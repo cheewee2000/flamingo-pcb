@@ -5,17 +5,23 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "flamingo": "dist/cli.js"
+  },
   "scripts": {
-    "build": "tsc -p .",
+    "build": "tsc -p . && chmod +x dist/cli.js",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@flamingo/engine": "*",
-    "@flamingo/parts": "*",
     "@flamingo/fab": "*",
+    "@flamingo/parts": "*",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "zod": "^4.4.3",
+    "@resvg/resvg-js": "^2.6.2",
     "ws": "^8.21.1",
-    "@resvg/resvg-js": "^2.6.2"
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
   }
 }
