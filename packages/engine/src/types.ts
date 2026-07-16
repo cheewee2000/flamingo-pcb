@@ -1,0 +1,166 @@
+/**
+ * Flamingo Engine - Board Model Types
+ * Units: mm
+ * Coordinate system: y-up
+ * Angles: degrees, counter-clockwise (CCW)
+ */
+
+export type LayerId =
+  | 'F.Cu'
+  | 'In1.Cu'
+  | 'In2.Cu'
+  | 'In3.Cu'
+  | 'In4.Cu'
+  | 'B.Cu'
+  | 'F.Silk'
+  | 'B.Silk'
+  | 'F.Mask'
+  | 'B.Mask'
+  | 'F.Paste'
+  | 'B.Paste'
+  | 'Edge';
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export type PathSeg =
+  | { type: 'line'; start: Point; end: Point }
+  | {
+      type: 'arc';
+      start: Point;
+      end: Point;
+      center: Point;
+      cw: boolean;
+    };
+
+export interface Pad {
+  number: string;
+  shape: 'rect' | 'oval' | 'circle' | 'polygon';
+  at: Point; // relative to footprint origin
+  rotation: number; // deg CCW, relative to footprint
+  size: { w: number; h: number };
+  polygon?: Point[]; // when shape==='polygon', relative to `at`
+  drill?: { diameter: number; slotLength?: number; plated: boolean };
+  layer: 'top' | 'bottom' | 'through';
+}
+
+export type SilkItem =
+  | { kind: 'line'; start: Point; end: Point; width: number }
+  | {
+      kind: 'arc';
+      start: Point;
+      end: Point;
+      center: Point;
+      cw: boolean;
+      width: number;
+    }
+  | { kind: 'circle'; center: Point; radius: number; width: number }
+  | { kind: 'text'; at: Point; text: string; height: number; rotation: number };
+
+export interface Footprint {
+  name: string;
+  lcsc: string;
+  pads: Pad[];
+  silk: SilkItem[];
+  courtyard: Point[][];
+}
+
+export interface ComponentInst {
+  refdes: string;
+  lcsc: string;
+  footprint: Footprint;
+  at: Point;
+  rotation: number;
+  side: 'top' | 'bottom';
+  fields: {
+    value?: string;
+    description?: string;
+    mfr?: string;
+    package?: string;
+    basic?: boolean;
+  };
+}
+
+export interface Net {
+  name: string;
+  class: string;
+  pins: string[];
+}
+
+export interface NetClass {
+  name: string;
+  trackWidth: number;
+  clearance: number;
+  viaDrill: number;
+  viaDiameter: number;
+}
+
+export interface Track {
+  id: string;
+  layer: LayerId;
+  width: number;
+  net: string;
+  seg: PathSeg;
+}
+
+export interface Via {
+  id: string;
+  at: Point;
+  drill: number;
+  diameter: number;
+  net: string;
+}
+
+export interface Zone {
+  id: string;
+  layer: LayerId;
+  net: string;
+  polygon: Point[];
+  clearance: number;
+  minWidth: number;
+  thermal: { gap: number; spokeWidth: number };
+  fill?: Point[][];
+}
+
+export interface Keepout {
+  id: string;
+  layers: LayerId[] | 'all';
+  polygon: Point[];
+  keepout: { copper: boolean; via: boolean };
+}
+
+export interface MountingHole {
+  id: string;
+  at: Point;
+  drill: number;
+  padDiameter: number;
+  plated: boolean;
+}
+
+export interface SilkText {
+  id: string;
+  layer: 'F.Silk' | 'B.Silk';
+  at: Point;
+  text: string;
+  height: number;
+  rotation: number;
+}
+
+export interface Board {
+  formatVersion: 1;
+  name: string;
+  copperLayers: 2 | 4 | 6;
+  outline: PathSeg[];
+  keepouts: Keepout[];
+  holes: MountingHole[];
+  components: ComponentInst[];
+  nets: Net[];
+  netClasses: NetClass[];
+  tracks: Track[];
+  vias: Via[];
+  zones: Zone[];
+  silk: SilkText[];
+  rules: 'jlcpcb-2l' | 'jlcpcb-4l' | 'jlcpcb-6l';
+}
