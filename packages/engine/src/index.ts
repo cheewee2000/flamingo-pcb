@@ -40,3 +40,7 @@ export {
   pointInPolygon,
   expandTrack,
 } from './geometry.js';
+
+// Re-export ops
+export type { Op, OpResult, OpError } from './ops.js';
+export { applyOp } from './ops.js';

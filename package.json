@@ -11,6 +11,7 @@
     "serve": "node packages/server/dist/index.js"
   },
   "devDependencies": {
+    "@types/node": "^22",
     "typescript": "^5",
     "vitest": "^3"
   }
