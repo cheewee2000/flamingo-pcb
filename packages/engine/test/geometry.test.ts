@@ -203,6 +203,26 @@ describe('padOutline', () => {
       expect(dist(p, { x: 0, y: 0 })).toBeCloseTo(0.5, 6);
     }
   });
+
+  it('oval pad (capsule) tessellates to a bbox matching its w/h and at least 16 points', () => {
+    const fp = makeFootprint([]);
+    const c = makeComponent({ at: { x: 0, y: 0 }, rotation: 0, side: 'top', footprint: fp });
+    const pad: Pad = {
+      number: '1',
+      shape: 'oval',
+      at: { x: 0, y: 0 },
+      rotation: 0,
+      size: { w: 2, h: 1 },
+      layer: 'top',
+    };
+    const outline = padOutline(c, pad);
+    const bbox = bboxOf(outline);
+    expect(bbox.minX).toBeCloseTo(-1, 6);
+    expect(bbox.minY).toBeCloseTo(-0.5, 6);
+    expect(bbox.maxX).toBeCloseTo(1, 6);
+    expect(bbox.maxY).toBeCloseTo(0.5, 6);
+    expect(outline.length).toBeGreaterThanOrEqual(16);
+  });
 });
 
 describe('outlineToPolygon', () => {
@@ -400,5 +420,41 @@ describe('expandTrack', () => {
     expect(bbox.minY).toBeCloseTo(3, 6);
     expect(bbox.maxX).toBeCloseTo(7, 6);
     expect(bbox.maxY).toBeCloseTo(17, 6);
+  });
+
+  it('capsule bbox and radial bound for a quarter-circle arc track', () => {
+    // Quarter circle, radius 10, centered at origin, CCW from (10,0) to (0,10),
+    // stroked with width 1 (half-width 0.5). Hand-computed via the capsule
+    // construction (see strokeCapsule): the two semicircular end caps push the
+    // bbox out to radius +/- half-width from each endpoint, giving
+    // {minX:-0.5, minY:-0.5, maxX:10.5, maxY:10.5}.
+    const track: Track = {
+      id: 'T3',
+      layer: 'F.Cu',
+      width: 1, // half-width 0.5
+      net: 'GND',
+      seg: {
+        type: 'arc',
+        start: { x: 10, y: 0 },
+        end: { x: 0, y: 10 },
+        center: { x: 0, y: 0 },
+        cw: false,
+      },
+    };
+    const poly = expandTrack(track);
+    const bbox = bboxOf(poly);
+    expect(bbox.minX).toBeCloseTo(-0.5, 1);
+    expect(bbox.minY).toBeCloseTo(-0.5, 1);
+    expect(bbox.maxX).toBeCloseTo(10.5, 1);
+    expect(bbox.maxY).toBeCloseTo(10.5, 1);
+
+    // Every point of the stroked polygon (both the offset curves along the
+    // arc and the two end caps) stays within half-width of the nominal
+    // radius-10 arc, so distance from the arc's center is bounded.
+    for (const p of poly) {
+      const d = dist(p, { x: 0, y: 0 });
+      expect(d).toBeGreaterThanOrEqual(9.35);
+      expect(d).toBeLessThanOrEqual(10.65);
+    }
   });
 });
