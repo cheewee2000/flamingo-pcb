@@ -1,0 +1,17 @@
+{
+  "name": "flamingo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm test -ws --if-present",
+    "build": "npm run build -ws --if-present",
+    "serve": "node packages/server/dist/index.js"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}
