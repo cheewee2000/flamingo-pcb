@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -107,6 +107,41 @@ describe('parseEasyedaFootprint', () => {
   it('never throws on unknown cosmetic shapes (all fixtures parse)', () => {
     for (const l of ['C25804', 'C2150', 'C2040', 'C2913204', 'C165948', 'C8734']) {
       expect(() => parseEasyedaFootprint(fixture(l))).not.toThrow();
+    }
+  });
+
+  it('warns once and skips unknown shape types, parses valid pads', () => {
+    // Minimal synthetic API response with one valid PAD and two unknown WIDGET shapes
+    const synthetic = {
+      packageDetail: {
+        dataStr: {
+          head: { x: 4000, y: 3000 },
+          shape: [
+            // Valid PAD: RECT shape at (4000,3000) with width 3.937, height 2.5591, top layer, pad number "1"
+            'PAD~RECT~4000~3000~3.937~2.5591~1~~1~0~3998.0315 2998.7205 4001.9685 2998.7205 4001.9685 3001.2795 3998.0315 3001.2795~0~gge1~0~~Y',
+            // Bogus shape type (first occurrence): should warn
+            'WIDGET~foo~bar',
+            // Another bogus shape type (same type, should NOT warn again)
+            'WIDGET~baz~qux',
+          ],
+        },
+      },
+    };
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { footprint } = parseEasyedaFootprint(synthetic);
+      // Should not throw
+      expect(footprint).toBeDefined();
+      // Should parse the one valid PAD
+      expect(footprint.pads).toHaveLength(1);
+      expect(footprint.pads[0]!.number).toBe('1');
+      expect(footprint.pads[0]!.shape).toBe('rect');
+      // Should warn exactly once for WIDGET (not twice, even though there are 2 instances)
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith('parseEasyedaFootprint: skipping unsupported shape "WIDGET"');
+    } finally {
+      warnSpy.mockRestore();
     }
   });
 });
