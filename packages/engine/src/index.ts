@@ -23,3 +23,20 @@ export { newBoard, serializeBoard, parseBoard } from './board.js';
 
 // Re-export layer functions
 export { copperLayersOf, isCopper } from './layers.js';
+
+// Re-export geometry functions
+export {
+  rotate,
+  add,
+  dist,
+  segSegDistance,
+  pointSegDistance,
+  padWorld,
+  padOutline,
+  outlineToPolygon,
+  bboxOf,
+  boardBBox,
+  polyIntersects,
+  pointInPolygon,
+  expandTrack,
+} from './geometry.js';

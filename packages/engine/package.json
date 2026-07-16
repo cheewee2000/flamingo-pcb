@@ -8,5 +8,8 @@
   "scripts": {
     "build": "tsc -p .",
     "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "polygon-clipping": "^0.15.7"
   }
 }
