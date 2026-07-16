@@ -20,6 +20,22 @@ async function serve(fileArg: string): Promise<void> {
   const port = process.env.FLAMINGO_PORT ? Number(process.env.FLAMINGO_PORT) : 4242;
   const started = await startServer(doc, port);
   console.log(`Flamingo serving ${fileArg} at http://localhost:${started.port}`);
+
+  let shuttingDown = false;
+  const shutdown = (): void => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    doc
+      .close()
+      .catch((err: unknown) => {
+        console.error('[flamingo] failed to flush pending save on shutdown:', err);
+      })
+      .finally(() => {
+        process.exit(0);
+      });
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
 async function main(): Promise<void> {

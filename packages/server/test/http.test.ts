@@ -56,6 +56,20 @@ describe('HTTP API', () => {
     expect(typeof body.error).toBe('string');
   });
 
+  it('POST /api/op returns 400 (not 500) when applyOp throws on a wrong-typed field', async () => {
+    // pins:42 instead of an array of strings -- applyOp's `for (const pin of
+    // op.pins)` throws a raw TypeError rather than returning an OpError.
+    const res = await fetch(`${base}/api/op`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ op: 'connectPins', net: 'x', pins: 42 }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.ok).toBe(false);
+    expect(typeof body.error).toBe('string');
+  });
+
   it('POST /api/op returns 400 for malformed JSON', async () => {
     const res = await fetch(`${base}/api/op`, {
       method: 'POST',

@@ -145,8 +145,12 @@ async function handleApi(
       sendJSON(res, 400, { ok: false, error: 'body must be an Op object with an "op" field' });
       return true;
     }
-    const result = doc.apply(body as Op);
-    sendJSON(res, result.ok ? 200 : 400, result);
+    try {
+      const result = doc.apply(body as Op);
+      sendJSON(res, result.ok ? 200 : 400, result);
+    } catch (err) {
+      sendJSON(res, 400, { ok: false, error: String(err) });
+    }
     return true;
   }
 
@@ -185,8 +189,12 @@ async function handleApi(
   }
 
   if (method === 'POST' && pathname === '/api/save') {
-    await doc.save();
-    sendJSON(res, 200, { ok: true });
+    try {
+      await doc.save();
+      sendJSON(res, 200, { ok: true });
+    } catch (err) {
+      sendJSON(res, 500, { ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
     return true;
   }
 
@@ -298,13 +306,15 @@ export function startServer(doc: Doc, port: number = DEFAULT_PORT): Promise<Star
       resolve({
         server,
         port: actualPort,
-        close: () =>
-          new Promise<void>((res, rej) => {
+        close: async () => {
+          await new Promise<void>((res, rej) => {
             for (const client of wss.clients) client.terminate();
             wss.close(() => {
               server.close((err) => (err ? rej(err) : res()));
             });
-          }),
+          });
+          await doc.close();
+        },
       });
     });
   });

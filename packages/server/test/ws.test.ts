@@ -149,4 +149,27 @@ describe('WebSocket API', () => {
 
     ws.close();
   });
+
+  it('replies with an opResult error instead of crashing when applyOp throws on a wrong-typed field', async () => {
+    const ws = new WebSocket(wsUrl);
+    const queue = messageQueue(ws);
+    await waitOpen(ws);
+    await queue.next(); // initial board message
+
+    // pins:42 instead of an array of strings -- applyOp's `for (const pin of
+    // op.pins)` throws a raw TypeError rather than returning an OpError.
+    ws.send(JSON.stringify({ type: 'op', op: { op: 'connectPins', net: 'x', pins: 42 } }));
+    const reply = (await queue.next()) as { type: string; result: { ok: boolean; error: string } };
+    expect(reply.type).toBe('opResult');
+    expect(reply.result.ok).toBe(false);
+    expect(typeof reply.result.error).toBe('string');
+
+    // Connection must still be usable afterwards.
+    ws.send(JSON.stringify({ type: 'op', op: { op: 'setBoardMeta', name: 'survived' } }));
+    const nextReply = (await queue.next()) as { type: string };
+    expect(['board', 'opResult']).toContain(nextReply.type);
+    expect(doc.board.name).toBe('survived');
+
+    ws.close();
+  });
 });

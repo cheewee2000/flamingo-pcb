@@ -23,6 +23,7 @@ export class Doc extends EventEmitter {
   private undoStack: Board[] = [];
   private redoStack: Board[] = [];
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private dirty = false;
 
   constructor(initial: Board, filePath?: string, debounceMs: number = DEFAULT_DEBOUNCE_MS) {
     super();
@@ -48,6 +49,7 @@ export class Doc extends EventEmitter {
       this.pushUndo(this._board);
       this.redoStack = [];
       this._board = result.board;
+      this.markDirty();
       this.emit('change', this._board);
       this.scheduleSave();
     }
@@ -59,6 +61,7 @@ export class Doc extends EventEmitter {
     if (prev === undefined) return null;
     this.redoStack.push(this._board);
     this._board = prev;
+    this.markDirty();
     this.emit('change', this._board);
     this.scheduleSave();
     return this._board;
@@ -69,9 +72,14 @@ export class Doc extends EventEmitter {
     if (next === undefined) return null;
     this.pushUndo(this._board);
     this._board = next;
+    this.markDirty();
     this.emit('change', this._board);
     this.scheduleSave();
     return this._board;
+  }
+
+  private markDirty(): void {
+    if (this.filePath) this.dirty = true;
   }
 
   private pushUndo(board: Board): void {
@@ -84,11 +92,19 @@ export class Doc extends EventEmitter {
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
-      void this.save();
+      this.save().catch((err: unknown) => {
+        console.error(`[flamingo] failed to save ${this.filePath}:`, err);
+        this.emit('saveError', err);
+      });
     }, this.debounceMs);
   }
 
-  /** Force an immediate, atomic write (write tmp file + rename). No-op without a filePath. */
+  /**
+   * Force an immediate, atomic write (write tmp file + rename). No-op
+   * without a filePath. Throws on failure -- direct callers (HTTP
+   * /api/save, close()) are responsible for handling/reporting the error;
+   * the debounced path installed by scheduleSave() catches instead.
+   */
   async save(): Promise<void> {
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
@@ -99,6 +115,22 @@ export class Doc extends EventEmitter {
     const tmpPath = `${this.filePath}.tmp-${randomUUID()}`;
     await writeFile(tmpPath, data, 'utf8');
     await rename(tmpPath, this.filePath);
+    this.dirty = false;
+  }
+
+  /**
+   * Cancel any pending debounced save and, if there are unsaved changes,
+   * flush them synchronously with respect to the caller. Safe to call
+   * multiple times or with nothing dirty (no-op write in that case).
+   */
+  async close(): Promise<void> {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    if (this.dirty) {
+      await this.save();
+    }
   }
 
   static async load(filePath: string): Promise<Doc> {

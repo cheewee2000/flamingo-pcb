@@ -164,5 +164,35 @@ describe('Doc', () => {
       expect(loaded.board.name).toBe('Loaded');
       expect(loaded.board.copperLayers).toBe(2);
     });
+
+    it('close() flushes a pending debounced save immediately, with no wait', async () => {
+      const doc = new Doc(newBoard('start', 2), filePath, DEBOUNCE_MS);
+      doc.apply(meta('ClosedBeforeDebounce'));
+      expect(existsSync(filePath)).toBe(false); // debounce timer hasn't fired yet
+
+      await doc.close();
+
+      expect(existsSync(filePath)).toBe(true);
+      const saved = parseBoard(readFileSync(filePath, 'utf8'));
+      expect(saved.name).toBe('ClosedBeforeDebounce');
+    });
+
+    it('close() with nothing dirty does not write a file', async () => {
+      const doc = new Doc(newBoard('start', 2), filePath, DEBOUNCE_MS);
+      await doc.close();
+      expect(existsSync(filePath)).toBe(false);
+    });
+
+    it('close() with nothing dirty after a prior save does not write again', async () => {
+      const doc = new Doc(newBoard('start', 2), filePath, DEBOUNCE_MS);
+      doc.apply(meta('Saved'));
+      await doc.save();
+      const before = readFileSync(filePath, 'utf8');
+
+      await doc.close();
+
+      const after = readFileSync(filePath, 'utf8');
+      expect(after).toBe(before);
+    });
   });
 });
