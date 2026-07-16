@@ -110,6 +110,7 @@ function validatePinRef(board: Board, pin: string): OpError | null {
  */
 export function applyOp(b: Board, op: Op): OpResult | OpError {
   const board = structuredClone(b);
+  op = structuredClone(op);
   const createdIds: string[] = [];
 
   switch (op.op) {

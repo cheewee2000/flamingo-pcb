@@ -118,6 +118,34 @@ describe('applyOp', () => {
         expect(result.error).toMatch(/R1/);
       }
     });
+
+    it('deep-clones op payload so mutations do not corrupt board snapshot', () => {
+      const board = baseBoard();
+      const fp = makeFootprint(['1', '2', '3']);
+      const result = applyOp(board, {
+        op: 'placeComponent',
+        refdes: 'C1',
+        lcsc: 'C99999',
+        footprint: fp,
+        at: { x: 5, y: 5 },
+        rotation: 90,
+        side: 'top',
+        fields: { value: '10uF' },
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const compBeforeMutation = result.board.components.find((c) => c.refdes === 'C1')!;
+        const padXBeforeMutation = compBeforeMutation.footprint.pads[0].at.x;
+
+        // Mutate the original footprint object
+        fp.pads[0].at.x = 999;
+
+        // Verify the board's component footprint pad is unchanged
+        const compAfterMutation = result.board.components.find((c) => c.refdes === 'C1')!;
+        expect(compAfterMutation.footprint.pads[0].at.x).toBe(padXBeforeMutation);
+        expect(compAfterMutation.footprint.pads[0].at.x).toBe(0);
+      }
+    });
   });
 
   describe('moveComponent', () => {
