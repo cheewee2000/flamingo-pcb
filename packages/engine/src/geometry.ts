@@ -217,13 +217,19 @@ export function segSegDistance(a: PathSeg, b: PathSeg): number {
  * by c.at. This is the single source of truth for the bottom-side mirror
  * convention; padWorld and padOutline both route through it.
  */
-function componentTransformPoints(c: ComponentInst, pts: Point[]): Point[] {
+export function componentTransformPoints(c: ComponentInst, pts: Point[]): Point[] {
   const mirror = c.side === 'bottom';
   return pts.map((pt) => {
     const mirrored = mirror ? { x: -pt.x, y: pt.y } : pt;
     const rotated = rotate(mirrored, c.rotation);
     return add(rotated, c.at);
   });
+}
+
+/** World-space rotation (deg CCW) of a footprint-local angle, honoring the mirror rule. */
+export function componentTransformRotation(c: ComponentInst, localRotationDeg: number): number {
+  const mirror = c.side === 'bottom';
+  return (mirror ? -localRotationDeg : localRotationDeg) + c.rotation;
 }
 
 /** World-space position + rotation of a pad (component transform ∘ pad transform). */

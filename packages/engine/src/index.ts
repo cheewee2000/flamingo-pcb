@@ -39,6 +39,8 @@ export {
   polyIntersects,
   pointInPolygon,
   expandTrack,
+  componentTransformPoints,
+  componentTransformRotation,
 } from './geometry.js';
 
 // Re-export ops

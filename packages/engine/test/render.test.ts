@@ -202,6 +202,92 @@ describe('renderSVG - DRC markers', () => {
   });
 });
 
+describe('renderSVG - arc rendering (tracks)', () => {
+  /**
+   * Arc centered at (5,5), radius 3: start=(8,5) is at angle 0 rad;
+   * end=(5,8) is at angle pi/2 rad (90deg), both relative to center.
+   * (render.ts arcPathD computes a0/a1 via atan2 on the *world* start/end
+   * relative to center -- these are the world points directly, no component
+   * transform involved for a board-level track.)
+   */
+  function arcTrackBoard(cw: boolean): Board {
+    const b = newBoard('arc-track', 2);
+    b.tracks = [
+      {
+        id: 'TA',
+        layer: 'F.Cu',
+        width: 0.2,
+        net: 'NET1',
+        seg: { type: 'arc', start: { x: 8, y: 5 }, end: { x: 5, y: 8 }, center: { x: 5, y: 5 }, cw },
+      },
+    ];
+    return b;
+  }
+
+  it('cw:false -> sweep = a1-a0 = pi/2 (90deg) < pi => largeArc=0, sweepFlag=0', () => {
+    // sweep = ((a1 - a0) mod 2pi) = pi/2 - 0 = pi/2 (90deg) < pi -> largeArc = 0
+    // sweepFlag = cw ? 1 : 0 = 0
+    const svg = renderSVG(arcTrackBoard(false));
+    expect(svg).toContain('A 3.0000 3.0000 0 0 0');
+  });
+
+  it('cw:true -> sweep = a0-a1 = 3pi/2 (270deg) > pi => largeArc=1, sweepFlag=1', () => {
+    // sweep = ((a0 - a1) mod 2pi) = (0 - pi/2 + 2pi) mod 2pi = 3pi/2 (270deg) > pi -> largeArc = 1
+    // sweepFlag = cw ? 1 : 0 = 1
+    const svg = renderSVG(arcTrackBoard(true));
+    expect(svg).toContain('A 3.0000 3.0000 0 1 1');
+  });
+});
+
+describe('renderSVG - arc rendering (footprint silk, mirror)', () => {
+  /**
+   * Silk arc defined in footprint-local space: start=(1,0), end=(0,1),
+   * center=(0,0), cw=false. Component placed at (10,10), rotation 0.
+   *
+   * Top side (mirror=false): world points are unchanged by the mirror step,
+   * just translated by (10,10) -> start=(11,10), end=(10,11), center=(10,10).
+   * effectiveCw = mirror ? !cw : cw = false.
+   * a0 = atan2(0,1) = 0; a1 = atan2(1,0) = pi/2.
+   * sweep (effectiveCw=false) = (a1-a0) mod 2pi = pi/2 < pi -> largeArc=0.
+   * sweepFlag = effectiveCw ? 1 : 0 = 0.
+   *
+   * Bottom side (mirror=true): local points get x -> -x before translate:
+   * start (1,0) -> (-1,0) -> world (9,10); end (0,1) -> (0,1) -> world (10,11);
+   * center (0,0) -> (0,0) -> world (10,10).
+   * effectiveCw = mirror ? !cw : cw = !false = true.
+   * a0 = atan2(10-10, 9-10) = atan2(0,-1) = pi; a1 = atan2(11-10,10-10) = pi/2.
+   * sweep (effectiveCw=true) = (a0-a1) mod 2pi = pi/2 < pi -> largeArc=0.
+   * sweepFlag = effectiveCw ? 1 : 0 = 1.
+   *
+   * So largeArc is 0 on both sides (same magnitude sweep), but sweepFlag
+   * flips 0 -> 1, confirming effectiveCw = mirror ? !cw : cw.
+   */
+  function silkArcBoard(side: 'top' | 'bottom'): Board {
+    const b = newBoard('silk-arc', 2);
+    b.components = [
+      makeComponent({
+        side,
+        at: { x: 10, y: 10 },
+        rotation: 0,
+        footprint: makeFootprint({
+          silk: [{ kind: 'arc', start: { x: 1, y: 0 }, end: { x: 0, y: 1 }, center: { x: 0, y: 0 }, cw: false, width: 0.1 }],
+        }),
+      }),
+    ];
+    return b;
+  }
+
+  it('top-side component renders the silk arc with sweepFlag=0', () => {
+    const svg = renderSVG(silkArcBoard('top'));
+    expect(svg).toContain('A 1.0000 1.0000 0 0 0');
+  });
+
+  it('bottom-side component renders the same silk arc with the sweepFlag inverted (1)', () => {
+    const svg = renderSVG(silkArcBoard('bottom'));
+    expect(svg).toContain('A 1.0000 1.0000 0 0 1');
+  });
+});
+
 describe('renderSVG - full fixture snapshot', () => {
   it('matches the recorded SVG for the fixture board', () => {
     const svg = renderSVG(fixtureBoard());

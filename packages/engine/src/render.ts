@@ -8,7 +8,14 @@
  */
 
 import type { Board, LayerId, Point, PathSeg, Pad, ComponentInst, Keepout, SilkItem } from './types.js';
-import { padOutline, padWorld, outlineToPolygon, boardBBox, rotate, add } from './geometry.js';
+import {
+  padOutline,
+  padWorld,
+  outlineToPolygon,
+  boardBBox,
+  componentTransformPoints,
+  componentTransformRotation,
+} from './geometry.js';
 import { copperLayersOf } from './layers.js';
 import type { RatLine } from './connectivity.js';
 
@@ -59,22 +66,6 @@ const MARGIN_MM = 2;
 function fmt(n: number): string {
   const r = n.toFixed(4);
   return r === '-0.0000' ? '0.0000' : r;
-}
-
-/** Component placement transform for local points: mirror x (bottom side), rotate, translate. */
-function componentTransformPoints(c: ComponentInst, pts: Point[]): Point[] {
-  const mirror = c.side === 'bottom';
-  return pts.map((pt) => {
-    const mirrored = mirror ? { x: -pt.x, y: pt.y } : pt;
-    const rotated = rotate(mirrored, c.rotation);
-    return add(rotated, c.at);
-  });
-}
-
-/** World-space rotation (deg CCW) of a footprint-local angle, honoring the mirror rule. */
-function componentTransformRotation(c: ComponentInst, localRotationDeg: number): number {
-  const mirror = c.side === 'bottom';
-  return (mirror ? -localRotationDeg : localRotationDeg) + c.rotation;
 }
 
 // ---------------------------------------------------------------------------
