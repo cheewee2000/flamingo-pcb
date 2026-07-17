@@ -56,6 +56,9 @@ export { padAnchor, connectedGroups, ratsnest, isFullyRouted } from './connectiv
 export type { RenderOpts } from './render.js';
 export { renderSVG } from './render.js';
 
+// Re-export zone fill
+export { fillZone, fillAllZones, bufferPolygon } from './zonefill.js';
+
 // Re-export DRC
 export type { RuleSet } from './drc/rules.js';
 export { RULESETS } from './drc/rules.js';

@@ -157,11 +157,14 @@ export function renderSVG(b: Board, opts: RenderOpts = {}): string {
     const zones = b.zones.filter((z) => z.layer === layer);
     for (const z of zones) {
       if (z.fill && z.fill.length > 0) {
-        for (const poly of z.fill) {
-          parts.push(
-            `<polygon points="${polygonPoints(poly)}" fill="${color}" fill-opacity="0.55" stroke="none"/>`,
-          );
-        }
+        // Winding-encoded rings (outer CCW + hole CW, see zonefill.ts): render
+        // as one even-odd path so holes cut through the solid copper.
+        const d = z.fill
+          .map((poly) => 'M ' + poly.map((p) => `${pt(p)}`).join(' L ') + ' Z')
+          .join(' ');
+        parts.push(
+          `<path d="${d}" fill="${color}" fill-opacity="0.55" fill-rule="evenodd" stroke="none"/>`,
+        );
       } else {
         parts.push(
           `<polygon points="${polygonPoints(z.polygon)}" fill="${color}" fill-opacity="0.25" stroke="none"/>`,
