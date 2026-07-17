@@ -110,6 +110,55 @@ describe('parseEasyedaFootprint', () => {
     }
   });
 
+  it('C5656610 (ICS-43434): SOLIDREGION arc paths do not explode the courtyard bbox', () => {
+    // Real shape strings from the ICS-43434 package (cache C5656610.json). The
+    // body SOLIDREGIONs on layer 100 use SVG path arcs ("A rx ry rot laf sf x y");
+    // a naive number-pairing parser folds the arc's 5 non-coordinate params in as
+    // fake vertices, producing courtyard points hundreds of mm from the part.
+    const synthetic = {
+      packageDetail: {
+        dataStr: {
+          head: { x: 4003.954, y: 2992.0275 },
+          shape: [
+            'PAD~RECT~3998.89~2995.571~2.3622~2.0472~1~~1~0~3997.8661 2996.752 3997.8661 2994.3898 3999.9133 2994.3898 3999.9133 2996.752~90~gge42~0~~Y~0~0~0.1969~3998.8897,2995.5709',
+            'PAD~RECT~4002.126~2995.571~2.3622~2.0472~1~~2~0~4001.1023 2996.752 4001.1023 2994.3898 4003.1494 2994.3898 4003.1494 2996.752~90~gge62~0~~Y~0~0~0.1969~4002.1258,2995.5709',
+            'PAD~RECT~4002.126~2988.484~2.3622~2.0472~1~~4~0~4001.1023 2989.6654 4001.1023 2987.3032 4003.1494 2987.3032 4003.1494 2989.6654~90~gge68~0~~Y~0~0~0.1969~4002.1258,2988.4843',
+            // Plain rectangular body region (no arcs).
+            'SOLIDREGION~99~~M 4011.1417 2997.2441 L 3997.3622 2997.2441 L 3997.3622 2986.811 L 4011.1417 2986.811 Z~solid~gge6~~~~0',
+            // Body regions with 7-parameter SVG arc commands (the bug trigger).
+            'SOLIDREGION~100~~M 4003.8531 2991.6431 L 4004.8464 2991.6431 L 4004.8468 2991.6428 A 2.2165 2.2165 0 0 1 4006.6448 2989.8447 L 4006.6448 2988.8548 L 4006.6408 2988.8508 A 3.2008 3.2008 0 0 0 4003.8531 2991.6385 L 4003.8531 2991.6431 Z ~solid~gge263~~~~0',
+            'SOLIDREGION~100~~M 4007.414 2988.8512 L 4007.414 2989.8446 L 4007.4144 2989.845 A 2.2165 2.2165 0 0 1 4009.2125 2991.643 L 4010.2024 2991.643 L 4010.2064 2991.639 A 3.2008 3.2008 0 0 0 4007.4187 2988.8512 L 4007.414 2988.8512 Z~solid~gge332~~~~0',
+          ],
+        },
+      },
+    };
+
+    const { footprint } = parseEasyedaFootprint(synthetic);
+    expect(footprint.courtyard.length).toBeGreaterThan(0);
+
+    // Pad bbox (pads are the ground-truth extent of the part).
+    const padPts = footprint.pads.flatMap((p) => [
+      { x: p.at.x - p.size.w / 2, y: p.at.y - p.size.h / 2 },
+      { x: p.at.x + p.size.w / 2, y: p.at.y + p.size.h / 2 },
+    ]);
+    const padMinX = Math.min(...padPts.map((p) => p.x));
+    const padMaxX = Math.max(...padPts.map((p) => p.x));
+    const padMinY = Math.min(...padPts.map((p) => p.y));
+    const padMaxY = Math.max(...padPts.map((p) => p.y));
+
+    // Every courtyard vertex must stay within 20mm of the pad bbox. With the bug
+    // present, arc params leak in as vertices hundreds of mm away and this fails.
+    const M = 20;
+    for (const poly of footprint.courtyard) {
+      for (const pt of poly) {
+        expect(pt.x).toBeGreaterThanOrEqual(padMinX - M);
+        expect(pt.x).toBeLessThanOrEqual(padMaxX + M);
+        expect(pt.y).toBeGreaterThanOrEqual(padMinY - M);
+        expect(pt.y).toBeLessThanOrEqual(padMaxY + M);
+      }
+    }
+  });
+
   it('warns once and skips unknown shape types, parses valid pads', () => {
     // Minimal synthetic API response with one valid PAD and two unknown WIDGET shapes
     const synthetic = {

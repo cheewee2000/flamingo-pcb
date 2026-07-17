@@ -260,11 +260,71 @@ function parseArc(fields: string[], conv: Convert): SilkItem[] {
   ];
 }
 
-/** Parse an SVG-ish "M x y L x y ... Z" region path into canvas point pairs. */
+/** Number of parameters each SVG path command consumes per coordinate set. */
+const SVG_PARAM_COUNT: Record<string, number> = {
+  M: 2, L: 2, T: 2, H: 1, V: 1, Q: 4, S: 4, C: 6, A: 7, Z: 0,
+};
+
+/**
+ * Parse an SVG path ("M x y L x y A rx ry rot laf sf x y ... Z") into the
+ * ordered polygon vertices it visits. Commands are walked properly — only each
+ * command's *endpoint* becomes a vertex (arcs are chord-approximated by their
+ * endpoint), so an 'A' command's rx/ry/rotation/large-arc/sweep parameters are
+ * NOT mistaken for coordinates. Handles absolute and relative commands and the
+ * SVG rule that extra coordinate sets after an M/m implicitly repeat as L/l.
+ *
+ * The old parser blindly paired every number in the string, which folded the
+ * five non-coordinate parameters of every arc in as bogus vertices and blew the
+ * courtyard bbox hundreds of mm away from the part.
+ */
 function parseRegionPath(path: string): Array<[number, number]> {
-  const nums = (path.match(/[-\d.]+/g) ?? []).map(Number);
+  const tokens = path.match(/[MLHVCSQTAZ]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? [];
   const out: Array<[number, number]> = [];
-  for (let i = 0; i + 1 < nums.length; i += 2) out.push([nums[i]!, nums[i + 1]!]);
+  let i = 0;
+  let cmd = '';
+  let cx = 0; // current point
+  let cy = 0;
+  let sx = 0; // subpath start (for Z)
+  let sy = 0;
+
+  while (i < tokens.length) {
+    if (/[a-z]/i.test(tokens[i]!)) {
+      cmd = tokens[i]!;
+      i++;
+    }
+    const up = cmd.toUpperCase();
+    const rel = cmd !== up;
+    const n = SVG_PARAM_COUNT[up];
+    if (n === undefined) {
+      i++; // unrecognized command letter; skip it
+      continue;
+    }
+    if (up === 'Z') {
+      cx = sx;
+      cy = sy;
+      continue;
+    }
+    if (i + n > tokens.length) break; // truncated / malformed
+    const p = tokens.slice(i, i + n).map(Number);
+    i += n;
+    // Endpoint (last two params), except H/V which move along one axis only.
+    if (up === 'H') {
+      cx = rel ? cx + p[0]! : p[0]!;
+    } else if (up === 'V') {
+      cy = rel ? cy + p[0]! : p[0]!;
+    } else {
+      const ex = p[n - 2]!;
+      const ey = p[n - 1]!;
+      cx = rel ? cx + ex : ex;
+      cy = rel ? cy + ey : ey;
+    }
+    out.push([cx, cy]);
+    if (up === 'M') {
+      sx = cx;
+      sy = cy;
+      cmd = rel ? 'l' : 'L'; // implicit lineto for subsequent coordinate sets
+    }
+  }
   return out;
 }
 
