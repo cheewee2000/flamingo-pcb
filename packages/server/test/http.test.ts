@@ -156,6 +156,30 @@ describe('HTTP API', () => {
     expect(buf.readUInt32BE(16)).toBe(300);
   });
 
+  it('GET /api/render.png returns 400 when region has wrong count (too few values)', async () => {
+    const res = await fetch(`${base}/api/render.png?region=0,0,10`);
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.ok).toBe(false);
+    expect(body.error).toBe('region must be minX,minY,maxX,maxY (numbers)');
+  });
+
+  it('GET /api/render.png returns 400 when region has non-numeric values', async () => {
+    const res = await fetch(`${base}/api/render.png?region=a,b,c,d`);
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.ok).toBe(false);
+    expect(body.error).toBe('region must be minX,minY,maxX,maxY (numbers)');
+  });
+
+  it('GET /api/render.png returns 200 with valid region and PNG magic bytes', async () => {
+    const res = await fetch(`${base}/api/render.png?region=0,0,10,10`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/png');
+    const buf = Buffer.from(await res.arrayBuffer());
+    expect(buf.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+  });
+
   it('POST /api/save returns ok:true when a filePath is set', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'flamingo-http-save-'));
     const filePath = join(dir, 'board.flamingo');

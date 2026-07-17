@@ -215,6 +215,9 @@ async function handleApi(
       if (nums.length === 4 && nums.every((n) => Number.isFinite(n))) {
         const [minX, minY, maxX, maxY] = nums as [number, number, number, number];
         opts.region = { minX, minY, maxX, maxY };
+      } else {
+        sendJSON(res, 400, { ok: false, error: 'region must be minX,minY,maxX,maxY (numbers)' });
+        return true;
       }
     }
     const widthPxRaw = url.searchParams.get('widthPx');
