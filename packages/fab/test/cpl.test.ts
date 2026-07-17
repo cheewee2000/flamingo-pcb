@@ -73,6 +73,16 @@ describe('generateCPL', () => {
     expect(csv).toContain(',Bottom,270');
   });
 
+  it('bottom side negative rotation -90 normalizes to 90', () => {
+    const csv = generateCPL(boardWith([comp('R1', { side: 'bottom', rotation: -90 })]));
+    expect(csv).toContain('R1,12.3457,4.5000,Bottom,90');
+  });
+
+  it('bottom side rotation >= 360 wraps: 450 -> 270', () => {
+    const csv = generateCPL(boardWith([comp('R1', { side: 'bottom', rotation: 450 })]));
+    expect(csv).toContain('R1,12.3457,4.5000,Bottom,270');
+  });
+
   it('emits one row per component in board order', () => {
     const csv = generateCPL(boardWith([comp('R1'), comp('R2', { at: { x: 1, y: 2 } })]));
     const lines = csv.trim().split('\r\n');
