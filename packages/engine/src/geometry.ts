@@ -398,6 +398,22 @@ export function polyIntersects(a: Point[], b: Point[]): boolean {
   return area > 1e-9;
 }
 
+/** Min edge-to-edge distance between two closed polygon boundaries (ignores containment/overlap). */
+function edgeToEdgeDistance(a: Point[], b: Point[]): number {
+  let min = Infinity;
+  const na = a.length;
+  const nb = b.length;
+  for (let i = 0; i < na; i++) {
+    const segA: PathSeg = { type: 'line', start: a[i], end: a[(i + 1) % na] };
+    for (let j = 0; j < nb; j++) {
+      const segB: PathSeg = { type: 'line', start: b[j], end: b[(j + 1) % nb] };
+      const d = segSegDistance(segA, segB);
+      if (d < min) min = d;
+    }
+  }
+  return min;
+}
+
 /**
  * Minimum distance between the boundaries of two closed polygons.
  * Returns 0 when they overlap (positive intersection area, per
@@ -410,16 +426,51 @@ export function polyPolyDistance(a: Point[], b: Point[]): number {
     throw new Error('polyPolyDistance: polygon must have at least one point');
   }
   if (polyIntersects(a, b)) return 0;
-  let min = Infinity;
-  const na = a.length;
-  const nb = b.length;
-  for (let i = 0; i < na; i++) {
-    const segA: PathSeg = { type: 'line', start: a[i], end: a[(i + 1) % na] };
-    for (let j = 0; j < nb; j++) {
-      const segB: PathSeg = { type: 'line', start: b[j], end: b[(j + 1) % nb] };
-      const d = segSegDistance(segA, segB);
-      if (d < min) min = d;
+  return edgeToEdgeDistance(a, b);
+}
+
+/**
+ * A polygon-with-holes: a solid `outer` ring minus each of `holes`. Used to
+ * represent a filled copper zone whose winding-encoded fill has been decoded
+ * (see zonefill.ts) so that hole rings (knockouts around other-net copper) are
+ * treated as absence-of-copper, not as solid islands.
+ */
+export interface PolyGroup {
+  outer: Point[];
+  holes: Point[][];
+}
+
+/** Does simple polygon `item` overlap the solid region (outer minus holes) of `group` with positive area? */
+export function polyGroupIntersects(item: Point[], group: PolyGroup): boolean {
+  const clip: [number, number][][] = [toRing(group.outer), ...group.holes.map(toRing)];
+  const result = polygonClipping.intersection([toRing(item)], clip);
+  let area = 0;
+  for (const polygon of result) {
+    for (let i = 0; i < polygon.length; i++) {
+      const a = ringArea(polygon[i]);
+      area += i === 0 ? a : -a;
     }
+  }
+  return area > 1e-9;
+}
+
+/**
+ * Distance from a simple polygon `item` to a polygon-with-holes `group`.
+ * Returns 0 when `item` overlaps the solid region (outer minus holes);
+ * otherwise the minimum boundary distance to ANY ring — outer or hole — so an
+ * item sitting inside a hole reports its distance to that hole's boundary
+ * (real copper edge), NOT 0. An item outside the outer reports its distance to
+ * the outer.
+ */
+export function polyGroupDistance(item: Point[], group: PolyGroup): number {
+  if (item.length === 0 || group.outer.length === 0) {
+    throw new Error('polyGroupDistance: polygon must have at least one point');
+  }
+  if (polyGroupIntersects(item, group)) return 0;
+  let min = edgeToEdgeDistance(item, group.outer);
+  for (const hole of group.holes) {
+    const d = edgeToEdgeDistance(item, hole);
+    if (d < min) min = d;
   }
   return min;
 }

@@ -13,6 +13,8 @@ import {
   polyIntersects,
   pointInPolygon,
   polyPolyDistance,
+  polyGroupDistance,
+  polyGroupIntersects,
   expandTrack,
 } from '../src/index.js';
 import type { ComponentInst, Pad, Footprint, PathSeg, Board, Track } from '../src/index.js';
@@ -504,5 +506,53 @@ describe('polyPolyDistance', () => {
     const a = square(0, 0, 1);
     const b = square(3, 5, 1);
     expect(polyPolyDistance(a, b)).toBeCloseTo(polyPolyDistance(b, a), 9);
+  });
+});
+
+describe('polyGroupDistance / polyGroupIntersects', () => {
+  function square(minX: number, minY: number, size: number) {
+    return [
+      { x: minX, y: minY },
+      { x: minX + size, y: minY },
+      { x: minX + size, y: minY + size },
+      { x: minX, y: minY + size },
+    ];
+  }
+
+  // A 10x10 solid outer with a 4x4 hole centered at (3..7, 3..7).
+  const group = { outer: square(0, 0, 10), holes: [square(3, 3, 4)] };
+
+  it('item entirely inside the hole => distance to the HOLE boundary, not 0', () => {
+    const item = square(4.5, 4.5, 1); // 1x1 centered in the 4x4 hole
+    // Nearest hole edge is at x=3/x=7 etc.; item spans [4.5,5.5] -> gap 1.0 to x=7? no, to x=3 is 1.5, to x=7 is 1.5.
+    // item x in [4.5,5.5]; hole x-edges at 3 and 7 -> gaps 1.5 and 1.5; y same. So 1.5.
+    expect(polyGroupIntersects(item, group)).toBe(false);
+    expect(polyGroupDistance(item, group)).toBeCloseTo(1.5, 9);
+  });
+
+  it('item overlapping the solid ring (annulus) => 0', () => {
+    const item = square(0.5, 0.5, 1); // sits in solid copper near the outer corner
+    expect(polyGroupIntersects(item, group)).toBe(true);
+    expect(polyGroupDistance(item, group)).toBe(0);
+  });
+
+  it('item straddling the hole boundary (partly in solid) => 0', () => {
+    const item = square(2.5, 4.5, 1); // x in [2.5,3.5] crosses hole edge x=3
+    expect(polyGroupIntersects(item, group)).toBe(true);
+    expect(polyGroupDistance(item, group)).toBe(0);
+  });
+
+  it('item outside the outer => distance to the OUTER boundary', () => {
+    const item = square(12, 0, 1); // x in [12,13], outer right edge at x=10 -> gap 2
+    expect(polyGroupIntersects(item, group)).toBe(false);
+    expect(polyGroupDistance(item, group)).toBeCloseTo(2, 9);
+  });
+
+  it('a group with no holes behaves like a solid polygon', () => {
+    const solid = { outer: square(0, 0, 10), holes: [] as { x: number; y: number }[][] };
+    const inside = square(4, 4, 2);
+    const outside = square(13, 0, 1);
+    expect(polyGroupDistance(inside, solid)).toBe(0);
+    expect(polyGroupDistance(outside, solid)).toBeCloseTo(3, 9);
   });
 });

@@ -39,10 +39,13 @@ export {
   polyIntersects,
   pointInPolygon,
   polyPolyDistance,
+  polyGroupDistance,
+  polyGroupIntersects,
   expandTrack,
   componentTransformPoints,
   componentTransformRotation,
 } from './geometry.js';
+export type { PolyGroup } from './geometry.js';
 
 // Re-export ops
 export type { Op, OpResult, OpError } from './ops.js';
@@ -63,4 +66,4 @@ export { fillZone, fillAllZones, bufferPolygon } from './zonefill.js';
 export type { RuleSet } from './drc/rules.js';
 export { RULESETS } from './drc/rules.js';
 export type { DrcViolation, CopperItem } from './drc/types.js';
-export { runDRC, buildCopperItems } from './drc/drc.js';
+export { runDRC, buildCopperItems, groupFillRings } from './drc/drc.js';

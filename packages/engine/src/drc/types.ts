@@ -6,6 +6,7 @@
  */
 
 import type { LayerId, Point } from '../types.js';
+import type { PolyGroup } from '../geometry.js';
 
 /** A single DRC finding. `items` holds refdes/net/id refs of the offenders. */
 export interface DrcViolation {
@@ -28,4 +29,13 @@ export interface CopperItem {
   ref: string;
   polygon: Point[];
   layer: LayerId;
+  /**
+   * Zone (copper pour) items only. When a zone has a winding-encoded fill,
+   * its rings are decoded into polygons-with-holes: `group.outer` is the solid
+   * boundary and `group.holes` are knockouts (e.g. clearance around other-net
+   * copper). Checks that test intersection/distance MUST honor holes for these
+   * items (an item inside a hole is NOT touching copper). `polygon` mirrors
+   * `group.outer` so bbox/centroid/rendering consumers keep working unchanged.
+   */
+  group?: PolyGroup;
 }

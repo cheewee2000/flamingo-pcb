@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { newBoard } from '../src/index.js';
 import type {
   Board,
@@ -9,8 +12,9 @@ import type {
   PathSeg,
   Point,
   SilkItem,
+  Zone,
 } from '../src/index.js';
-import { runDRC, RULESETS } from '../src/index.js';
+import { runDRC, RULESETS, parseBoard, fillAllZones } from '../src/index.js';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -375,5 +379,107 @@ describe('runDRC', () => {
     });
 
     expect(violationsOf(b, 'track-width')).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Zone fill: winding-encoded hole rings are copper knockouts, not solid copper.
+// Regression guard for the false "clearance 0.00mm" violations that arose from
+// treating every fill ring as an independent solid polygon.
+// ---------------------------------------------------------------------------
+
+describe('runDRC — zone fill hole rings are copper knockouts', () => {
+  // CCW rectPoly is a solid outer; its reverse is a CW hole (winding contract,
+  // see zonefill.ts). A GND pour over a 10x10 outer with a 2x2 knockout hole.
+  function pourWithKnockout(hole: Point[]): Zone {
+    return {
+      id: 'z1',
+      layer: 'F.Cu',
+      net: 'GND',
+      polygon: rectPoly(0, 0, 10, 10),
+      clearance: 0.2,
+      minWidth: 0.2,
+      thermal: { gap: 0.3, spokeWidth: 0.3 },
+      fill: [rectPoly(0, 0, 10, 10), hole],
+    };
+  }
+
+  function withNets(b: Board): Board {
+    b.nets.push({ name: 'GND', class: 'default', pins: [] });
+    b.nets.push({ name: 'SIG', class: 'default', pins: [] });
+    return b;
+  }
+
+  it('a different-net track inside a fill hole at proper clearance is NOT a clearance violation', () => {
+    const b = withNets(base());
+    // Track centered in the 2x2 hole [4,6]x[4,6]; nearest hole edge ~0.375mm > 0.2.
+    b.tracks.push({
+      id: 't1',
+      layer: 'F.Cu',
+      width: 0.25,
+      net: 'SIG',
+      seg: { type: 'line', start: { x: 4.5, y: 5 }, end: { x: 5.5, y: 5 } },
+    });
+    // Hole CW = reversed CCW rectPoly.
+    b.zones.push(pourWithKnockout(rectPoly(4, 4, 2, 2).slice().reverse()));
+
+    const zoneVsTrack = runDRC(b).filter(
+      (v) => v.rule === 'clearance' && v.items.includes('z1') && v.items.includes('t1'),
+    );
+    expect(zoneVsTrack).toHaveLength(0);
+  });
+
+  it('a different-net track overlapping SOLID fill IS a clearance violation', () => {
+    const b = withNets(base());
+    // Track in the solid region (no knockout there) => genuinely overlaps copper.
+    b.tracks.push({
+      id: 't1',
+      layer: 'F.Cu',
+      width: 0.25,
+      net: 'SIG',
+      seg: { type: 'line', start: { x: 1, y: 1 }, end: { x: 2, y: 1 } },
+    });
+    b.zones.push(pourWithKnockout(rectPoly(4, 4, 2, 2).slice().reverse()));
+
+    const zoneVsTrack = runDRC(b).filter(
+      (v) => v.rule === 'clearance' && v.items.includes('z1') && v.items.includes('t1'),
+    );
+    expect(zoneVsTrack.length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Integration: the committed blinker-routed fixture, filled + DRC'd, must not
+// emit the bogus zone-vs-track clearance violations the hole-ring bug produced.
+// ---------------------------------------------------------------------------
+
+describe('runDRC — blinker-routed fixture (filled zones)', () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const board = fillAllZones(
+    parseBoard(readFileSync(join(here, 'fixtures', 'blinker-routed.flamingo'), 'utf8')),
+  );
+  const violations = runDRC(board);
+
+  it('reports ZERO clearance violations between a zone and a different-net item', () => {
+    const zoneClearance = violations.filter((v) => {
+      if (v.rule !== 'clearance') return false;
+      return board.zones.some((z) => v.items.includes(z.id));
+    });
+    expect(zoneClearance).toHaveLength(0);
+  });
+
+  it('still surfaces the board\'s genuine (non-zone) violations', () => {
+    // The routed board is clean of zone-clearance faults but has legitimately
+    // reported issues elsewhere: tight USB-C connector pad-to-pad clearances,
+    // GND pours filled to exactly the copper-to-edge minimum, and silk over
+    // pads. Assert those real findings remain (guards against over-suppression).
+    const byRule = new Map<string, number>();
+    for (const v of violations) byRule.set(v.rule, (byRule.get(v.rule) ?? 0) + 1);
+    expect(byRule.get('clearance') ?? 0).toBeGreaterThan(0); // pad-vs-pad in J1
+    expect(byRule.get('silk-over-pad') ?? 0).toBeGreaterThan(0);
+    // Every remaining clearance violation is pad-vs-pad, never zone-involving.
+    for (const v of violations.filter((x) => x.rule === 'clearance')) {
+      expect(board.zones.some((z) => v.items.includes(z.id))).toBe(false);
+    }
   });
 });

@@ -8,9 +8,21 @@
  * polygon math for pairs that can't possibly violate.
  */
 import type { Board, Point } from '../../types.js';
-import { bboxOf, polyPolyDistance } from '../../geometry.js';
+import { bboxOf, polyPolyDistance, polyGroupDistance } from '../../geometry.js';
 import type { RuleSet } from '../rules.js';
 import type { CopperItem, DrcViolation } from '../types.js';
+
+/**
+ * Distance between two copper items, honoring zone holes. When an item carries
+ * a decoded `group` (outer+holes), the other item's outline is measured against
+ * the solid (outer minus holes) so a track sitting inside a knockout reports
+ * its true distance to the hole boundary instead of a false 0.
+ */
+function itemDistance(a: CopperItem, c: CopperItem): number {
+  if (a.group) return polyGroupDistance(c.polygon, a.group);
+  if (c.group) return polyGroupDistance(a.polygon, c.group);
+  return polyPolyDistance(a.polygon, c.polygon);
+}
 
 function netClearance(b: Board, net: string): number {
   if (!net) return 0;
@@ -78,7 +90,7 @@ export function check(b: Board, rules: RuleSet, items: CopperItem[]): DrcViolati
         continue; // bbox prefilter: can't possibly be closer than `required`
       }
 
-      const d = polyPolyDistance(a.it.polygon, c.it.polygon);
+      const d = itemDistance(a.it, c.it);
       if (d < required) {
         violations.push({
           rule: 'clearance',

@@ -40,7 +40,20 @@ export function check(b: Board, rules: RuleSet, items: CopperItem[]): DrcViolati
 
   const violations: DrcViolation[] = [];
   for (const item of items) {
-    const { d, at } = boundaryDistance(item.polygon, outlinePoly);
+    // For a decoded zone (outer+holes), every ring is a real copper boundary;
+    // measure the nearest of them to the edge. A hole boundary is copper too
+    // (copper wraps the knockout), so including holes can only surface a real
+    // near-edge copper location, never a false one.
+    const rings = item.group ? [item.group.outer, ...item.group.holes] : [item.polygon];
+    let d = Infinity;
+    let at: Point = rings[0][0];
+    for (const ring of rings) {
+      const r = boundaryDistance(ring, outlinePoly);
+      if (r.d < d) {
+        d = r.d;
+        at = r.at;
+      }
+    }
     if (d < rules.copperToEdge) {
       violations.push({
         rule: 'copper-to-edge',

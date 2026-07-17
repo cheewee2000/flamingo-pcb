@@ -7,7 +7,7 @@
  */
 import type { Board, Point } from '../../types.js';
 import { copperLayersOf, isCopper } from '../../layers.js';
-import { pointInPolygon, polyIntersects } from '../../geometry.js';
+import { pointInPolygon, polyIntersects, polyGroupIntersects } from '../../geometry.js';
 import type { RuleSet } from '../rules.js';
 import type { CopperItem, DrcViolation } from '../types.js';
 
@@ -30,7 +30,11 @@ export function check(b: Board, rules: RuleSet, items: CopperItem[]): DrcViolati
     if (k.keepout.copper) {
       for (const item of items) {
         if (layers !== 'all' && !layers.includes(item.layer)) continue;
-        if (polyIntersects(item.polygon, k.polygon)) {
+        // Zone items honor holes: copper inside a knockout is absence-of-copper.
+        const hit = item.group
+          ? polyGroupIntersects(k.polygon, item.group)
+          : polyIntersects(item.polygon, k.polygon);
+        if (hit) {
           violations.push({
             rule: 'keepout',
             message: `${item.kind} ${item.ref} (net "${item.net}") on ${item.layer} intersects copper keepout ${k.id}`,
