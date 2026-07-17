@@ -3,9 +3,11 @@ import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { newBoard } from '@flamingo/engine';
+import type { Board, ComponentInst, Footprint } from '@flamingo/engine';
 import { Doc } from '../src/document.js';
 import { startServer } from '../src/http.js';
 import type { StartedServer } from '../src/http.js';
+import type { RouteRunner } from '../src/route.js';
 
 describe('HTTP API', () => {
   let doc: Doc;
@@ -285,6 +287,103 @@ describe('HTTP API', () => {
       } finally {
         await defServer.close();
         await rm(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe('POST /api/route', () => {
+    // A routed board streams back over /ws; here we only exercise the endpoint
+    // plumbing with a mock runner, so an SES with no wires is enough.
+    const EMPTY_SES = '(session route.ses (routes (resolution um 1)))';
+
+    function makeFootprint(): Footprint {
+      return {
+        name: 'test-fp',
+        lcsc: 'C0',
+        pads: [
+          { number: '1', shape: 'rect', at: { x: -1, y: 0 }, rotation: 0, size: { w: 1, h: 1 }, layer: 'top' },
+          { number: '2', shape: 'rect', at: { x: 1, y: 0 }, rotation: 0, size: { w: 1, h: 1 }, layer: 'top' },
+        ],
+        silk: [],
+        courtyard: [],
+      };
+    }
+
+    function makeComponent(refdes: string, x: number, y: number): ComponentInst {
+      return { refdes, lcsc: 'C0', footprint: makeFootprint(), at: { x, y }, rotation: 0, side: 'top', fields: {} };
+    }
+
+    function routeBoard(): Board {
+      const b = newBoard('routetest', 2);
+      b.outline = [
+        { type: 'line', start: { x: 0, y: 0 }, end: { x: 20, y: 0 } },
+        { type: 'line', start: { x: 20, y: 0 }, end: { x: 20, y: 20 } },
+        { type: 'line', start: { x: 20, y: 20 }, end: { x: 0, y: 20 } },
+        { type: 'line', start: { x: 0, y: 20 }, end: { x: 0, y: 0 } },
+      ];
+      b.components = [makeComponent('R1', 5, 10), makeComponent('R2', 15, 10)];
+      b.nets = [{ name: 'NET1', class: 'default', pins: ['R1.1', 'R2.1'] }];
+      return b;
+    }
+
+    async function startRouteServer(runner: RouteRunner): Promise<StartedServer> {
+      return startServer(new Doc(routeBoard()), 0, { uiDistDir: missingUiDistDir, routeRunner: runner });
+    }
+
+    it('runs the autoroute pipeline and reports counts as JSON', async () => {
+      const okRunner: RouteRunner = { run: async () => EMPTY_SES };
+      const srv = await startRouteServer(okRunner);
+      try {
+        const res = await fetch(`http://localhost:${srv.port}/api/route`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        });
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.ok).toBe(true);
+        expect(body.routedCount).toBe(1); // NET1 has >=2 pins
+        expect(body.tracksAdded).toBe(0); // empty SES: no wires
+        expect(body.viasAdded).toBe(0);
+        expect(Array.isArray(body.remaining)).toBe(true);
+        expect(body.fullyRouted).toBe(false); // still two islands after an empty route
+      } finally {
+        await srv.close();
+      }
+    });
+
+    it('returns 500 with an error message when the router throws', async () => {
+      const badRunner: RouteRunner = {
+        run: async () => {
+          throw new Error('java not found');
+        },
+      };
+      const srv = await startRouteServer(badRunner);
+      try {
+        const res = await fetch(`http://localhost:${srv.port}/api/route`, { method: 'POST' });
+        expect(res.status).toBe(500);
+        const body = await res.json();
+        expect(body.ok).toBe(false);
+        expect(body.error).toContain('java not found');
+      } finally {
+        await srv.close();
+      }
+    });
+
+    it('returns 400 when nets is not an array of strings', async () => {
+      const okRunner: RouteRunner = { run: async () => EMPTY_SES };
+      const srv = await startRouteServer(okRunner);
+      try {
+        const res = await fetch(`http://localhost:${srv.port}/api/route`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ nets: 42 }),
+        });
+        expect(res.status).toBe(400);
+        const body = await res.json();
+        expect(body.ok).toBe(false);
+      } finally {
+        await srv.close();
       }
     });
   });

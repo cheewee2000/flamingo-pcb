@@ -11,7 +11,17 @@
 
 import type { LayerId } from '@flamingo/engine';
 import { copperLayersOf } from '@flamingo/engine';
-import { RATSNEST_KEY, SILK_KEY, store, withLayerKeys, type AppState, type HitInfo, type ToolOptions } from './state.js';
+import {
+  LABEL_NETS_KEY,
+  LABEL_PADS_KEY,
+  RATSNEST_KEY,
+  SILK_KEY,
+  store,
+  withLayerKeys,
+  type AppState,
+  type HitInfo,
+  type ToolOptions,
+} from './state.js';
 import type { ToolManager } from './tools/manager.js';
 
 export interface PanelEls {
@@ -29,7 +39,16 @@ export interface PanelEls {
   snapToggle: HTMLInputElement;
   undoBtn: HTMLButtonElement;
   redoBtn: HTMLButtonElement;
+  routeBtn: HTMLButtonElement;
+  routeStatus: HTMLElement;
 }
+
+// Swatch colors for the two label pseudo-layers, matching the overlay colors in
+// packages/engine/src/render.ts (PAD_LABEL_COLOR / NET_LABEL_COLOR).
+const LABEL_SWATCH: Record<string, string> = {
+  [LABEL_PADS_KEY]: '#22D3EE',
+  [LABEL_NETS_KEY]: '#FACC15',
+};
 
 // COPIED from packages/engine/src/render.ts's LAYER_COLORS (binding table).
 // Keep in sync by hand; exported so packages/ui/test/consistency.test.ts can
@@ -65,7 +84,7 @@ export function initPanels(els: PanelEls, toolManager: ToolManager): void {
     els.layerList.replaceChildren();
     const board = state.board;
     if (!board) return;
-    const keys = [...copperLayersOf(board), SILK_KEY, RATSNEST_KEY];
+    const keys = [...copperLayersOf(board), SILK_KEY, RATSNEST_KEY, LABEL_PADS_KEY, LABEL_NETS_KEY];
     store.set({ layerVisibility: withLayerKeys(state.layerVisibility, keys) });
     const vis = store.get().layerVisibility;
 
@@ -79,7 +98,8 @@ export function initPanels(els: PanelEls, toolManager: ToolManager): void {
       });
       const swatch = document.createElement('span');
       swatch.className = 'layer-swatch';
-      swatch.style.background = key === SILK_KEY || key === RATSNEST_KEY ? '#888' : layerSwatchColor(key);
+      swatch.style.background =
+        LABEL_SWATCH[key] ?? (key === SILK_KEY || key === RATSNEST_KEY ? '#888' : layerSwatchColor(key));
       const text = document.createElement('span');
       text.textContent = key;
       label.append(cb, swatch, text);
@@ -342,6 +362,93 @@ export function initPanels(els: PanelEls, toolManager: ToolManager): void {
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Lock & Route: an in-page confirm (no window.confirm) that POSTs /api/route,
+  // shows a routing-in-progress state, then reports routed/unrouted counts. The
+  // routed board streams back over the existing /ws channel automatically.
+  // ---------------------------------------------------------------------------
+
+  function wireRouteControls(): void {
+    let routing = false;
+    const btn = els.routeBtn;
+    const status = els.routeStatus;
+
+    function idle(): void {
+      status.replaceChildren();
+      btn.disabled = false;
+      btn.textContent = 'Lock & Route';
+    }
+
+    function setResult(text: string, kind: 'ok' | 'err'): void {
+      status.replaceChildren();
+      const el = document.createElement('div');
+      el.className = `route-result ${kind}`;
+      el.textContent = text;
+      status.appendChild(el);
+    }
+
+    async function doRoute(): Promise<void> {
+      if (routing) return;
+      routing = true;
+      btn.disabled = true;
+      status.replaceChildren();
+      const busy = document.createElement('div');
+      busy.className = 'route-busy';
+      busy.textContent = 'Routing… this can take a minute.';
+      status.appendChild(busy);
+      try {
+        const res = await fetch('/api/route', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        });
+        const body = await res.json();
+        if (res.ok && body.ok) {
+          const summary = body.fullyRouted
+            ? `Routed ${body.routedCount} net(s): ${body.tracksAdded} tracks, ${body.viasAdded} vias. All nets routed.`
+            : `Routed ${body.tracksAdded} tracks, ${body.viasAdded} vias — ${body.remaining.length} net(s) still unrouted.`;
+          setResult(summary, 'ok');
+        } else {
+          setResult(`Route failed: ${body.error ?? res.statusText}`, 'err');
+        }
+      } catch (err) {
+        setResult(`Route failed: ${err instanceof Error ? err.message : String(err)}`, 'err');
+      } finally {
+        routing = false;
+        btn.disabled = false;
+        btn.textContent = 'Lock & Route';
+      }
+    }
+
+    function showConfirm(): void {
+      status.replaceChildren();
+      const msg = document.createElement('div');
+      msg.className = 'route-confirm-msg';
+      msg.textContent = 'Lock placement and run the autorouter?';
+      const row = document.createElement('div');
+      row.className = 'route-confirm-row';
+      const go = document.createElement('button');
+      go.type = 'button';
+      go.className = 'route-confirm-go';
+      go.textContent = 'Route';
+      go.addEventListener('click', () => {
+        void doRoute();
+      });
+      const cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'route-confirm-cancel';
+      cancel.textContent = 'Cancel';
+      cancel.addEventListener('click', idle);
+      row.append(go, cancel);
+      status.append(msg, row);
+    }
+
+    btn.addEventListener('click', () => {
+      if (routing) return;
+      showConfirm();
+    });
+  }
+
   function onStateChange(state: AppState): void {
     const boardChanged = state.board !== lastBoard;
     if (boardChanged) {
@@ -363,6 +470,7 @@ export function initPanels(els: PanelEls, toolManager: ToolManager): void {
 
   buildToolButtons();
   wireToolbarControls();
+  wireRouteControls();
   store.subscribe(onStateChange);
   onStateChange(store.get());
 }

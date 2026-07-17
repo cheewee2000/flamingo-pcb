@@ -38,9 +38,11 @@ import {
   isSlot,
   holeSlotCenterline,
   capsulePolygon,
+  labelFontMm,
+  padNetMap,
 } from '@flamingo/engine';
 import type { AppState, ViewTransform } from './state.js';
-import { RATSNEST_KEY, SILK_KEY } from './state.js';
+import { LABEL_NETS_KEY, LABEL_PADS_KEY, RATSNEST_KEY, SILK_KEY } from './state.js';
 import { screenToWorld, worldToScreen } from './view.js';
 
 // ---------------------------------------------------------------------------
@@ -72,6 +74,11 @@ const DRC_COLOR = '#FF0000';
 const KEEPOUT_COLOR = '#FF6600';
 const HOVER_COLOR = '#ffffffcc';
 const BACKGROUND = '#1a1a1a';
+// Label overlay colors -- kept in sync by hand with PAD_LABEL_COLOR /
+// NET_LABEL_COLOR in packages/engine/src/render.ts (the SVG renderer).
+const PAD_LABEL_COLOR = '#22D3EE';
+const NET_LABEL_COLOR = '#FACC15';
+const LABEL_MIN_PX = 7;
 
 const REFDES_HEIGHT_MM = 1.0;
 
@@ -413,6 +420,18 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
         if (s.layer !== silkLayer) continue;
         drawRotatedText(ctx, view, s.at, s.rotation, s.text, s.height, color);
       }
+      for (const line of board.silkLines) {
+        if (line.layer !== silkLayer) continue;
+        const s = worldToScreen(view, line.start);
+        const e = worldToScreen(view, line.end);
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y);
+        ctx.lineTo(e.x, e.y);
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = Math.max(line.width * view.scale, 0.6);
+        ctx.stroke();
+      }
     }
   }
 
@@ -476,6 +495,37 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
       for (const ref of netObj.pins) {
         const found = resolvePin(board, ref);
         if (found) strokePolygon(ctx, view, padOutline(found.comp, found.pad), HIGHLIGHT_COLOR, 0.1);
+      }
+    }
+  }
+
+  // ---- label overlays (pad numbers + net names) ----
+  const showPadLabels = vis[LABEL_PADS_KEY] !== false;
+  const showNetLabels = vis[LABEL_NETS_KEY] !== false;
+  if (showPadLabels || showNetLabels) {
+    const netByPin = showNetLabels ? padNetMap(board) : null;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const c of board.components) {
+      for (const pad of c.footprint.pads) {
+        const [center] = componentTransformPoints(c, [pad.at]);
+        const fontMm = labelFontMm(pad);
+        const fontPx = Math.max(fontMm * view.scale, LABEL_MIN_PX);
+        ctx.font = `${fontPx}px var(--mono, monospace)`;
+        if (showPadLabels) {
+          const s = worldToScreen(view, center);
+          ctx.fillStyle = PAD_LABEL_COLOR;
+          ctx.fillText(pad.number, s.x, s.y);
+        }
+        if (netByPin) {
+          const netName = netByPin.get(`${c.refdes}.${pad.number}`);
+          if (netName) {
+            const offset = Math.min(pad.size.w, pad.size.h) / 2 + fontMm;
+            const s = worldToScreen(view, { x: center.x, y: center.y - offset });
+            ctx.fillStyle = NET_LABEL_COLOR;
+            ctx.fillText(netName, s.x, s.y);
+          }
+        }
       }
     }
   }

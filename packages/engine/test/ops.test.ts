@@ -338,6 +338,27 @@ describe('applyOp', () => {
     });
   });
 
+  describe('addSilkLine', () => {
+    it('adds a silk line with a generated id', () => {
+      const board = baseBoard();
+      const result = applyOp(board, {
+        op: 'addSilkLine',
+        line: { layer: 'F.Silk', start: { x: 0, y: 0 }, end: { x: 5, y: 0 }, width: 0.15 },
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.board.silkLines).toHaveLength(1);
+        expect(result.createdIds).toEqual([result.board.silkLines[0].id]);
+        expect(result.board.silkLines[0]).toMatchObject({
+          layer: 'F.Silk',
+          start: { x: 0, y: 0 },
+          end: { x: 5, y: 0 },
+          width: 0.15,
+        });
+      }
+    });
+  });
+
   describe('removeItem', () => {
     function boardWithItems(): Board {
       const board = baseBoard();
@@ -348,12 +369,13 @@ describe('applyOp', () => {
       });
       board.holes.push({ id: 'H1', at: { x: 0, y: 0 }, drill: 3, padDiameter: 6, plated: true });
       board.silk.push({ id: 'S1', layer: 'F.Silk', at: { x: 0, y: 0 }, text: 'X', height: 1, rotation: 0 });
+      board.silkLines.push({ id: 'SL1', layer: 'F.Silk', start: { x: 0, y: 0 }, end: { x: 1, y: 0 }, width: 0.15 });
       board.tracks.push({ id: 'T1', layer: 'F.Cu', width: 0.25, net: 'NET1', seg: { type: 'line', start: { x: 0, y: 0 }, end: { x: 1, y: 1 } } });
       board.vias.push({ id: 'V1', at: { x: 0, y: 0 }, drill: 0.3, diameter: 0.6, net: 'NET1' });
       return board;
     }
 
-    it.each(['K1', 'Z1', 'H1', 'S1', 'T1', 'V1'])('removes item %s by id', (id) => {
+    it.each(['K1', 'Z1', 'H1', 'S1', 'SL1', 'T1', 'V1'])('removes item %s by id', (id) => {
       const board = boardWithItems();
       const result = applyOp(board, { op: 'removeItem', id });
       expect(result.ok).toBe(true);
@@ -363,6 +385,7 @@ describe('applyOp', () => {
           ...result.board.zones.map((z) => z.id),
           ...result.board.holes.map((h) => h.id),
           ...result.board.silk.map((s) => s.id),
+          ...result.board.silkLines.map((s) => s.id),
           ...result.board.tracks.map((t) => t.id),
           ...result.board.vias.map((v) => v.id),
         ];

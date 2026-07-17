@@ -147,6 +147,33 @@ describe('renderPNG', () => {
     const edgeOnly = renderPNG(board, { showRatsnest: false, showDrc: false, layers: ['Edge'] });
     expect(all.equals(edgeOnly)).toBe(false);
   });
+
+  it('includes both label overlays by default (differs from an explicit no-label layer list)', () => {
+    // unroutedBoard has pads and a net, so the label overlays draw something.
+    const board = unroutedBoard();
+    const withLabels = renderPNG(board, { showRatsnest: false, showDrc: false });
+    const noLabels = renderPNG(board, {
+      showRatsnest: false,
+      showDrc: false,
+      layers: ['F.Cu', 'B.Cu', 'F.Silk', 'B.Silk', 'Edge'],
+    });
+    expect(withLabels.equals(noLabels)).toBe(false);
+  });
+
+  it('label pseudo-layers can be requested explicitly via the layers list', () => {
+    const board = unroutedBoard();
+    const padsOnly = renderPNG(board, {
+      showRatsnest: false,
+      showDrc: false,
+      layers: ['F.Cu', 'B.Cu', 'F.Silk', 'B.Silk', 'Edge', 'labels:pads'],
+    });
+    const noLabels = renderPNG(board, {
+      showRatsnest: false,
+      showDrc: false,
+      layers: ['F.Cu', 'B.Cu', 'F.Silk', 'B.Silk', 'Edge'],
+    });
+    expect(padsOnly.equals(noLabels)).toBe(false);
+  });
 });
 
 describe('pngDimensions', () => {

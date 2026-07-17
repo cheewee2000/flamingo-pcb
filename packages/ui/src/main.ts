@@ -78,6 +78,8 @@ initPanels(
     snapToggle: document.getElementById('snap-toggle') as HTMLInputElement,
     undoBtn: document.getElementById('undo-btn') as HTMLButtonElement,
     redoBtn: document.getElementById('redo-btn') as HTMLButtonElement,
+    routeBtn: document.getElementById('route-btn') as HTMLButtonElement,
+    routeStatus: document.getElementById('route-status')!,
   },
   toolManager,
 );

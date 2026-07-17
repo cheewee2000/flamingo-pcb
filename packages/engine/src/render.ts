@@ -31,6 +31,49 @@ export interface RenderOpts {
   region?: { minX: number; minY: number; maxX: number; maxY: number };
   highlightNet?: string;
   drcMarkers?: Point[];
+  /** Overlay each pad's number at its center (default off). */
+  showPadLabels?: boolean;
+  /** Overlay, offset below each pad, the name of the net that pad belongs to (default off). */
+  showNetLabels?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Label pseudo-layers. These are NOT physical LayerIds -- they are display-only
+// overlays the screenshot tool / UI toggle. They live here (not in the LayerId
+// enum) so DRC, gerber export, etc. never see them. `splitLabelLayers` maps a
+// raw token list (which may mix real LayerIds with these) onto RenderOpts.
+// ---------------------------------------------------------------------------
+
+export const LABEL_PADS_LAYER = 'labels:pads';
+export const LABEL_NETS_LAYER = 'labels:nets';
+
+export interface SplitLayers {
+  /** Physical layers to render, or undefined for "all layers". */
+  layers?: LayerId[];
+  showPadLabels: boolean;
+  showNetLabels: boolean;
+}
+
+/**
+ * Split a raw layer-token list -- which may include the two label
+ * pseudo-layers ('labels:pads', 'labels:nets') alongside real LayerIds -- into
+ * physical LayerIds plus the two label flags.
+ *
+ * `undefined` (no explicit selection) means "show everything": all physical
+ * layers AND both label layers. An explicit list shows only the layers/labels
+ * it names.
+ */
+export function splitLabelLayers(layers?: string[]): SplitLayers {
+  if (layers === undefined) return { layers: undefined, showPadLabels: true, showNetLabels: true };
+  const physical: LayerId[] = [];
+  let showPadLabels = false;
+  let showNetLabels = false;
+  for (const l of layers) {
+    if (l === LABEL_PADS_LAYER) showPadLabels = true;
+    else if (l === LABEL_NETS_LAYER) showNetLabels = true;
+    else physical.push(l as LayerId);
+  }
+  return { layers: physical, showPadLabels, showNetLabels };
 }
 
 // ---------------------------------------------------------------------------
@@ -61,6 +104,11 @@ const RATSNEST_COLOR = '#ffffff66';
 const HIGHLIGHT_COLOR = '#00FFFF';
 const DRC_COLOR = '#FF0000';
 const KEEPOUT_COLOR = '#FF6600';
+// Label overlay colors -- deliberately distinct from silk (#F2EDA1/#E8B2A7) and
+// the cyan highlight (#00FFFF) so pad numbers and net names read as their own
+// layer. The UI (packages/ui/src/renderer.ts) keeps matching copies.
+const PAD_LABEL_COLOR = '#22D3EE';
+const NET_LABEL_COLOR = '#FACC15';
 const DEFAULT_BACKGROUND = '#1a1a1a';
 const DEFAULT_WIDTH_PX = 1200;
 const MARGIN_MM = 2;
@@ -72,6 +120,27 @@ const MARGIN_MM = 2;
 function fmt(n: number): string {
   const r = n.toFixed(4);
   return r === '-0.0000' ? '0.0000' : r;
+}
+
+// Label font height (mm): scales with the pad's smaller dimension so the text
+// tracks pad size, but clamped so it never shrinks into illegibility or grows
+// to swamp the board. Shared by the SVG renderer and the UI canvas renderer.
+export const LABEL_FONT_MIN_MM = 0.35;
+export const LABEL_FONT_MAX_MM = 1.2;
+
+export function labelFontMm(pad: Pad): number {
+  const minDim = Math.min(pad.size.w, pad.size.h);
+  const scaled = minDim * 0.6;
+  return Math.max(LABEL_FONT_MIN_MM, Math.min(LABEL_FONT_MAX_MM, scaled));
+}
+
+/** Map of "REFDES.PAD" -> net name, for net-label lookups. */
+export function padNetMap(b: Board): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const net of b.nets) {
+    for (const ref of net.pins) m.set(ref, net.name);
+  }
+  return m;
 }
 
 // ---------------------------------------------------------------------------
@@ -278,6 +347,16 @@ export function renderSVG(b: Board, opts: RenderOpts = {}): string {
         `<text x="${fmt(p.x)}" y="${fmt(p.y)}" font-family="monospace" font-size="${fmt(s.height)}" text-anchor="middle" fill="${color}"${rotAttr}>${escapeXml(s.text)}</text>`,
       );
     }
+
+    // board-level silk lines (mechanical reference outlines) on this side
+    for (const line of b.silkLines) {
+      if (line.layer !== silkLayer) continue;
+      const s = svg(line.start);
+      const e = svg(line.end);
+      parts.push(
+        `<line x1="${fmt(s.x)}" y1="${fmt(s.y)}" x2="${fmt(e.x)}" y2="${fmt(e.y)}" stroke="${color}" stroke-width="${fmt(line.width)}" stroke-linecap="round"/>`,
+      );
+    }
   }
 
   function renderSilkItem(item: SilkItem, c: ComponentInst, mirror: boolean, color: string): string[] {
@@ -377,6 +456,34 @@ export function renderSVG(b: Board, opts: RenderOpts = {}): string {
         parts.push(
           `<polygon points="${polygonPoints(outline)}" fill="none" stroke="${HIGHLIGHT_COLOR}" stroke-width="0.1"/>`,
         );
+      }
+    }
+  }
+
+  // ---- label overlays (pad numbers + net names), drawn above copper/silk ----
+  if (opts.showPadLabels || opts.showNetLabels) {
+    const netByPin = opts.showNetLabels ? padNetMap(b) : null;
+    for (const c of b.components) {
+      for (const pad of c.footprint.pads) {
+        const center = padWorld(c, pad).at;
+        const font = labelFontMm(pad);
+        if (opts.showPadLabels) {
+          const p = svg(center);
+          parts.push(
+            `<text x="${fmt(p.x)}" y="${fmt(p.y)}" font-family="monospace" font-size="${fmt(font)}" text-anchor="middle" dominant-baseline="central" fill="${PAD_LABEL_COLOR}">${escapeXml(pad.number)}</text>`,
+          );
+        }
+        if (netByPin) {
+          const netName = netByPin.get(`${c.refdes}.${pad.number}`);
+          if (netName) {
+            // Offset below the pad (world y-up: -y) so it clears the pad number.
+            const offset = Math.min(pad.size.w, pad.size.h) / 2 + font;
+            const p = svg({ x: center.x, y: center.y - offset });
+            parts.push(
+              `<text x="${fmt(p.x)}" y="${fmt(p.y)}" font-family="monospace" font-size="${fmt(font)}" text-anchor="middle" dominant-baseline="central" fill="${NET_LABEL_COLOR}">${escapeXml(netName)}</text>`,
+            );
+          }
+        }
       }
     }
   }

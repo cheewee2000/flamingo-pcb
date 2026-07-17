@@ -18,6 +18,7 @@ import type {
   PathSeg,
   Point,
   SilkText,
+  SilkLine,
   Track,
   Via,
   Zone,
@@ -26,16 +27,18 @@ import {
   boardBBox,
   fillAllZones,
   isFullyRouted,
+  LABEL_NETS_LAYER,
+  LABEL_PADS_LAYER,
   newBoard,
   parseBoard,
   ratsnest,
   runDRC,
 } from '@flamingo/engine';
-import { exportDSN, exportFab, importSES } from '@flamingo/fab';
-import type { ImportSESResult } from '@flamingo/fab';
+import { exportFab } from '@flamingo/fab';
 import type { PartInfo, SearchOpts } from '@flamingo/parts';
 import type { Doc } from './document.js';
 import type { RouteRunner } from './route.js';
+import { formatAutorouteSummary, runAutoroute } from './autoroute.js';
 import { pngDimensions, renderPNG } from './screenshot.js';
 
 /**
@@ -262,6 +265,13 @@ const LAYER_IDS = [
   'Edge',
 ] as const;
 const layerIdSchema = z.enum(LAYER_IDS);
+
+// Layers accepted by the screenshot tool: real LayerIds plus the two label
+// pseudo-layers (pad numbers / net names). See engine `splitLabelLayers`.
+const screenshotLayerSchema = z.union([
+  layerIdSchema,
+  z.enum([LABEL_PADS_LAYER, LABEL_NETS_LAYER]),
+]);
 
 const pointSchema = z.object({ x: z.number().describe('X in mm'), y: z.number().describe('Y in mm') });
 
@@ -735,10 +745,61 @@ export function createMcpServer(ctx: McpContext): McpServer {
     },
   );
 
+  const silkPointSchema = z.object({
+    x: z.number().describe('X position in mm'),
+    y: z.number().describe('Y position in mm'),
+  });
+
+  server.registerTool(
+    'add_silk_line',
+    {
+      description:
+        'Add silkscreen line(s) for mechanical reference outlines (e.g. the display glass or FPC-tail footprint drawn on the legend layer). Provide either a single segment (start + end) or a `polyline` of >= 2 points, which is drawn as connected segments (N-1 lines) in a single call -- one call per outline instead of one per edge.',
+      inputSchema: {
+        layer: z.enum(['F.Silk', 'B.Silk']).describe('Silkscreen layer'),
+        start: silkPointSchema.optional().describe('Segment start {x,y} in mm (single-segment form)'),
+        end: silkPointSchema.optional().describe('Segment end {x,y} in mm (single-segment form)'),
+        polyline: z
+          .array(silkPointSchema)
+          .optional()
+          .describe('Ordered points {x,y} in mm; creates N-1 connected segments (reference-outline form)'),
+        width: z.number().optional().describe('Line width in mm (default 0.15)'),
+      },
+    },
+    ({ layer, start, end, polyline, width }) => {
+      const w = width ?? 0.15;
+      let points: Point[];
+      if (polyline !== undefined) {
+        if (start !== undefined || end !== undefined) {
+          return errorResult('Provide either start+end or polyline, not both');
+        }
+        if (polyline.length < 2) {
+          return errorResult('polyline needs at least 2 points to make a segment');
+        }
+        points = polyline;
+      } else {
+        if (start === undefined || end === undefined) {
+          return errorResult('Provide start and end (or a polyline)');
+        }
+        points = [start, end];
+      }
+      // Each segment is its own removable SilkLine; apply them in sequence so
+      // the polyline form returns every created id in one tool call.
+      const ids: string[] = [];
+      for (let i = 0; i < points.length - 1; i++) {
+        const line: Omit<SilkLine, 'id'> = { layer, start: points[i], end: points[i + 1], width: w };
+        const result = ctx.doc.apply({ op: 'addSilkLine', line });
+        if (!result.ok) return errorResult((result as OpError).error);
+        ids.push(result.createdIds[0]);
+      }
+      return textResult(`Added ${ids.length} silk line${ids.length === 1 ? '' : 's'} on ${layer}: ${ids.join(', ')}`);
+    },
+  );
+
   server.registerTool(
     'remove_item',
     {
-      description: 'Remove a keepout, zone, mounting hole, silk text, track, or via by id.',
+      description: 'Remove a keepout, zone, mounting hole, silk text, silk line, track, or via by id.',
       inputSchema: { id: z.string().describe('Item id, as returned by its creating tool') },
     },
     ({ id }) => {
@@ -897,53 +958,12 @@ export function createMcpServer(ctx: McpContext): McpServer {
       },
     },
     async ({ nets, passes }) => {
-      const netList = nets && nets.length > 0 ? nets : undefined;
-
-      // 1. Unroute the nets we are about to (re)route so freerouting starts fresh.
-      if (netList) {
-        for (const n of netList) {
-          const r = ctx.doc.apply({ op: 'unroute', net: n });
-          if (!r.ok) return errorResult((r as OpError).error);
-        }
-      } else {
-        const r = ctx.doc.apply({ op: 'unroute' });
-        if (!r.ok) return errorResult((r as OpError).error);
-      }
-
-      // 2. Export DSN, 3. run freerouting, 4. import SES.
-      const board = ctx.doc.board;
-      const dsn = exportDSN(board, netList ? { nets: netList } : {});
-      let ses: string;
       try {
-        ses = await ctx.route.run(dsn, passes !== undefined ? { passes } : undefined);
+        const result = await runAutoroute(ctx.doc, ctx.route, { nets, passes });
+        return textResult(formatAutorouteSummary(result));
       } catch (err) {
         return errorResult(`autoroute failed: ${err instanceof Error ? err.message : String(err)}`);
       }
-      let tracks: ImportSESResult['tracks'];
-      let vias: ImportSESResult['vias'];
-      try {
-        ({ tracks, vias } = importSES(ses, board));
-      } catch (err) {
-        return errorResult(`autoroute failed: ${err instanceof Error ? err.message : String(err)}`);
-      }
-
-      // 5. Apply the routed geometry.
-      const applyRes = ctx.doc.apply({ op: 'addTracks', tracks, vias });
-      if (!applyRes.ok) return errorResult((applyRes as OpError).error);
-
-      const routedCount = netList
-        ? netList.length
-        : ctx.doc.board.nets.filter((n) => n.pins.length >= 2).length;
-      const remaining = isFullyRouted(ctx.doc.board);
-      const remainingStr =
-        remaining.length === 0
-          ? 'All nets fully routed.'
-          : `Unrouted remaining: ${remaining
-              .map((u) => `${u.net} (${u.unconnected})`)
-              .join(', ')}`;
-      return textResult(
-        `Routed ${routedCount} net(s): ${tracks.length} tracks, ${vias.length} vias added. ${remainingStr}`,
-      );
     },
   );
 
@@ -998,9 +1018,14 @@ export function createMcpServer(ctx: McpContext): McpServer {
     'screenshot',
     {
       description:
-        'Render the current board to a PNG image so you can see it. Unrouted airwires (ratsnest) and DRC violation markers are shown by default -- pass showRatsnest:false / showDrc:false to hide them. Filter to specific layers, zoom to a region, or highlight one net.',
+        'Render the current board to a PNG image so you can see it. Unrouted airwires (ratsnest) and DRC violation markers are shown by default -- pass showRatsnest:false / showDrc:false to hide them. Two label overlays -- "labels:pads" (each pad number, cyan) and "labels:nets" (the net each pad belongs to, yellow) -- are ALSO shown by default so you can verify pin/net assignments; pass an explicit layers list to include only the layers/labels you name. Filter to specific layers, zoom to a region, or highlight one net.',
       inputSchema: {
-        layers: z.array(layerIdSchema).optional().describe('Layers to render (omit for all layers)'),
+        layers: z
+          .array(screenshotLayerSchema)
+          .optional()
+          .describe(
+            'Layers to render (omit for all layers + both label overlays). Include "labels:pads" and/or "labels:nets" to show pad-number / net-name overlays.',
+          ),
         region: regionSchema.optional().describe('Zoom to this mm bounding box (omit for the whole board)'),
         highlightNet: z.string().optional().describe('Net name to highlight in cyan'),
         widthPx: z.number().int().positive().optional().describe('Image width in px (default 1200, capped at 2400)'),

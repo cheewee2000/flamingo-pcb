@@ -8,6 +8,7 @@ import type {
   Point,
   PathSeg,
   SilkText,
+  SilkLine,
   Track,
   Via,
   Zone,
@@ -37,6 +38,7 @@ export type Op =
   | { op: 'addZone'; zone: Omit<Zone, 'id' | 'fill'> }
   | { op: 'addHole'; hole: Omit<MountingHole, 'id'> }
   | { op: 'addSilkText'; text: Omit<SilkText, 'id'> }
+  | { op: 'addSilkLine'; line: Omit<SilkLine, 'id'> }
   | { op: 'removeItem'; id: string }
   | { op: 'connectPins'; net: string; pins: string[] }
   | { op: 'disconnectPins'; pins: string[] }
@@ -187,12 +189,21 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
       return ok(board, createdIds);
     }
 
+    case 'addSilkLine': {
+      const id = globalThis.crypto.randomUUID();
+      const line: SilkLine = { id, ...op.line };
+      board.silkLines.push(line);
+      createdIds.push(id);
+      return ok(board, createdIds);
+    }
+
     case 'removeItem': {
       const collections: Array<{ id: string }[]> = [
         board.keepouts,
         board.zones,
         board.holes,
         board.silk,
+        board.silkLines,
         board.tracks,
         board.vias,
       ];
@@ -204,7 +215,7 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
         }
       }
       return err(
-        `No item with id "${op.id}" found in keepouts/zones/holes/silk/tracks/vias`,
+        `No item with id "${op.id}" found in keepouts/zones/holes/silk/silkLines/tracks/vias`,
       );
     }
 

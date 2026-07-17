@@ -32,6 +32,7 @@ describe('Board', () => {
       expect(board.vias).toEqual([]);
       expect(board.zones).toEqual([]);
       expect(board.silk).toEqual([]);
+      expect(board.silkLines).toEqual([]);
     });
 
     it('creates a 4-layer board with correct rules', () => {
@@ -79,6 +80,27 @@ describe('Board', () => {
       const parsed = parseBoard(json);
       expect(parsed.nets).toEqual(board.nets);
       expect(parsed.tracks).toEqual(board.tracks);
+    });
+
+    it('round-trips silk lines', () => {
+      const board = newBoard('silklines', 2);
+      board.silkLines.push({
+        id: 'SL1',
+        layer: 'F.Silk',
+        start: { x: 0, y: 0 },
+        end: { x: 10, y: 0 },
+        width: 0.15,
+      });
+      const parsed = parseBoard(serializeBoard(board));
+      expect(parsed.silkLines).toEqual(board.silkLines);
+    });
+
+    it('defaults silkLines to [] when loading an older board that omits the field', () => {
+      const board = newBoard('legacy', 2);
+      const obj = JSON.parse(serializeBoard(board));
+      delete obj.silkLines; // simulate a board saved before silkLines existed
+      const parsed = parseBoard(JSON.stringify(obj));
+      expect(parsed.silkLines).toEqual([]);
     });
   });
 

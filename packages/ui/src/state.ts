@@ -92,6 +92,10 @@ export const MAX_SCALE = 200;
 
 export const SILK_KEY = 'Silk';
 export const RATSNEST_KEY = 'Ratsnest';
+/** Display-only overlays: pad numbers and per-pad net names. Toggled like a
+ * layer but rendered from the board model, not a physical copper/silk layer. */
+export const LABEL_PADS_KEY = 'Pad #';
+export const LABEL_NETS_KEY = 'Net names';
 
 function initialState(): AppState {
   return {
@@ -100,7 +104,7 @@ function initialState(): AppState {
     selectedNet: null,
     hover: null,
     view: { scale: 10, originPxX: 0, originPxY: 0, flipped: false },
-    layerVisibility: { [SILK_KEY]: true, [RATSNEST_KEY]: true },
+    layerVisibility: { [SILK_KEY]: true, [RATSNEST_KEY]: true, [LABEL_PADS_KEY]: true, [LABEL_NETS_KEY]: true },
     connected: false,
     drcMarkers: [],
     cursorMm: null,

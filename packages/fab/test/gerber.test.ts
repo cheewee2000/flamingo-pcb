@@ -251,6 +251,30 @@ describe('buildDrills', () => {
   });
 });
 
+describe('generateGerbers - board-level silk lines', () => {
+  it('strokes an F.Silk line into the top legend (GTO) at its width', () => {
+    const b = newBoard('sl', 2);
+    b.silkLines.push({ id: 'SL1', layer: 'F.Silk', start: { x: 1, y: 1 }, end: { x: 11, y: 1 }, width: 0.15 });
+    const { files } = generateGerbers(b);
+    const gto = files.get('sl.GTO')!;
+    assertGerberParses(gto);
+    // A 0.15mm round aperture is defined and a segment is drawn (D01) with it.
+    expect(gto).toMatch(/%ADD\d+C,0\.15\*%/);
+    expect(gto).toContain('D01*');
+  });
+
+  it('routes a B.Silk line into the bottom legend (GBO), not the top', () => {
+    const b = newBoard('sl', 2);
+    b.silkLines.push({ id: 'SL1', layer: 'B.Silk', start: { x: 0, y: 0 }, end: { x: 5, y: 5 }, width: 0.2 });
+    const { files } = generateGerbers(b);
+    const gbo = files.get('sl.GBO')!;
+    const gto = files.get('sl.GTO')!;
+    assertGerberParses(gbo);
+    expect(gbo).toMatch(/%ADD\d+C,0\.2\*%/);
+    expect(gto).not.toContain('D01*'); // nothing drawn on the top legend
+  });
+});
+
 describe('generateGerbers - slotted mounting hole annulus', () => {
   it('draws a plated slotted mounting hole annulus as a stadium region on copper and mask', () => {
     const b = newBoard('mh', 2);
