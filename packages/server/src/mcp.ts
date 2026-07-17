@@ -6,6 +6,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type {
   Board,
   ComponentInst,
+  DrcViolation,
   Footprint,
   Keepout,
   LayerId,
@@ -25,6 +26,7 @@ import {
   newBoard,
   parseBoard,
   ratsnest,
+  runDRC,
 } from '@flamingo/engine';
 import { exportDSN, importSES } from '@flamingo/fab';
 import type { ImportSESResult } from '@flamingo/fab';
@@ -145,6 +147,16 @@ function describeConnections(board: Board): string {
       return `${net.name}: ${pins} — ${status}`;
     })
     .join('\n');
+}
+
+function formatDrcReport(violations: DrcViolation[]): string {
+  if (violations.length === 0) return 'DRC clean: 0 violations.';
+  const lines: string[] = [`DRC found ${violations.length} violation(s):`];
+  for (const v of violations) {
+    const itemsStr = v.items.length > 0 ? v.items.join(', ') : '(none)';
+    lines.push(`[${v.rule}] ${v.message} — at (${fmt(v.at.x)}, ${fmt(v.at.y)}); items: ${itemsStr}`);
+  }
+  return lines.join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -703,6 +715,16 @@ export function createMcpServer(ctx: McpContext): McpServer {
         .join('\n');
       return textResult(text);
     },
+  );
+
+  server.registerTool(
+    'run_drc',
+    {
+      description:
+        'Run design rule checks (DRC) against the current board using the fab ruleset matching its layer count (JLCPCB 2/4/6-layer capabilities). Checks clearance, track width, drill/annular/via-diameter minimums, copper-to-edge, keepouts, hole-to-hole spacing, courtyard overlap, silk-over-pad, unconnected nets, and outline issues. Returns a report of violations (an empty report means the board is DRC-clean) -- violations are reported as data, not a tool error.',
+      inputSchema: {},
+    },
+    () => textResult(formatDrcReport(runDRC(ctx.doc.board))),
   );
 
   server.registerTool(

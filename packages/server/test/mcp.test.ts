@@ -81,6 +81,7 @@ const TOOL_NAMES = [
   'add_silk_text',
   'remove_item',
   'get_ratsnest',
+  'run_drc',
   'undo',
   'redo',
   'unroute',
@@ -119,11 +120,11 @@ describe('MCP endpoint', () => {
     await rm(projectDir, { recursive: true, force: true });
   });
 
-  it('tools/list returns all 25 core tools', async () => {
+  it('tools/list returns all 26 core tools', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([...TOOL_NAMES].sort());
-    expect(tools).toHaveLength(25);
+    expect(tools).toHaveLength(26);
   });
 
   it('place_component (mocked part) then get_board_state reflects it', async () => {
@@ -292,6 +293,54 @@ describe('MCP endpoint', () => {
     expect(result.isError).toBeFalsy();
     const text = textOf(result as any);
     expect(text).toContain('GND');
+  });
+
+  it('run_drc on a bare (outline-less) board reports the missing-outline violation, not a tool error', async () => {
+    const result = await client.callTool({ name: 'run_drc', arguments: {} });
+    expect(result.isError).toBeFalsy();
+    const text = textOf(result as any);
+    expect(text).toContain('missing-outline');
+    expect(text).toContain('1 violation');
+  });
+
+  it('run_drc on a DRC-clean board reports zero violations', async () => {
+    // R1/R2 placed at the exact coordinates the mock router's SES wire
+    // assumes (see MOCK_SES / R1.2->R2.1 comment above); outline given
+    // generous margin on every side so nothing trips copper-to-edge or
+    // outside-outline.
+    await client.callTool({
+      name: 'set_board_outline',
+      arguments: {
+        shape: 'polygon',
+        points: [
+          { x: -10, y: -10 },
+          { x: 50, y: -10 },
+          { x: 50, y: 30 },
+          { x: -10, y: 30 },
+        ],
+      },
+    });
+    await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R1', x: 0, y: 0 } });
+    await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R2', x: 5, y: 0 } });
+    await client.callTool({ name: 'connect_pins', arguments: { net: 'N1', pins: ['R1.2', 'R2.1'] } });
+    await client.callTool({ name: 'autoroute', arguments: {} });
+
+    const result = await client.callTool({ name: 'run_drc', arguments: {} });
+    expect(result.isError).toBeFalsy();
+    expect(textOf(result as any)).toContain('DRC clean: 0 violations.');
+  });
+
+  it('run_drc reports an unconnected-net violation as data, without isError', async () => {
+    await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R1', x: 5, y: 10 } });
+    await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R2', x: 15, y: 10 } });
+    await client.callTool({ name: 'connect_pins', arguments: { net: 'N1', pins: ['R1.2', 'R2.1'] } });
+    // Deliberately not autorouted: N1 has two pins in separate islands.
+
+    const result = await client.callTool({ name: 'run_drc', arguments: {} });
+    expect(result.isError).toBeFalsy(); // violations are data, not a tool failure
+    const text = textOf(result as any);
+    expect(text).toContain('unconnected-net');
+    expect(text).toContain('N1');
   });
 
   it('new_board replaces the current board', async () => {

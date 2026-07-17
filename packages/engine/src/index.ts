@@ -38,6 +38,7 @@ export {
   boardBBox,
   polyIntersects,
   pointInPolygon,
+  polyPolyDistance,
   expandTrack,
   componentTransformPoints,
   componentTransformRotation,
@@ -54,3 +55,9 @@ export { padAnchor, connectedGroups, ratsnest, isFullyRouted } from './connectiv
 // Re-export renderer
 export type { RenderOpts } from './render.js';
 export { renderSVG } from './render.js';
+
+// Re-export DRC
+export type { RuleSet } from './drc/rules.js';
+export { RULESETS } from './drc/rules.js';
+export type { DrcViolation, CopperItem } from './drc/types.js';
+export { runDRC, buildCopperItems } from './drc/drc.js';

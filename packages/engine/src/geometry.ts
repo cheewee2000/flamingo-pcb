@@ -398,6 +398,32 @@ export function polyIntersects(a: Point[], b: Point[]): boolean {
   return area > 1e-9;
 }
 
+/**
+ * Minimum distance between the boundaries of two closed polygons.
+ * Returns 0 when they overlap (positive intersection area, per
+ * `polyIntersects`) or merely touch; otherwise the true edge-to-edge gap,
+ * computed via all edge-pair segment distances (segSegDistance on synthetic
+ * line PathSegs, so it shares the tested closest-point math).
+ */
+export function polyPolyDistance(a: Point[], b: Point[]): number {
+  if (a.length === 0 || b.length === 0) {
+    throw new Error('polyPolyDistance: polygon must have at least one point');
+  }
+  if (polyIntersects(a, b)) return 0;
+  let min = Infinity;
+  const na = a.length;
+  const nb = b.length;
+  for (let i = 0; i < na; i++) {
+    const segA: PathSeg = { type: 'line', start: a[i], end: a[(i + 1) % na] };
+    for (let j = 0; j < nb; j++) {
+      const segB: PathSeg = { type: 'line', start: b[j], end: b[(j + 1) % nb] };
+      const d = segSegDistance(segA, segB);
+      if (d < min) min = d;
+    }
+  }
+  return min;
+}
+
 /** Ray-casting point-in-polygon test. */
 export function pointInPolygon(p: Point, poly: Point[]): boolean {
   let inside = false;

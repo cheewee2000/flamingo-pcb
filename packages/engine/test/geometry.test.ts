@@ -12,6 +12,7 @@ import {
   boardBBox,
   polyIntersects,
   pointInPolygon,
+  polyPolyDistance,
   expandTrack,
 } from '../src/index.js';
 import type { ComponentInst, Pad, Footprint, PathSeg, Board, Track } from '../src/index.js';
@@ -456,5 +457,52 @@ describe('expandTrack', () => {
       expect(d).toBeGreaterThanOrEqual(9.35);
       expect(d).toBeLessThanOrEqual(10.65);
     }
+  });
+});
+
+describe('polyPolyDistance', () => {
+  function square(minX: number, minY: number, size: number) {
+    return [
+      { x: minX, y: minY },
+      { x: minX + size, y: minY },
+      { x: minX + size, y: minY + size },
+      { x: minX, y: minY + size },
+    ];
+  }
+
+  it('returns 0 for overlapping polygons', () => {
+    const a = square(0, 0, 2);
+    const b = square(1, 1, 2);
+    expect(polyPolyDistance(a, b)).toBe(0);
+  });
+
+  it('returns 0 for touching (edge-adjacent) polygons', () => {
+    const a = square(0, 0, 1);
+    const b = square(1, 0, 1);
+    expect(polyPolyDistance(a, b)).toBeCloseTo(0, 9);
+  });
+
+  it('returns 0 when one polygon fully contains the other (no edge crossing)', () => {
+    const outer = square(0, 0, 10);
+    const inner = square(4, 4, 2);
+    expect(polyPolyDistance(outer, inner)).toBe(0);
+  });
+
+  it('computes the true edge-to-edge gap between two disjoint axis-aligned squares', () => {
+    const a = square(0, 0, 1); // x in [0,1]
+    const b = square(3, 0, 1); // x in [3,4]
+    expect(polyPolyDistance(a, b)).toBeCloseTo(2, 9);
+  });
+
+  it('computes the diagonal gap between two disjoint squares offset in both axes', () => {
+    const a = square(0, 0, 1); // corner at (1,1)
+    const b = square(4, 4, 1); // corner at (4,4)
+    expect(polyPolyDistance(a, b)).toBeCloseTo(Math.hypot(3, 3), 9);
+  });
+
+  it('is symmetric', () => {
+    const a = square(0, 0, 1);
+    const b = square(3, 5, 1);
+    expect(polyPolyDistance(a, b)).toBeCloseTo(polyPolyDistance(b, a), 9);
   });
 });
