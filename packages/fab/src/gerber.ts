@@ -23,6 +23,7 @@
 import type { Board, ComponentInst, LayerId, Pad, PathSeg, Point } from '@flamingo/engine';
 import {
   copperLayersOf,
+  padCopperLayers,
   padOutline,
   padWorld,
   componentTransformPoints,
@@ -193,13 +194,6 @@ class GerberBuilder {
 // Pad geometry / aperture selection
 // ---------------------------------------------------------------------------
 
-function padPhysicalLayers(b: Board, comp: ComponentInst, pad: Pad): LayerId[] {
-  if (pad.layer === 'through') return copperLayersOf(b);
-  const physicalSide: 'top' | 'bottom' =
-    comp.side === 'bottom' ? (pad.layer === 'top' ? 'bottom' : 'top') : pad.layer;
-  return [physicalSide === 'top' ? 'F.Cu' : 'B.Cu'];
-}
-
 /** Nearest of 0/90/180/270 if within tolerance, else null. */
 function axisAlign(rotationDeg: number): 0 | 90 | 180 | 270 | null {
   const r = ((rotationDeg % 360) + 360) % 360;
@@ -254,6 +248,7 @@ function emitPad(g: GerberBuilder, comp: ComponentInst, pad: Pad, expansion: num
 
 function buildCopper(b: Board, filled: Board, layer: LayerId, fileFunction: string): string {
   const g = new GerberBuilder();
+  const cu = copperLayersOf(b);
 
   for (const z of filled.zones) {
     if (z.layer !== layer || !z.fill || z.fill.length === 0) continue;
@@ -269,7 +264,7 @@ function buildCopper(b: Board, filled: Board, layer: LayerId, fileFunction: stri
 
   for (const comp of b.components) {
     for (const pad of comp.footprint.pads) {
-      if (!padPhysicalLayers(b, comp, pad).includes(layer)) continue;
+      if (!padCopperLayers(pad, comp.side, cu).includes(layer)) continue;
       emitPad(g, comp, pad, 0);
     }
   }
@@ -291,9 +286,10 @@ function buildCopper(b: Board, filled: Board, layer: LayerId, fileFunction: stri
 function buildMask(b: Board, side: 'F' | 'B'): string {
   const layer: LayerId = side === 'F' ? 'F.Cu' : 'B.Cu';
   const g = new GerberBuilder();
+  const cu = copperLayersOf(b);
   for (const comp of b.components) {
     for (const pad of comp.footprint.pads) {
-      if (!padPhysicalLayers(b, comp, pad).includes(layer)) continue;
+      if (!padCopperLayers(pad, comp.side, cu).includes(layer)) continue;
       emitPad(g, comp, pad, 0.05);
     }
   }
@@ -310,10 +306,11 @@ function buildMask(b: Board, side: 'F' | 'B'): string {
 function buildPaste(b: Board, side: 'F' | 'B'): string {
   const layer: LayerId = side === 'F' ? 'F.Cu' : 'B.Cu';
   const g = new GerberBuilder();
+  const cu = copperLayersOf(b);
   for (const comp of b.components) {
     for (const pad of comp.footprint.pads) {
       if (pad.layer === 'through') continue;
-      if (!padPhysicalLayers(b, comp, pad).includes(layer)) continue;
+      if (!padCopperLayers(pad, comp.side, cu).includes(layer)) continue;
       emitPad(g, comp, pad, 0);
     }
   }

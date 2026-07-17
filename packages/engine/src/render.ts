@@ -16,7 +16,7 @@ import {
   componentTransformPoints,
   componentTransformRotation,
 } from './geometry.js';
-import { copperLayersOf } from './layers.js';
+import { copperLayersOf, padCopperLayers } from './layers.js';
 import type { RatLine } from './connectivity.js';
 
 export interface RenderOpts {
@@ -31,10 +31,13 @@ export interface RenderOpts {
 }
 
 // ---------------------------------------------------------------------------
-// Color table (binding -- the UI copies these; do not rename/retint casually)
+// Color table (binding -- the UI copies these; do not rename/retint casually.
+// Exported as LAYER_COLORS so packages/ui/test/consistency.test.ts can assert
+// the UI's independent copies -- src/renderer.ts's COPPER_COLOR and
+// src/panels.ts's LAYER_SWATCH_COLORS -- stay in sync with this table.)
 // ---------------------------------------------------------------------------
 
-const COPPER_COLOR: Partial<Record<LayerId, string>> = {
+export const LAYER_COLORS: Partial<Record<LayerId, string>> = {
   'F.Cu': '#C83434',
   'In1.Cu': '#7FC87F',
   'In2.Cu': '#CE7D2C',
@@ -147,11 +150,12 @@ export function renderSVG(b: Board, opts: RenderOpts = {}): string {
   );
 
   // ---- copper layers, bottom-up: B.Cu -> inner layers -> F.Cu ----
-  const layerOrder = copperLayersOf(b).slice().reverse();
+  const cu = copperLayersOf(b);
+  const layerOrder = cu.slice().reverse();
 
   for (const layer of layerOrder) {
     if (!layerOn(layer)) continue;
-    const color = COPPER_COLOR[layer]!;
+    const color = LAYER_COLORS[layer]!;
 
     // zones on this layer
     const zones = b.zones.filter((z) => z.layer === layer);
@@ -185,10 +189,7 @@ export function renderSVG(b: Board, opts: RenderOpts = {}): string {
       for (const c of b.components) {
         for (const pad of c.footprint.pads) {
           if (pad.layer === 'through') continue;
-          const physicalSide: 'top' | 'bottom' =
-            c.side === 'bottom' ? (pad.layer === 'top' ? 'bottom' : 'top') : pad.layer;
-          const physicalLayer: LayerId = physicalSide === 'top' ? 'F.Cu' : 'B.Cu';
-          if (physicalLayer !== layer) continue;
+          if (!padCopperLayers(pad, c.side, cu).includes(layer)) continue;
           const outline = padOutline(c, pad);
           parts.push(`<polygon points="${polygonPoints(outline)}" fill="${color}"/>`);
         }

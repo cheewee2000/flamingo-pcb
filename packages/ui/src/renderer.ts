@@ -34,17 +34,21 @@ import {
   padOutline,
   outlineToPolygon,
   copperLayersOf,
+  padCopperLayers,
 } from '@flamingo/engine';
 import type { AppState, ViewTransform } from './state.js';
 import { RATSNEST_KEY, SILK_KEY } from './state.js';
 import { screenToWorld, worldToScreen } from './view.js';
 
 // ---------------------------------------------------------------------------
-// Color table -- COPIED from packages/engine/src/render.ts (binding table).
-// Keep these two lists in sync by hand; canvas draws differently from SVG,
-// but the palette must match. Do not rename/retint casually.
+// Color table -- COPIED from packages/engine/src/render.ts's LAYER_COLORS
+// (binding table). Keep these two lists in sync by hand; canvas draws
+// differently from SVG, but the palette must match. Do not rename/retint
+// casually. Exported so packages/ui/test/consistency.test.ts can assert this
+// stays equal to the engine's LAYER_COLORS (drift insurance for the
+// hand-kept-in-sync copy).
 // ---------------------------------------------------------------------------
-const COPPER_COLOR: Partial<Record<LayerId, string>> = {
+export const COPPER_COLOR: Partial<Record<LayerId, string>> = {
   'F.Cu': '#C83434',
   'In1.Cu': '#7FC87F',
   'In2.Cu': '#CE7D2C',
@@ -296,14 +300,6 @@ function drawKeepout(ctx: CanvasRenderingContext2D, view: ViewTransform, widthPx
 // Main draw
 // ---------------------------------------------------------------------------
 
-function padPhysicalLayer(c: ComponentInst, pad: Pad): LayerId {
-  // Only called for non-through pads (callers filter `pad.layer === 'through'`
-  // first); through is folded to 'top' here only to satisfy the type checker.
-  const localSide: 'top' | 'bottom' = pad.layer === 'bottom' ? 'bottom' : 'top';
-  const physicalSide: 'top' | 'bottom' = c.side === 'bottom' ? (localSide === 'top' ? 'bottom' : 'top') : localSide;
-  return physicalSide === 'top' ? 'F.Cu' : 'B.Cu';
-}
-
 function resolvePin(b: Board, ref: string): { comp: ComponentInst; pad: Pad } | undefined {
   const dot = ref.indexOf('.');
   if (dot === -1) return undefined;
@@ -331,7 +327,8 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
   drawGrid(ctx, view, widthPx, heightPx);
 
   // ---- copper layers, bottom-up ----
-  const layerOrder = copperLayersOf(board).slice().reverse();
+  const cu = copperLayersOf(board);
+  const layerOrder = cu.slice().reverse();
   for (const layer of layerOrder) {
     if (vis[layer] === false) continue;
     const color = COPPER_COLOR[layer]!;
@@ -354,7 +351,7 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
       for (const c of board.components) {
         for (const pad of c.footprint.pads) {
           if (pad.layer === 'through') continue;
-          if (padPhysicalLayer(c, pad) !== layer) continue;
+          if (!padCopperLayers(pad, c.side, cu).includes(layer)) continue;
           fillPolygon(ctx, view, padOutline(c, pad), color);
         }
       }

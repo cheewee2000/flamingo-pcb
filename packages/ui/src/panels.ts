@@ -31,16 +31,21 @@ export interface PanelEls {
   redoBtn: HTMLButtonElement;
 }
 
+// COPIED from packages/engine/src/render.ts's LAYER_COLORS (binding table).
+// Keep in sync by hand; exported so packages/ui/test/consistency.test.ts can
+// assert this stays equal to the engine's LAYER_COLORS (drift insurance for
+// the hand-kept-in-sync copy).
+export const LAYER_SWATCH_COLORS: Record<string, string> = {
+  'F.Cu': '#C83434',
+  'In1.Cu': '#7FC87F',
+  'In2.Cu': '#CE7D2C',
+  'In3.Cu': '#9C6BC8',
+  'In4.Cu': '#C8B96B',
+  'B.Cu': '#4D7FC4',
+};
+
 function layerSwatchColor(key: string): string {
-  const colors: Record<string, string> = {
-    'F.Cu': '#C83434',
-    'In1.Cu': '#7FC87F',
-    'In2.Cu': '#CE7D2C',
-    'In3.Cu': '#9C6BC8',
-    'In4.Cu': '#C8B96B',
-    'B.Cu': '#4D7FC4',
-  };
-  return colors[key] ?? '#999';
+  return LAYER_SWATCH_COLORS[key] ?? '#999';
 }
 
 function hoverText(hit: HitInfo): string {

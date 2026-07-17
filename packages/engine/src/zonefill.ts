@@ -35,9 +35,9 @@
 
 import polygonClipping from 'polygon-clipping';
 import type { MultiPolygon, Polygon, Ring, Pair } from 'polygon-clipping';
-import type { Board, ComponentInst, LayerId, Pad, Point, Zone } from './types.js';
+import type { Board, Point, Zone } from './types.js';
 import { expandTrack, padOutline, outlineToPolygon } from './geometry.js';
-import { copperLayersOf } from './layers.js';
+import { copperLayersOf, padCopperLayers } from './layers.js';
 
 // ---------------------------------------------------------------------------
 // Ring / geometry helpers
@@ -160,15 +160,8 @@ export function bufferPolygon(pts: Point[], delta: number): MultiPolygon {
 }
 
 // ---------------------------------------------------------------------------
-// Pad layer / net resolution (mirrors drc.ts's private helpers, kept in sync)
+// Pad net resolution
 // ---------------------------------------------------------------------------
-
-function padPhysicalLayers(b: Board, comp: ComponentInst, pad: Pad): LayerId[] {
-  if (pad.layer === 'through') return copperLayersOf(b);
-  const physicalSide: 'top' | 'bottom' =
-    comp.side === 'bottom' ? (pad.layer === 'top' ? 'bottom' : 'top') : pad.layer;
-  return [physicalSide === 'top' ? 'F.Cu' : 'B.Cu'];
-}
 
 function netOfPin(b: Board, pinRef: string): string {
   const net = b.nets.find((n) => n.pins.includes(pinRef));
@@ -212,9 +205,10 @@ export function fillZone(b: Board, zone: Zone): Point[][] {
     obstacles.push([[toRing(disk(v.at, v.diameter / 2 + zone.clearance))]]);
   }
 
+  const cu = copperLayersOf(b);
   for (const c of b.components) {
     for (const pad of c.footprint.pads) {
-      if (!padPhysicalLayers(b, c, pad).includes(zone.layer)) continue;
+      if (!padCopperLayers(pad, c.side, cu).includes(zone.layer)) continue;
       const net = netOfPin(b, `${c.refdes}.${pad.number}`);
       if (net === zone.net) continue;
       obstacles.push(bufferPolygon(padOutline(c, pad), zone.clearance));

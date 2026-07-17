@@ -14,9 +14,9 @@
  * track width.
  */
 
-import type { Board, ComponentInst, Net, Pad, Point, Track, LayerId } from './types.js';
+import type { Board, Net, Point, Track, LayerId } from './types.js';
 import { padWorld, dist } from './geometry.js';
-import { copperLayersOf } from './layers.js';
+import { copperLayersOf, padCopperLayers } from './layers.js';
 
 const EPSILON_MM = 0.01;
 
@@ -43,18 +43,6 @@ export function padAnchor(b: Board, pinRef: string): Point {
   return padWorld(comp, pad).at;
 }
 
-/**
- * The copper layer(s) a pad occupies in world space, honoring the
- * bottom-side flip: a footprint-local 'top' pad on a bottom-side component
- * is physically on B.Cu, and vice versa. A 'through' pad occupies every
- * copper layer on the board.
- */
-function padLayers(b: Board, comp: ComponentInst, pad: Pad): LayerId[] {
-  if (pad.layer === 'through') return copperLayersOf(b);
-  const physicalSide: 'top' | 'bottom' =
-    comp.side === 'bottom' ? (pad.layer === 'top' ? 'bottom' : 'top') : pad.layer;
-  return [physicalSide === 'top' ? 'F.Cu' : 'B.Cu'];
-}
 
 interface PinNode {
   kind: 'pin';
@@ -118,6 +106,7 @@ export function connectedGroups(b: Board, net: Net): string[][] {
 
   const nodes: Node[] = [];
   const pinNodeIdx: number[] = [];
+  const cu = copperLayersOf(b);
 
   for (const ref of net.pins) {
     const dot = ref.indexOf('.');
@@ -130,7 +119,7 @@ export function connectedGroups(b: Board, net: Net): string[][] {
       throw new Error(`connectedGroups: pad "${padNumber}" not found on "${refdes}" (pin "${ref}")`);
     }
     const at = padWorld(comp, pad).at;
-    const layers = padLayers(b, comp, pad);
+    const layers = padCopperLayers(pad, comp.side, cu);
     pinNodeIdx.push(nodes.length);
     nodes.push({ kind: 'pin', ref, at, layers });
   }
@@ -163,7 +152,7 @@ export function connectedGroups(b: Board, net: Net): string[][] {
   function layersOf(n: Node): LayerId[] {
     if (n.kind === 'pin') return n.layers;
     if (n.kind === 'trackEnd') return [n.layer];
-    return copperLayersOf(b); // via joins any copper layer
+    return cu; // via joins any copper layer
   }
 
   for (let i = 0; i < nodes.length; i++) {

@@ -80,6 +80,8 @@ const TOOL_NAMES = [
   'add_mounting_hole',
   'add_silk_text',
   'remove_item',
+  'add_track',
+  'add_via',
   'get_ratsnest',
   'run_drc',
   'undo',
@@ -122,11 +124,11 @@ describe('MCP endpoint', () => {
     await rm(projectDir, { recursive: true, force: true });
   });
 
-  it('tools/list returns all 28 core tools', async () => {
+  it('tools/list returns all 30 core tools', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([...TOOL_NAMES].sort());
-    expect(tools).toHaveLength(28);
+    expect(tools).toHaveLength(30);
   });
 
   it('place_component (mocked part) then get_board_state reflects it', async () => {
@@ -284,6 +286,70 @@ describe('MCP endpoint', () => {
     const removeResult = await client.callTool({ name: 'remove_item', arguments: { id: holeId } });
     expect(removeResult.isError).toBeFalsy();
     expect(doc.board.holes).toHaveLength(0);
+  });
+
+  it('add_track adds a straight track on a net, defaulting width from the net class', async () => {
+    await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R1', x: 0, y: 0 } });
+    await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R2', x: 5, y: 0 } });
+    await client.callTool({ name: 'connect_pins', arguments: { net: 'N1', pins: ['R1.2', 'R2.1'] } });
+
+    const result = await client.callTool({
+      name: 'add_track',
+      arguments: { layer: 'F.Cu', net: 'N1', start: { x: 0.75, y: 0 }, end: { x: 4.25, y: 0 } },
+    });
+    expect(result.isError).toBeFalsy();
+    expect(textOf(result as any)).toContain('F.Cu');
+    expect(textOf(result as any)).toContain('N1');
+
+    expect(doc.board.tracks).toHaveLength(1);
+    const track = doc.board.tracks[0]!;
+    expect(track.net).toBe('N1');
+    expect(track.layer).toBe('F.Cu');
+    expect(track.width).toBe(0.25); // default net class ("default") trackWidth
+    expect(track.seg).toEqual({ type: 'line', start: { x: 0.75, y: 0 }, end: { x: 4.25, y: 0 } });
+  });
+
+  it('add_track on an unknown net returns an isError result', async () => {
+    const result = await client.callTool({
+      name: 'add_track',
+      arguments: { layer: 'F.Cu', net: 'NOPE', start: { x: 0, y: 0 }, end: { x: 1, y: 0 } },
+    });
+    expect(result.isError).toBe(true);
+    expect(textOf(result as any)).toContain('ERROR:');
+    expect(textOf(result as any)).toContain('Unknown net');
+    expect(textOf(result as any)).toContain('NOPE');
+    expect(doc.board.tracks).toHaveLength(0);
+  });
+
+  it('add_via adds a via on a net, defaulting drill/diameter from the net class', async () => {
+    await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R1', x: 0, y: 0 } });
+    await client.callTool({ name: 'connect_pins', arguments: { net: 'N1', pins: ['R1.1'] } });
+
+    const result = await client.callTool({
+      name: 'add_via',
+      arguments: { x: 2, y: 3, net: 'N1' },
+    });
+    expect(result.isError).toBeFalsy();
+    expect(textOf(result as any)).toContain('N1');
+
+    expect(doc.board.vias).toHaveLength(1);
+    const via = doc.board.vias[0]!;
+    expect(via.net).toBe('N1');
+    expect(via.at).toEqual({ x: 2, y: 3 });
+    expect(via.drill).toBe(0.3); // default net class ("default") viaDrill
+    expect(via.diameter).toBe(0.6); // default net class ("default") viaDiameter
+  });
+
+  it('add_via on an unknown net returns an isError result', async () => {
+    const result = await client.callTool({
+      name: 'add_via',
+      arguments: { x: 0, y: 0, net: 'NOPE' },
+    });
+    expect(result.isError).toBe(true);
+    expect(textOf(result as any)).toContain('ERROR:');
+    expect(textOf(result as any)).toContain('Unknown net');
+    expect(textOf(result as any)).toContain('NOPE');
+    expect(doc.board.vias).toHaveLength(0);
   });
 
   it('get_ratsnest reports unrouted connections', async () => {

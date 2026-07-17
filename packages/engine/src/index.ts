@@ -22,7 +22,7 @@ export type {
 export { newBoard, serializeBoard, parseBoard } from './board.js';
 
 // Re-export layer functions
-export { copperLayersOf, isCopper } from './layers.js';
+export { copperLayersOf, isCopper, padCopperLayers } from './layers.js';
 
 // Re-export geometry functions
 export {
@@ -54,7 +54,7 @@ export { padAnchor, connectedGroups, ratsnest, isFullyRouted } from './connectiv
 
 // Re-export renderer
 export type { RenderOpts } from './render.js';
-export { renderSVG } from './render.js';
+export { renderSVG, LAYER_COLORS } from './render.js';
 
 // Re-export zone fill
 export { fillZone, fillAllZones, bufferPolygon } from './zonefill.js';

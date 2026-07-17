@@ -3,8 +3,8 @@
  * Units: mm
  */
 
-import type { Board, ComponentInst, LayerId, Pad } from '../types.js';
-import { copperLayersOf } from '../layers.js';
+import type { Board } from '../types.js';
+import { copperLayersOf, padCopperLayers } from '../layers.js';
 import { expandTrack, padOutline } from '../geometry.js';
 import { RULESETS } from './rules.js';
 import type { RuleSet } from './rules.js';
@@ -30,18 +30,6 @@ export type { DrcViolation, CopperItem } from './types.js';
 
 export { circlePolygon } from './util.js';
 
-/**
- * The physical copper layer(s) a pad occupies in world space, honoring the
- * bottom-side flip (mirrors connectivity.ts's private padLayers — kept in
- * sync manually since that helper isn't exported).
- */
-function padPhysicalLayers(b: Board, comp: ComponentInst, pad: Pad): LayerId[] {
-  if (pad.layer === 'through') return copperLayersOf(b);
-  const physicalSide: 'top' | 'bottom' =
-    comp.side === 'bottom' ? (pad.layer === 'top' ? 'bottom' : 'top') : pad.layer;
-  return [physicalSide === 'top' ? 'F.Cu' : 'B.Cu'];
-}
-
 function netOfPin(b: Board, pinRef: string): string {
   const net = b.nets.find((n) => n.pins.includes(pinRef));
   return net ? net.name : '';
@@ -56,20 +44,21 @@ function netOfPin(b: Board, pinRef: string): string {
  */
 export function buildCopperItems(b: Board): CopperItem[] {
   const items: CopperItem[] = [];
+  const cu = copperLayersOf(b);
 
   for (const t of b.tracks) {
     items.push({ kind: 'track', net: t.net, ref: t.id, polygon: expandTrack(t), layer: t.layer });
   }
 
   for (const v of b.vias) {
-    for (const layer of copperLayersOf(b)) {
+    for (const layer of cu) {
       items.push({ kind: 'via', net: v.net, ref: v.id, polygon: circlePolygon(v.at, v.diameter / 2), layer });
     }
   }
 
   for (const c of b.components) {
     for (const pad of c.footprint.pads) {
-      const layers = padPhysicalLayers(b, c, pad);
+      const layers = padCopperLayers(pad, c.side, cu);
       const polygon = padOutline(c, pad);
       const ref = `${c.refdes}.${pad.number}`;
       const net = netOfPin(b, ref);

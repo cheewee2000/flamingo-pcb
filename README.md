@@ -68,7 +68,8 @@ prompt → parts → place → connect → route → drc → export
    `create_net_class` / `assign_net_class` set track/via/clearance rules.
 4. **features** — `add_zone` (copper pours), `add_mounting_hole`, `add_silk_text`,
    `add_keepout`.
-5. **route** — `autoroute` runs Freerouting; `get_ratsnest` / `unroute` help
+5. **route** — `autoroute` runs Freerouting for bulk routing; `add_track` /
+   `add_via` place surgical fixes by hand; `get_ratsnest` / `unroute` help
    iterate.
 6. **drc** — `run_drc` reports violations against the JLCPCB ruleset for the
    board's layer count.
@@ -80,7 +81,7 @@ doing.
 
 ## MCP tools
 
-28 tools are served at `http://localhost:4242/mcp`:
+30 tools are served at `http://localhost:4242/mcp`:
 
 | Group | Tools |
 | --- | --- |
@@ -89,7 +90,7 @@ doing.
 | **Placement** | `place_component`, `move_component`, `remove_component` |
 | **Connectivity** | `connect_pins`, `disconnect_pins`, `create_net_class`, `assign_net_class` |
 | **Board features** | `set_board_outline`, `add_zone`, `add_keepout`, `add_mounting_hole`, `add_silk_text`, `remove_item` |
-| **Routing / analysis** | `get_ratsnest`, `autoroute`, `unroute`, `run_drc` |
+| **Routing / analysis** | `add_track`, `add_via`, `get_ratsnest`, `autoroute`, `unroute`, `run_drc` |
 | **History** | `undo`, `redo` |
 | **Output** | `export_fab`, `screenshot` |
 

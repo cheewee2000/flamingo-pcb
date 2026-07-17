@@ -18,6 +18,8 @@ import type {
   PathSeg,
   Point,
   SilkText,
+  Track,
+  Via,
   Zone,
 } from '@flamingo/engine';
 import {
@@ -720,6 +722,74 @@ export function createMcpServer(ctx: McpContext): McpServer {
     ({ id }) => {
       const op: Op = { op: 'removeItem', id };
       return applyAndReport(ctx, op, () => `Removed item ${id}`);
+    },
+  );
+
+  server.registerTool(
+    'add_track',
+    {
+      description:
+        'Add a straight copper track (a single line segment; the underlying engine addTrack op also supports arcs, but this tool is line-segment-only for simplicity) to an existing net on a copper layer. Width defaults to the net\'s class trackWidth if omitted.',
+      inputSchema: {
+        layer: layerIdSchema.describe('Copper layer for this track'),
+        width: z
+          .number()
+          .optional()
+          .describe("Track width in mm (default: the net's class trackWidth)"),
+        net: z.string().describe('Net name this track belongs to (must already exist)'),
+        start: pointSchema.describe('Track start point in mm'),
+        end: pointSchema.describe('Track end point in mm'),
+      },
+    },
+    ({ layer, width, net, start, end }) => {
+      const netObj = ctx.doc.board.nets.find((n) => n.name === net);
+      const netClass = netObj ? ctx.doc.board.netClasses.find((c) => c.name === netObj.class) : undefined;
+      const track: Omit<Track, 'id'> = {
+        layer,
+        width: width ?? netClass?.trackWidth ?? 0.25,
+        net,
+        seg: { type: 'line', start, end },
+      };
+      const op: Op = { op: 'addTrack', track };
+      return applyAndReport(
+        ctx,
+        op,
+        (result) => `Added track ${result.createdIds[0]} on ${layer} for net "${net}", width ${fmt(track.width)}mm`,
+      );
+    },
+  );
+
+  server.registerTool(
+    'add_via',
+    {
+      description:
+        "Add a via (a plated through-hole that joins copper layers) to an existing net. drill/diameter default from the net's class viaDrill/viaDiameter if omitted.",
+      inputSchema: {
+        x: z.number().describe('X position in mm'),
+        y: z.number().describe('Y position in mm'),
+        net: z.string().describe('Net name this via belongs to (must already exist)'),
+        drill: z.number().optional().describe("Via drill diameter in mm (default: the net's class viaDrill)"),
+        diameter: z
+          .number()
+          .optional()
+          .describe("Via pad diameter in mm (default: the net's class viaDiameter)"),
+      },
+    },
+    ({ x, y, net, drill, diameter }) => {
+      const netObj = ctx.doc.board.nets.find((n) => n.name === net);
+      const netClass = netObj ? ctx.doc.board.netClasses.find((c) => c.name === netObj.class) : undefined;
+      const via: Omit<Via, 'id'> = {
+        at: { x, y },
+        drill: drill ?? netClass?.viaDrill ?? 0.3,
+        diameter: diameter ?? netClass?.viaDiameter ?? 0.6,
+        net,
+      };
+      const op: Op = { op: 'addVia', via };
+      return applyAndReport(
+        ctx,
+        op,
+        (result) => `Added via ${result.createdIds[0]} at (${fmt(x)}, ${fmt(y)}) for net "${net}"`,
+      );
     },
   );
 
