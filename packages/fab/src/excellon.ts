@@ -4,16 +4,18 @@
  * Two files: plated (`-PTH.DRL`) and non-plated (`-NPTH.DRL`). Plated holes are
  * vias, plated through-hole pad drills, and plated mounting holes; non-plated
  * are unplated mounting holes and unplated pad drills. Slotted pad drills
- * (`drill.slotLength`) are emitted as routed slots (G85) along the pad's rotated
- * long axis; the two G85 endpoints are the slot centerline ends, separated by
- * (slotLength - diameter) so the swept width equals `diameter`.
+ * (`drill.slotLength`) and slotted mounting holes (`MountingHole.slotLength`)
+ * are emitted as routed slots (G85) along the rotated long axis; the two G85
+ * endpoints are the slot centerline ends, separated by (slotLength - diameter)
+ * so the swept width equals `diameter`. Pads derive the axis from their pad
+ * size; mounting holes from `MountingHole.rotation`.
  *
  * Coordinates are decimal millimetres (KiCad-style), which the tracespace drill
  * parser reads directly. Tools are deduped by diameter to 3 decimal places.
  */
 
 import type { Board, Pad, Point } from '@flamingo/engine';
-import { padWorld, rotate } from '@flamingo/engine';
+import { padWorld, rotate, isSlot, holeSlotCenterline } from '@flamingo/engine';
 
 interface DrillHole {
   diameter: number;
@@ -70,7 +72,12 @@ function collectHoles(b: Board): { plated: DrillHole[]; unplated: DrillHole[] } 
   }
 
   for (const h of b.holes) {
-    (h.plated ? plated : unplated).push({ diameter: h.drill, at: h.at });
+    // A slotted mounting hole mills a G85 slot along its rotated long axis; the
+    // two endpoints are the drill centerline ends, so the swept width == drill.
+    const hole: DrillHole = isSlot(h)
+      ? { diameter: h.drill, at: h.at, slot: holeSlotCenterline(h) }
+      : { diameter: h.drill, at: h.at };
+    (h.plated ? plated : unplated).push(hole);
   }
 
   return { plated, unplated };

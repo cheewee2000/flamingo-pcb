@@ -16,7 +16,14 @@
  */
 
 import type { Board, ComponentInst, Point, Track, Via } from '@flamingo/engine';
-import { componentTransformPoints, dist, padOutline, pointInPolygon, pointSegDistance } from '@flamingo/engine';
+import {
+  componentTransformPoints,
+  dist,
+  padOutline,
+  pointInPolygon,
+  pointSegDistance,
+  holeSlotCenterline,
+} from '@flamingo/engine';
 import type { HitInfo } from './state.js';
 
 const TOLERANCE_PX = 4;
@@ -111,7 +118,10 @@ export function hitEditTarget(board: Board, world: Point, scale: number): EditTa
     if (pointInPolygon(world, k.polygon)) return { kind: 'keepout', id: k.id };
   }
   for (const h of board.holes) {
-    if (dist(world, h.at) < h.padDiameter / 2 + tolMm) return { kind: 'hole', id: h.id };
+    const { start, end } = holeSlotCenterline(h);
+    if (pointSegDistance(world, { type: 'line', start, end }) < h.padDiameter / 2 + tolMm) {
+      return { kind: 'hole', id: h.id };
+    }
   }
   for (const s of board.silk) {
     if (dist(world, s.at) < Math.max(s.height, 1) + tolMm) return { kind: 'silk', id: s.id };

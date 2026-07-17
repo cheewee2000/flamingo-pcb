@@ -137,6 +137,16 @@ export interface MountingHole {
   drill: number;
   padDiameter: number;
   plated: boolean;
+  /**
+   * Total slot length in mm along the rotated long axis. When present and
+   * greater than `drill`, the hole is a milled (G85) slot: geometrically a
+   * capsule swept from a centerline of length `slotLength - drill` at the swept
+   * width `drill` (the annulus uses `padDiameter`). Values <= drill (or absent)
+   * mean a plain round hole.
+   */
+  slotLength?: number;
+  /** Orientation of the slot's long axis in degrees CCW (0 = along +x). Default 0. */
+  rotation?: number;
 }
 
 export interface SilkText {

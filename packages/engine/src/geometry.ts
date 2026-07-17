@@ -14,7 +14,7 @@
  */
 
 import polygonClipping from 'polygon-clipping';
-import type { Point, PathSeg, Pad, ComponentInst, Track, Board } from './types.js';
+import type { Point, PathSeg, Pad, ComponentInst, Track, Board, MountingHole } from './types.js';
 
 const CHORD_ERROR_MM = 0.05;
 const MIN_CIRCLE_SEGMENTS = 16;
@@ -355,8 +355,12 @@ export function boardBBox(b: Board): { minX: number; minY: number; maxX: number;
     pts.push(...k.polygon);
   }
   for (const h of b.holes) {
-    pts.push({ x: h.at.x - h.padDiameter / 2, y: h.at.y - h.padDiameter / 2 });
-    pts.push({ x: h.at.x + h.padDiameter / 2, y: h.at.y + h.padDiameter / 2 });
+    const r = h.padDiameter / 2;
+    const { start, end } = holeSlotCenterline(h);
+    for (const c of [start, end]) {
+      pts.push({ x: c.x - r, y: c.y - r });
+      pts.push({ x: c.x + r, y: c.y + r });
+    }
   }
   for (const s of b.silk) {
     pts.push(s.at);
@@ -556,4 +560,37 @@ function strokeCapsule(pts: Point[], hw: number): Point[] {
 export function expandTrack(t: Track): Point[] {
   const centerline = tessellateSeg(t.seg);
   return strokeCapsule(centerline, t.width / 2);
+}
+
+// ---------------------------------------------------------------------------
+// Mounting-hole slot geometry
+// ---------------------------------------------------------------------------
+
+/** True when the mounting hole is a milled slot (slotLength present and > drill). */
+export function isSlot(h: MountingHole): boolean {
+  return h.slotLength !== undefined && h.slotLength > h.drill;
+}
+
+/**
+ * Centerline endpoints of a mounting hole's slot. The two points are separated
+ * by `slotLength - drill` along the rotated long axis (0 = +x), centered on
+ * `h.at`; a round hole (no/short slotLength) collapses to `at, at`.
+ */
+export function holeSlotCenterline(h: MountingHole): { start: Point; end: Point } {
+  const half = isSlot(h) ? (h.slotLength! - h.drill) / 2 : 0;
+  const dir = rotate({ x: 1, y: 0 }, h.rotation ?? 0);
+  return {
+    start: { x: h.at.x - dir.x * half, y: h.at.y - dir.y * half },
+    end: { x: h.at.x + dir.x * half, y: h.at.y + dir.y * half },
+  };
+}
+
+/**
+ * Capsule (stadium) outline: the Minkowski sum of the segment start->end with a
+ * disk of `radius` (rounded ends, straight sides). When start == end this is a
+ * circle. Used to draw/clip a slotted mounting hole's drill or annulus.
+ */
+export function capsulePolygon(start: Point, end: Point, radius: number): Point[] {
+  if (dist(start, end) < 1e-9) return tessellateCircle(start, radius);
+  return strokeCapsule([start, end], radius);
 }

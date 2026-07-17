@@ -222,6 +222,56 @@ describe('buildDrills', () => {
     // slot centerline is 1.0mm long (slotLength 1.6 - diameter 0.6), centered at (5,5)
     expect(d.plated).toMatch(/X4\.500Y5\.000G85X5\.500Y5\.000/);
   });
+
+  it('emits an unplated slotted mounting hole as a G85 routed slot in the NPTH file', () => {
+    const b = newBoard('ms', 2);
+    b.holes.push({ id: 'H1', at: { x: 5, y: 5 }, drill: 2, padDiameter: 2, plated: false, slotLength: 10 });
+    const d = buildDrills(b);
+    expect(d.unplated).not.toBeNull();
+    assertDrillParses(d.unplated!);
+    expect(d.unplated).toContain('T1C2.000');
+    // centerline half = (slotLength 10 - drill 2)/2 = 4 -> (1,5)..(9,5)
+    expect(d.unplated).toMatch(/X1\.000Y5\.000G85X9\.000Y5\.000/);
+  });
+
+  it('orients a slotted mounting hole along its rotation', () => {
+    const b = newBoard('ms', 2);
+    b.holes.push({
+      id: 'H1',
+      at: { x: 5, y: 5 },
+      drill: 2,
+      padDiameter: 2,
+      plated: false,
+      slotLength: 10,
+      rotation: 90,
+    });
+    const d = buildDrills(b);
+    // rotated 90deg -> centerline runs along +y: (5,1)..(5,9)
+    expect(d.unplated).toMatch(/X5\.000Y1\.000G85X5\.000Y9\.000/);
+  });
+});
+
+describe('generateGerbers - slotted mounting hole annulus', () => {
+  it('draws a plated slotted mounting hole annulus as a stadium region on copper and mask', () => {
+    const b = newBoard('mh', 2);
+    b.holes.push({ id: 'H1', at: { x: 5, y: 5 }, drill: 2, padDiameter: 3, plated: true, slotLength: 10 });
+    const { files } = generateGerbers(b);
+
+    const gtl = files.get('mh.GTL')!;
+    assertGerberParses(gtl);
+    // The annulus is drawn as a G36/G37 filled region (a flashed circle would be a D03).
+    expect(/G36\*[\s\S]*?G37\*/.test(gtl)).toBe(true);
+    expect(gtl).not.toContain('D03*');
+
+    // The soldermask opening is likewise a stadium region.
+    const gts = files.get('mh.GTS')!;
+    assertGerberParses(gts);
+    expect(/G36\*[\s\S]*?G37\*/.test(gts)).toBe(true);
+
+    // And the plated slot still drills as a G85 routed slot.
+    const drl = files.get('mh-PTH.DRL')!;
+    expect(drl).toMatch(/X1\.000Y5\.000G85X9\.000Y5\.000/);
+  });
 });
 
 describe('generateGerbers - zone coverage', () => {

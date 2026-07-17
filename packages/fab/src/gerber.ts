@@ -30,6 +30,9 @@ import {
   componentTransformRotation,
   fillAllZones,
   bufferPolygon,
+  isSlot,
+  holeSlotCenterline,
+  capsulePolygon,
 } from '@flamingo/engine';
 import { strokeText } from './strokefont.js';
 import { buildDrills } from './excellon.js';
@@ -276,8 +279,14 @@ function buildCopper(b: Board, filled: Board, layer: LayerId, fileFunction: stri
 
   for (const h of b.holes) {
     if (!h.plated) continue;
-    g.select(g.aperture(`C,${ap(h.padDiameter)}`));
-    g.flash(h.at);
+    if (isSlot(h)) {
+      const { start, end } = holeSlotCenterline(h);
+      g.region(capsulePolygon(start, end, h.padDiameter / 2), true);
+      g.resetDark();
+    } else {
+      g.select(g.aperture(`C,${ap(h.padDiameter)}`));
+      g.flash(h.at);
+    }
   }
 
   return g.assemble(fileFunction, 'Positive');
@@ -296,8 +305,14 @@ function buildMask(b: Board, side: 'F' | 'B'): string {
   // Plated mounting holes keep a mask opening (exposed ring); vias are tented.
   for (const h of b.holes) {
     if (!h.plated) continue;
-    g.select(g.aperture(`C,${ap(h.padDiameter + 0.1)}`));
-    g.flash(h.at);
+    if (isSlot(h)) {
+      const { start, end } = holeSlotCenterline(h);
+      g.region(capsulePolygon(start, end, (h.padDiameter + 0.1) / 2), true);
+      g.resetDark();
+    } else {
+      g.select(g.aperture(`C,${ap(h.padDiameter + 0.1)}`));
+      g.flash(h.at);
+    }
   }
   const fn = side === 'F' ? 'Soldermask,Top' : 'Soldermask,Bot';
   return g.assemble(fn, 'Negative');

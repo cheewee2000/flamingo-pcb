@@ -44,6 +44,9 @@ export {
   expandTrack,
   componentTransformPoints,
   componentTransformRotation,
+  isSlot,
+  holeSlotCenterline,
+  capsulePolygon,
 } from './geometry.js';
 export type { PolyGroup } from './geometry.js';
 
