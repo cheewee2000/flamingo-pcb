@@ -18,6 +18,8 @@
     "@flamingo/parts": "*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@resvg/resvg-js": "^2.6.2",
+    "@types/earcut": "^3.0.0",
+    "earcut": "^3.2.3",
     "ws": "^8.21.1",
     "zod": "^4.4.3"
   },

@@ -359,6 +359,25 @@ describe('applyOp', () => {
     });
   });
 
+  describe('addDimension', () => {
+    it('adds a dimension with a generated id, and removeItem deletes it', () => {
+      const board = baseBoard();
+      const added = applyOp(board, {
+        op: 'addDimension',
+        dimension: { a: { x: 0, y: 0 }, b: { x: 66, y: 0 }, offset: -4 },
+      });
+      expect(added.ok).toBe(true);
+      if (!added.ok) return;
+      expect(added.board.dimensions).toHaveLength(1);
+      expect(added.createdIds).toEqual([added.board.dimensions[0].id]);
+      expect(added.board.dimensions[0]).toMatchObject({ a: { x: 0, y: 0 }, b: { x: 66, y: 0 }, offset: -4 });
+
+      const removed = applyOp(added.board, { op: 'removeItem', id: added.board.dimensions[0].id });
+      expect(removed.ok).toBe(true);
+      if (removed.ok) expect(removed.board.dimensions).toHaveLength(0);
+    });
+  });
+
   describe('removeItem', () => {
     function boardWithItems(): Board {
       const board = baseBoard();

@@ -226,6 +226,7 @@ const TOOL_SHORTCUTS: Record<string, string> = {
   KeyT: 'silk',
   KeyX: 'ripup',
   KeyM: 'measure',
+  KeyD: 'dimension',
 };
 
 window.addEventListener('keydown', (ev) => {

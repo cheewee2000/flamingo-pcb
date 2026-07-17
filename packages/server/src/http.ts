@@ -19,6 +19,7 @@ import { defaultRouteRunner } from './route.js';
 import type { ScreenshotOpts } from './screenshot.js';
 import { renderPNG } from './screenshot.js';
 import { render3dHtml } from './viewer3d.js';
+import { exportStep } from './step.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 // packages/server/dist/http.js -> packages/ui/dist
@@ -359,6 +360,21 @@ async function handleApi(
         ...result,
         fullyRouted: result.remaining.length === 0,
       });
+    } catch (err) {
+      sendJSON(res, 500, { ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  if (method === 'GET' && pathname === '/api/export.step') {
+    try {
+      const step = exportStep(doc.board);
+      const fileName = `${doc.board.name.replace(/[^\w.-]+/g, '_') || 'board'}.step`;
+      res.writeHead(200, {
+        'content-type': 'application/step',
+        'content-disposition': `attachment; filename="${fileName}"`,
+      });
+      res.end(step);
     } catch (err) {
       sendJSON(res, 500, { ok: false, error: err instanceof Error ? err.message : String(err) });
     }

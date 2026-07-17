@@ -25,6 +25,7 @@ import {
   holeSlotCenterline,
 } from '@flamingo/engine';
 import type { HitInfo } from './state.js';
+import { dimensionLine } from './renderer.js';
 
 const TOLERANCE_PX = 4;
 
@@ -84,7 +85,8 @@ export type EditTarget =
   | { kind: 'zone'; id: string }
   | { kind: 'keepout'; id: string }
   | { kind: 'hole'; id: string }
-  | { kind: 'silk'; id: string };
+  | { kind: 'silk'; id: string }
+  | { kind: 'dimension'; id: string };
 
 function componentContains(c: ComponentInst, world: Point): boolean {
   for (const pad of c.footprint.pads) {
@@ -125,6 +127,13 @@ export function hitEditTarget(board: Board, world: Point, scale: number): EditTa
   }
   for (const s of board.silk) {
     if (dist(world, s.at) < Math.max(s.height, 1) + tolMm) return { kind: 'silk', id: s.id };
+  }
+  for (const dim of board.dimensions) {
+    const line = dimensionLine(dim.a, dim.b, dim.offset);
+    if (!line) continue;
+    if (pointSegDistance(world, { type: 'line', start: line.A, end: line.B }) < 0.5 + tolMm) {
+      return { kind: 'dimension', id: dim.id };
+    }
   }
   return null;
 }
