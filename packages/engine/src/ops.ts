@@ -36,6 +36,7 @@ export type Op =
   | { op: 'moveComponents'; moves: Array<{ refdes: string; at: Point }> }
   | { op: 'setComponentFields'; refdes: string; fields: Partial<ComponentInst['fields']> }
   | { op: 'editHole'; id: string; hole: Partial<Omit<MountingHole, 'id'>> }
+  | { op: 'editKeepout'; id: string; keepout: Partial<Omit<Keepout, 'id'>> }
   | { op: 'removeComponent'; refdes: string }
   | { op: 'setOutline'; outline: PathSeg[] }
   | { op: 'addKeepout'; keepout: Omit<Keepout, 'id'> }
@@ -179,6 +180,16 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
         delete hole.slotLength;
         delete hole.rotation;
       }
+      return ok(board, createdIds);
+    }
+
+    case 'editKeepout': {
+      const keepout = board.keepouts.find((k) => k.id === op.id);
+      if (!keepout) return err(`No keepout with id "${op.id}"`);
+      if (op.keepout.polygon !== undefined && op.keepout.polygon.length < 3) {
+        return err('keepout polygon needs at least 3 points');
+      }
+      Object.assign(keepout, op.keepout);
       return ok(board, createdIds);
     }
 

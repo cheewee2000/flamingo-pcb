@@ -597,29 +597,34 @@ body {
 
 /* ---- Selection properties ---- */
 
-.props-edit input[type='text'],
-.props-edit input[type='number'],
-.props-edit select {
+/* Click-to-edit rows: static value with a dotted-underline affordance;
+   clicking swaps in an inline input. */
+.props-editable .props-value {
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  transition: opacity var(--dur) var(--ease);
+}
+.props-editable .props-value:hover {
+  opacity: 0.55;
+}
+
+.props-inline-input {
   background: var(--paper);
   color: var(--ink);
-  border: 1px solid var(--rule);
+  border: 1px solid var(--ink);
   border-radius: 0;
   font-family: var(--mono);
   font-size: 11px;
-  padding: 1px 4px;
+  padding: 0 4px;
   width: 110px;
   text-align: right;
 }
-.props-edit input[type='text'] {
+input[type='text'].props-inline-input {
   text-align: left;
 }
-.props-edit input:focus,
-.props-edit select:focus {
+.props-inline-input:focus {
   outline: none;
-  border-color: var(--ink);
-}
-.props-edit input[type='checkbox'] {
-  accent-color: var(--ink);
 }
 
 .props-empty {
