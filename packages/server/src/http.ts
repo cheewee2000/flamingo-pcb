@@ -18,6 +18,7 @@ import type { RouteRunner } from './route.js';
 import { defaultRouteRunner } from './route.js';
 import type { ScreenshotOpts } from './screenshot.js';
 import { renderPNG } from './screenshot.js';
+import { render3dHtml } from './viewer3d.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 // packages/server/dist/http.js -> packages/ui/dist
@@ -392,6 +393,12 @@ function makeRequestListener(
           return;
         }
         req.resume(); // static/unknown routes never read the body
+        if (method === 'GET' && pathname === '/3d') {
+          // Regenerated from the live board on every request.
+          res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+          res.end(render3dHtml(ctx.doc.board));
+          return;
+        }
         if (method === 'GET' || method === 'HEAD') {
           const served = await serveStatic(pathname, res, uiDistDir);
           if (served) return;

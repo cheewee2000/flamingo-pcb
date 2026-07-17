@@ -462,3 +462,17 @@ body {
 .route-result.err {
   color: #e06c6c;
 }
+
+.view3d-link {
+  display: block;
+  text-align: center;
+  padding: 5px 8px;
+  border: 1px solid #3a4152;
+  border-radius: 4px;
+  color: #9db4d8;
+  text-decoration: none;
+  font-size: 12px;
+}
+.view3d-link:hover {
+  background: #232a38;
+}
