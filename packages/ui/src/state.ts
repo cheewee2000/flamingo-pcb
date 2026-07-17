@@ -8,7 +8,8 @@
  * module has no dependency on canvas/DOM.
  */
 
-import type { Board, Point, RatLine } from '@flamingo/engine';
+import type { Board, LayerId, Point, RatLine } from '@flamingo/engine';
+import type { EditTarget } from './hit-test.js';
 
 /** Pan/zoom/flip transform between world mm (y-up) and canvas px (y-down). */
 export interface ViewTransform {
@@ -38,6 +39,19 @@ export type HitInfo =
  */
 export type LayerKey = string;
 
+/**
+ * Per-tool option values shown in the toolbar's options row (Task 10).
+ * Defaults chosen per the task-10 brief; `zoneLayer`/`zoneNet` get re-synced
+ * to a valid value whenever the board changes (see panels.ts).
+ */
+export interface ToolOptions {
+  outlineMode: 'rect' | 'polygon';
+  zoneLayer: LayerId;
+  zoneNet: string;
+  holeDrillMm: number;
+  holePlated: boolean;
+}
+
 export interface AppState {
   board: Board | null;
   /** Ratsnest lines recomputed client-side whenever `board` changes (not
@@ -59,6 +73,18 @@ export interface AppState {
   cursorMm: Point | null;
   /** Set once fit-to-board has run for the first board received. */
   hasFitOnce: boolean;
+  /** Id of the currently active editing tool (see tools/manager.ts). */
+  activeTool: string;
+  /** Edit target of the active tool (select's move/rotate/flip/delete target,
+   * or whatever else got selected). Independent of `selectedNet`. */
+  selection: EditTarget | null;
+  /** Grid-snap toggle (toolbar checkbox, default on) -- Ctrl/Cmd bypasses it
+   * momentarily per tool (see tools/overlay-utils.ts `snapPoint`). */
+  snapEnabled: boolean;
+  snapMm: number;
+  toolOptions: ToolOptions;
+  /** Live ruler readout from the measure tool, or null when not measuring. */
+  measureMm: number | null;
 }
 
 export const MIN_SCALE = 0.5;
@@ -79,6 +105,18 @@ function initialState(): AppState {
     drcMarkers: [],
     cursorMm: null,
     hasFitOnce: false,
+    activeTool: 'select',
+    selection: null,
+    snapEnabled: true,
+    snapMm: 0.5,
+    toolOptions: {
+      outlineMode: 'rect',
+      zoneLayer: 'F.Cu',
+      zoneNet: '',
+      holeDrillMm: 2.2,
+      holePlated: false,
+    },
+    measureMm: null,
   };
 }
 

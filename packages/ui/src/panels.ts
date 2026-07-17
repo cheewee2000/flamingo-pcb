@@ -9,8 +9,10 @@
  * highlight and the status bar update unconditionally on every state change.
  */
 
+import type { LayerId } from '@flamingo/engine';
 import { copperLayersOf } from '@flamingo/engine';
-import { RATSNEST_KEY, SILK_KEY, store, withLayerKeys, type AppState, type HitInfo } from './state.js';
+import { RATSNEST_KEY, SILK_KEY, store, withLayerKeys, type AppState, type HitInfo, type ToolOptions } from './state.js';
+import type { ToolManager } from './tools/manager.js';
 
 export interface PanelEls {
   layerList: HTMLElement;
@@ -21,6 +23,12 @@ export interface PanelEls {
   statusZoom: HTMLElement;
   statusHover: HTMLElement;
   statusConn: HTMLElement;
+  statusMeasure: HTMLElement;
+  toolButtons: HTMLElement;
+  toolOptions: HTMLElement;
+  snapToggle: HTMLInputElement;
+  undoBtn: HTMLButtonElement;
+  redoBtn: HTMLButtonElement;
 }
 
 function layerSwatchColor(key: string): string {
@@ -41,10 +49,12 @@ function hoverText(hit: HitInfo): string {
   return `via  net:${hit.net}`;
 }
 
-/** Wire the layer list, net list, board-info panel, and status bar to `store`. */
-export function initPanels(els: PanelEls): void {
+/** Wire the layer list, net list, board-info panel, toolbar, and status bar to `store`. */
+export function initPanels(els: PanelEls, toolManager: ToolManager): void {
   let lastBoard: AppState['board'] = null;
+  let lastToolOptionsTool: string | null = null;
   const netRows = new Map<string, HTMLElement>();
+  let measureReadoutEl: HTMLElement | null = null;
 
   function buildLayerList(state: AppState): void {
     els.layerList.replaceChildren();
@@ -128,23 +138,226 @@ export function initPanels(els: PanelEls): void {
       : 'x: -- y: --';
     els.statusZoom.textContent = `${state.view.scale.toFixed(1)} px/mm`;
     els.statusHover.textContent = state.hover ? hoverText(state.hover) : '';
+    els.statusMeasure.textContent = state.measureMm !== null ? `measure: ${state.measureMm.toFixed(2)} mm` : '';
     els.statusConn.textContent = state.connected ? 'connected' : 'disconnected';
     els.statusConn.classList.toggle('connected', state.connected);
     els.statusConn.classList.toggle('disconnected', !state.connected);
     els.sideBadge.hidden = !state.view.flipped;
   }
 
+  // ---------------------------------------------------------------------------
+  // Toolbar (Task 10): tool buttons, per-tool options row, snap toggle, undo/redo.
+  // ---------------------------------------------------------------------------
+
+  function buildToolButtons(): void {
+    els.toolButtons.replaceChildren();
+    for (const tool of toolManager.tools) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'tool-btn';
+      btn.dataset.toolId = tool.id;
+      btn.title = `${tool.label} (${tool.shortcut})`;
+      btn.textContent = `${tool.label} (${tool.shortcut})`;
+      btn.addEventListener('click', () => toolManager.setActive(tool.id));
+      els.toolButtons.appendChild(btn);
+    }
+  }
+
+  function updateToolButtons(state: AppState): void {
+    for (const btn of Array.from(els.toolButtons.children)) {
+      if (btn instanceof HTMLElement) {
+        btn.classList.toggle('active', btn.dataset.toolId === state.activeTool);
+      }
+    }
+  }
+
+  /** Keep zoneLayer/zoneNet pointed at a value that actually exists on the current board. */
+  function syncToolOptionDefaults(state: AppState): void {
+    const board = state.board;
+    if (!board) return;
+    const layers = copperLayersOf(board);
+    const nets = board.nets.map((n) => n.name);
+    const cur = state.toolOptions;
+    const patch: Partial<ToolOptions> = {};
+    if (!layers.includes(cur.zoneLayer)) patch.zoneLayer = layers[0];
+    if (!nets.includes(cur.zoneNet)) patch.zoneNet = nets[0] ?? '';
+    if (Object.keys(patch).length > 0) {
+      store.set({ toolOptions: { ...cur, ...patch } });
+    }
+  }
+
+  function setToolOptions(patch: Partial<ToolOptions>): void {
+    store.set({ toolOptions: { ...store.get().toolOptions, ...patch } });
+  }
+
+  function buildToolOptions(state: AppState): void {
+    els.toolOptions.replaceChildren();
+    measureReadoutEl = null;
+    const board = state.board;
+    const opts = state.toolOptions;
+
+    switch (state.activeTool) {
+      case 'outline': {
+        const row = document.createElement('div');
+        row.className = 'tool-options-row';
+        const buttons = document.createElement('div');
+        buttons.style.display = 'flex';
+        buttons.style.gap = '4px';
+        for (const mode of ['rect', 'polygon'] as const) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'tool-suboption' + (opts.outlineMode === mode ? ' active' : '');
+          btn.textContent = mode;
+          btn.addEventListener('click', () => setToolOptions({ outlineMode: mode }));
+          buttons.appendChild(btn);
+        }
+        row.appendChild(buttons);
+        const hint = document.createElement('div');
+        hint.className = 'tool-hint';
+        hint.textContent = 'Rect: drag corners (Shift = square). Polygon: click points, Enter/dblclick closes.';
+        row.appendChild(hint);
+        els.toolOptions.appendChild(row);
+        break;
+      }
+      case 'zone': {
+        if (!board) break;
+        const row = document.createElement('div');
+        row.className = 'tool-options-row';
+
+        const layerLabel = document.createElement('label');
+        layerLabel.textContent = 'layer';
+        const layerSel = document.createElement('select');
+        for (const l of copperLayersOf(board)) {
+          const o = document.createElement('option');
+          o.value = l;
+          o.textContent = l;
+          o.selected = l === opts.zoneLayer;
+          layerSel.appendChild(o);
+        }
+        layerSel.addEventListener('change', () => setToolOptions({ zoneLayer: layerSel.value as LayerId }));
+        layerLabel.appendChild(layerSel);
+
+        const netLabel = document.createElement('label');
+        netLabel.textContent = 'net';
+        const netSel = document.createElement('select');
+        for (const n of board.nets.map((x) => x.name)) {
+          const o = document.createElement('option');
+          o.value = n;
+          o.textContent = n;
+          o.selected = n === opts.zoneNet;
+          netSel.appendChild(o);
+        }
+        netSel.addEventListener('change', () => setToolOptions({ zoneNet: netSel.value }));
+        netLabel.appendChild(netSel);
+
+        row.append(layerLabel, netLabel);
+        els.toolOptions.appendChild(row);
+        break;
+      }
+      case 'hole': {
+        const row = document.createElement('div');
+        row.className = 'tool-options-row';
+
+        const drillLabel = document.createElement('label');
+        drillLabel.textContent = 'drill mm';
+        const drillInput = document.createElement('input');
+        drillInput.type = 'number';
+        drillInput.step = '0.1';
+        drillInput.min = '0.1';
+        drillInput.value = String(opts.holeDrillMm);
+        drillInput.addEventListener('change', () => {
+          const v = parseFloat(drillInput.value);
+          if (Number.isFinite(v) && v > 0) setToolOptions({ holeDrillMm: v });
+        });
+        drillLabel.appendChild(drillInput);
+
+        const platedLabel = document.createElement('label');
+        const platedInput = document.createElement('input');
+        platedInput.type = 'checkbox';
+        platedInput.checked = opts.holePlated;
+        platedInput.addEventListener('change', () => setToolOptions({ holePlated: platedInput.checked }));
+        platedLabel.append(platedInput, ' plated');
+
+        row.append(drillLabel, platedLabel);
+        els.toolOptions.appendChild(row);
+        break;
+      }
+      case 'measure': {
+        const readout = document.createElement('div');
+        readout.className = 'tool-hint';
+        readout.textContent = state.measureMm !== null ? `${state.measureMm.toFixed(2)} mm` : 'drag to measure';
+        els.toolOptions.appendChild(readout);
+        measureReadoutEl = readout;
+        break;
+      }
+      case 'select': {
+        appendHint('Click to select. Drag a component to move it. R rotate, F flip, Del/Backspace remove.');
+        break;
+      }
+      case 'ripup': {
+        appendHint('Click a track/via to remove it. Alt-click removes the whole net.');
+        break;
+      }
+      case 'keepout': {
+        appendHint('Click points to build a polygon. Enter or double-click closes it.');
+        break;
+      }
+      case 'silk': {
+        appendHint('Click to place a text label. Enter commits, Esc cancels.');
+        break;
+      }
+      default:
+        break;
+    }
+
+    function appendHint(text: string): void {
+      const hint = document.createElement('div');
+      hint.className = 'tool-hint';
+      hint.textContent = text;
+      els.toolOptions.appendChild(hint);
+    }
+  }
+
+  function updateMeasureReadout(state: AppState): void {
+    if (measureReadoutEl) {
+      measureReadoutEl.textContent = state.measureMm !== null ? `${state.measureMm.toFixed(2)} mm` : 'drag to measure';
+    }
+  }
+
+  function wireToolbarControls(): void {
+    els.snapToggle.checked = store.get().snapEnabled;
+    els.snapToggle.addEventListener('change', () => {
+      store.set({ snapEnabled: els.snapToggle.checked });
+    });
+    els.undoBtn.addEventListener('click', () => {
+      void fetch('/api/undo', { method: 'POST' });
+    });
+    els.redoBtn.addEventListener('click', () => {
+      void fetch('/api/redo', { method: 'POST' });
+    });
+  }
+
   function onStateChange(state: AppState): void {
-    if (state.board !== lastBoard) {
+    const boardChanged = state.board !== lastBoard;
+    if (boardChanged) {
       lastBoard = state.board;
       buildLayerList(state);
       buildNetList(state);
       buildBoardInfo(state);
+      syncToolOptionDefaults(state);
+    }
+    if (state.activeTool !== lastToolOptionsTool || boardChanged) {
+      lastToolOptionsTool = state.activeTool;
+      buildToolOptions(state);
     }
     updateSelection(state);
     updateStatusBar(state);
+    updateToolButtons(state);
+    updateMeasureReadout(state);
   }
 
+  buildToolButtons();
+  wireToolbarControls();
   store.subscribe(onStateChange);
   onStateChange(store.get());
 }

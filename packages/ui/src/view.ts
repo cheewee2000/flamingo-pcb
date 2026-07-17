@@ -91,6 +91,10 @@ export function fitToBoard(
 
 export interface ViewControls {
   detach(): void;
+  /** True while a middle-button or space+left-drag pan gesture is in progress --
+   * main.ts uses this to suppress editing-tool pointerdown routing so panning
+   * never also starts a tool gesture (component drag, new polygon point, ...). */
+  isPanning(): boolean;
 }
 
 /**
@@ -174,5 +178,6 @@ export function attachViewControls(
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     },
+    isPanning: () => panning,
   };
 }

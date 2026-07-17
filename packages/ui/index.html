@@ -8,8 +8,24 @@
   <body>
     <div id="app">
       <div id="toolbar-left" class="panel toolbar-left">
-        <div class="panel-title">Tools</div>
-        <div class="tool-placeholder">(editing tools — Task 10)</div>
+        <div class="panel-title">
+          Tools
+          <span
+            id="tool-help"
+            class="tool-help"
+            title="S select · O outline · K keepout · Z zone · H hole · T silk · X ripup · M measure&#10;Esc = select · Del/Backspace = remove · R = rotate · F = flip side · Ctrl/Cmd = bypass snap"
+            >?</span
+          >
+        </div>
+        <div id="tool-buttons" class="tool-buttons"></div>
+        <div id="tool-options" class="tool-options"></div>
+        <div class="panel-section">
+          <label class="snap-toggle"><input type="checkbox" id="snap-toggle" checked /> Snap 0.5mm</label>
+        </div>
+        <div class="panel-section edit-buttons">
+          <button id="undo-btn" class="edit-btn" type="button">Undo</button>
+          <button id="redo-btn" class="edit-btn" type="button">Redo</button>
+        </div>
       </div>
 
       <div id="viewport" class="viewport">
@@ -36,6 +52,7 @@
         <span id="status-cursor">x: -- y: --</span>
         <span id="status-zoom">zoom: --</span>
         <span id="status-hover">&nbsp;</span>
+        <span id="status-measure"></span>
         <span id="status-conn" class="status-conn">connecting…</span>
       </div>
     </div>

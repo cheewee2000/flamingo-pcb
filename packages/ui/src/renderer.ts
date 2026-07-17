@@ -489,7 +489,11 @@ export interface Renderer {
 }
 
 /** Owns canvas sizing (device-pixel-ratio aware) and the redraw loop for `canvas`. */
-export function createRenderer(canvas: HTMLCanvasElement, getState: () => AppState): Renderer {
+export function createRenderer(
+  canvas: HTMLCanvasElement,
+  getState: () => AppState,
+  drawOverlay?: (ctx2d: CanvasRenderingContext2D, view: ViewTransform, state: AppState) => void,
+): Renderer {
   const ctx2d = canvas.getContext('2d');
   if (!ctx2d) throw new Error('2D canvas context unavailable');
   const ctx: CanvasRenderingContext2D = ctx2d;
@@ -515,7 +519,10 @@ export function createRenderer(canvas: HTMLCanvasElement, getState: () => AppSta
     if (!dirty) return;
     dirty = false;
     const state = getState();
-    if (state.board) draw(state.board, state, ctx, widthPx, heightPx);
+    if (state.board) {
+      draw(state.board, state, ctx, widthPx, heightPx);
+      drawOverlay?.(ctx, state.view, state);
+    }
   }
 
   function requestRedraw(): void {

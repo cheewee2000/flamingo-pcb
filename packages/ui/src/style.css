@@ -73,6 +73,145 @@ body {
   font-size: 11px;
 }
 
+.panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tool-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 9px;
+  font-weight: bold;
+  cursor: help;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.tool-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.tool-btn {
+  flex: 1 1 calc(50% - 4px);
+  padding: 5px 4px;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tool-btn:hover {
+  border-color: var(--accent);
+}
+
+.tool-btn.active {
+  background: rgba(77, 166, 255, 0.25);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tool-options {
+  margin-bottom: 10px;
+  min-height: 1px;
+}
+
+.tool-options-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.tool-options-row label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.tool-options-row select,
+.tool-options-row input[type='number'] {
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 4px;
+  max-width: 100px;
+}
+
+.tool-suboption {
+  flex: 1;
+  padding: 3px 6px;
+  background: var(--bg-input);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.tool-suboption.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.tool-hint {
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.snap-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.snap-toggle input {
+  accent-color: var(--accent);
+}
+
+.edit-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.edit-btn {
+  flex: 1;
+  padding: 5px 4px;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.edit-btn:hover {
+  border-color: var(--accent);
+}
+
 .viewport {
   grid-row: 1;
   grid-column: 2;
@@ -88,8 +227,36 @@ body {
   cursor: crosshair;
 }
 
+#board-canvas[data-tool='select'] {
+  cursor: default;
+}
+
+#board-canvas[data-tool='silk'] {
+  cursor: text;
+}
+
+#board-canvas[data-tool='ripup'] {
+  cursor: not-allowed;
+}
+
+/* Must come after the [data-tool] rules (equal specificity, last wins) so
+   an active pan always shows the grabbing cursor regardless of tool. */
 #board-canvas.panning {
   cursor: grabbing;
+}
+
+.silk-inline-input {
+  position: absolute;
+  transform: translate(-2px, -10px);
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 5px;
+  min-width: 90px;
+  z-index: 10;
 }
 
 .side-badge {
