@@ -8,7 +8,7 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -68,6 +68,51 @@ const JAVA_INSTALL_HINT =
   'JAVA_HOME=/opt/homebrew/opt/openjdk).';
 
 // ---------------------------------------------------------------------------
+// Headless configuration
+// ---------------------------------------------------------------------------
+
+/**
+ * Freerouting 2.x is GUI/analytics-first and, run naively in batch mode, hangs
+ * in two places that make it unusable as a subprocess:
+ *
+ *  1. On startup it POSTs a telemetry "app started" event; with no reachable
+ *     analytics server that call blocks before routing ever begins.
+ *  2. After the auto-router converges it runs a *route optimizer* pass whose
+ *     batch loop can deadlock and never return — so the job never reaches the
+ *     COMPLETED state, the SES output is never written, and the process spins
+ *     forever (empirically reproduced with v2.2.4 on JDK 26).
+ *
+ * We neutralise both by pointing freerouting at a throwaway user-data dir that
+ * contains a `freerouting.json` disabling the GUI, analytics and the optimizer.
+ * The auto-router alone fully connects the board (the optimizer only shortens
+ * traces / removes vias), which is all we need. `profile.id` must be a real
+ * UUID and the profile block must be present, or freerouting NPEs on a null
+ * userId. Analytics is also disabled via env var as belt-and-suspenders.
+ */
+const FREEROUTING_CONFIG = {
+  profile: { id: '00000000-0000-4000-8000-000000000000', email: '', allow_telemetry: false, allow_contact: false },
+  gui: { enabled: false, input_directory: '', dialog_confirmation_timeout: 5 },
+  router: { optimizer: { enabled: false }, scoring: {} },
+  usage_and_diagnostic_data: { disable_analytics: true },
+  feature_flags: { multi_threading: true, inspection_mode: false, other_menu: false, save_jobs: false },
+  api_server: { enabled: false },
+};
+
+/** Write the headless freerouting.json into `dir` and return the env for the run. */
+async function writeFreeroutingConfig(dir: string): Promise<NodeJS.ProcessEnv> {
+  const config = {
+    ...FREEROUTING_CONFIG,
+    logging: { console: { enabled: true, level: 'INFO' }, file: { enabled: false, level: 'INFO', location: join(dir, 'freerouting.log') } },
+  };
+  await writeFile(join(dir, 'freerouting.json'), JSON.stringify(config, null, 2), 'utf8');
+  return {
+    ...process.env,
+    FREEROUTING__USER_DATA_PATH: dir,
+    FREEROUTING__USAGE_AND_DIAGNOSTIC_DATA__DISABLE_ANALYTICS: 'true',
+  };
+}
+
+// ---------------------------------------------------------------------------
 // freerouting.jar acquisition
 // ---------------------------------------------------------------------------
 
@@ -122,6 +167,35 @@ export async function ensureFreerouting(jarPath: string = JAR_PATH): Promise<str
   }
   const tmpPath = `${jarPath}.tmp-${randomUUID()}`;
   await pipeline(Readable.fromWeb(dl.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(tmpPath));
+
+  // Validate the download before committing it: a jar is a zip, so it must
+  // start with the PK\x03\x04 local-file-header magic and be a plausible size.
+  // A truncated download or an HTML error page would otherwise be renamed into
+  // place and fail cryptically every run thereafter.
+  try {
+    const info = await stat(tmpPath);
+    const fh = await open(tmpPath, 'r');
+    let magic: Buffer;
+    try {
+      magic = Buffer.alloc(4);
+      await fh.read(magic, 0, 4, 0);
+    } finally {
+      await fh.close();
+    }
+    const isZip = magic[0] === 0x50 && magic[1] === 0x4b && magic[2] === 0x03 && magic[3] === 0x04;
+    if (!isZip || info.size <= 1_000_000) {
+      throw new Error(
+        `downloaded ${asset.name} looks invalid ` +
+          `(${info.size} bytes, magic ${magic.toString('hex')}; expected a >1MB zip/jar). ` +
+          'Delete any partial ~/.flamingo/freerouting.jar and retry; if it persists, ' +
+          'download the jar manually from https://github.com/freerouting/freerouting/releases.',
+      );
+    }
+  } catch (err) {
+    await rm(tmpPath, { force: true });
+    throw err;
+  }
+
   await rename(tmpPath, jarPath);
   console.error(`[flamingo] saved freerouting.jar to ${jarPath}`);
   return jarPath;
@@ -159,10 +233,11 @@ export async function runFreerouting(
 
   try {
     await writeFile(inPath, dsn, 'utf8');
+    const env = await writeFreeroutingConfig(dir);
 
     const args = ['-jar', jar, '-de', inPath, '-do', outPath, '-mp', String(passes)];
     const ses = await new Promise<string>((resolve, reject) => {
-      const child = spawn(java, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawn(java, args, { stdio: ['ignore', 'pipe', 'pipe'], env });
       let stdout = '';
       let stderr = '';
       let timedOut = false;

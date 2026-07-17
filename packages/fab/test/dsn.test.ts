@@ -134,6 +134,63 @@ describe('exportDSN', () => {
     );
   });
 
+  it('bottom-side place line keeps the component origin (Specctra mirrors around it, not it)', () => {
+    // Specctra mirrors a back-side image around the component origin; the
+    // origin coordinate itself is NOT mirrored. So the (place ...) x/y must
+    // equal the component's placement coordinates verbatim, with `back` and
+    // the placement rotation preserved.
+    let b = tinyBoard();
+    b = apply(b, { op: 'moveComponent', refdes: 'R2', side: 'bottom', rotation: 90 });
+    const dsn = exportDSN(b);
+    // R2 was placed at (10,5) => 10000 5000 um; rotation 90; side back.
+    expect(dsn).toContain('(place R2 10000 5000 back 90)');
+    // Top-side sibling untouched.
+    expect(dsn).toContain('(place R1 5000 5000 front 0)');
+  });
+
+  it('emits copper keepouts per-layer as (keepout ...) polygons', () => {
+    let b = tinyBoard();
+    b = apply(b, {
+      op: 'addKeepout',
+      keepout: {
+        layers: ['F.Cu'],
+        polygon: [
+          { x: 2, y: 2 },
+          { x: 4, y: 2 },
+          { x: 4, y: 4 },
+          { x: 2, y: 4 },
+        ],
+        keepout: { copper: true, via: false },
+      },
+    });
+    const dsn = exportDSN(b);
+    expect(dsn).toContain('(keepout "" (polygon F.Cu 0 2000 2000 4000 2000 4000 4000 2000 4000))');
+    // copper:true, via:false => no via_keepout for this shape.
+    expect(dsn).not.toContain('(via_keepout "" (polygon signal 0 2000 2000');
+  });
+
+  it('emits an all-layer via keepout as a single (via_keepout ...) on signal', () => {
+    let b = tinyBoard();
+    b = apply(b, {
+      op: 'addKeepout',
+      keepout: {
+        layers: 'all',
+        polygon: [
+          { x: 6, y: 6 },
+          { x: 8, y: 6 },
+          { x: 8, y: 8 },
+          { x: 6, y: 8 },
+        ],
+        keepout: { copper: false, via: true },
+      },
+    });
+    const dsn = exportDSN(b);
+    expect(dsn).toContain('(via_keepout "" (polygon signal 0 6000 6000 8000 6000 8000 8000 6000 8000))');
+    // copper:false => no copper keepout lines for this shape.
+    expect(dsn).not.toContain('(keepout "" (polygon F.Cu 0 6000 6000');
+    expect(dsn).not.toContain('(keepout "" (polygon B.Cu 0 6000 6000');
+  });
+
   it('bakes pad rotation (mod 180 != 0) into a polygon padstack', () => {
     const fp: Footprint = {
       name: 'ROT',

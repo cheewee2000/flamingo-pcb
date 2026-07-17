@@ -27,6 +27,7 @@ import {
   ratsnest,
 } from '@flamingo/engine';
 import { exportDSN, importSES } from '@flamingo/fab';
+import type { ImportSESResult } from '@flamingo/fab';
 import type { PartInfo, SearchOpts } from '@flamingo/parts';
 import type { Doc } from './document.js';
 import type { RouteRunner } from './route.js';
@@ -782,7 +783,13 @@ export function createMcpServer(ctx: McpContext): McpServer {
       } catch (err) {
         return errorResult(`autoroute failed: ${err instanceof Error ? err.message : String(err)}`);
       }
-      const { tracks, vias } = importSES(ses, board);
+      let tracks: ImportSESResult['tracks'];
+      let vias: ImportSESResult['vias'];
+      try {
+        ({ tracks, vias } = importSES(ses, board));
+      } catch (err) {
+        return errorResult(`autoroute failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
 
       // 5. Apply the routed geometry.
       const applyRes = ctx.doc.apply({ op: 'addTracks', tracks, vias });

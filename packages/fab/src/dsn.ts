@@ -11,8 +11,12 @@
  * Bottom-side components: emitted as `(place ... back <rot>)`. Specctra
  * mirrors the component image across its local Y axis (x -> -x) for back-side
  * placement, which matches our engine's bottom-side convention
- * (componentTransformPoints: mirror x, then rotate, then translate). This is
- * verified by a round-trip test in test/dsn.test.ts.
+ * (componentTransformPoints: mirror x, then rotate, then translate). The
+ * `(place ...)` origin itself is NOT mirrored (Specctra mirrors around it) —
+ * asserted in test/dsn.test.ts. The end-to-end convention match is verified
+ * for real against freerouting by the bottom-side round-trip in
+ * packages/server/test/route.integration.test.ts (a back-side SOT-23 with
+ * asymmetric pads + nonzero rotation routes to our computed pad anchors).
  *
  * Padstacks are defined in footprint-local ("as-if front") layers: a
  * footprint-local `top` pad puts copper on F.Cu, `bottom` on B.Cu, `through`
@@ -214,19 +218,25 @@ function boundaryPath(b: Board): string {
 // Net class resolution
 // ---------------------------------------------------------------------------
 
+/** Hard-coded fallback net class when the board declares no `default`. */
+const FALLBACK_NET_CLASS: NetClass = {
+  name: 'default',
+  trackWidth: 0.25,
+  clearance: 0.2,
+  viaDrill: 0.3,
+  viaDiameter: 0.6,
+};
+
 function netClassOf(b: Board, net: Net): NetClass {
   return (
     b.netClasses.find((c) => c.name === net.class) ??
     b.netClasses.find((c) => c.name === 'default') ??
-    { name: 'default', trackWidth: 0.25, clearance: 0.2, viaDrill: 0.3, viaDiameter: 0.6 }
+    FALLBACK_NET_CLASS
   );
 }
 
 function defaultNetClass(b: Board): NetClass {
-  return (
-    b.netClasses.find((c) => c.name === 'default') ??
-    { name: 'default', trackWidth: 0.25, clearance: 0.2, viaDrill: 0.3, viaDiameter: 0.6 }
-  );
+  return b.netClasses.find((c) => c.name === 'default') ?? FALLBACK_NET_CLASS;
 }
 
 // ---------------------------------------------------------------------------
