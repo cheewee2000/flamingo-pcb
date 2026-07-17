@@ -44,15 +44,18 @@ function roundedRectOutline(w: number, h: number, r: number): PathSeg[] {
   const hw = w / 2;
   const hh = h / 2;
   const segs: PathSeg[] = [];
-  // Corners, CCW starting from the bottom edge's right end, arcs sweep CCW (cw:false).
+  // Traversal is clockwise in y-up (west along bottom, up the left side, ...),
+  // so each 90-degree corner arc must also sweep clockwise (cw:true) to take
+  // the short way around. cw:false here sweeps 270 degrees the long way and
+  // renders giant concave corner bites.
   segs.push({ type: 'line', start: { x: hw - r, y: -hh }, end: { x: -hw + r, y: -hh } });
-  segs.push({ type: 'arc', start: { x: -hw + r, y: -hh }, end: { x: -hw, y: -hh + r }, center: { x: -hw + r, y: -hh + r }, cw: false });
+  segs.push({ type: 'arc', start: { x: -hw + r, y: -hh }, end: { x: -hw, y: -hh + r }, center: { x: -hw + r, y: -hh + r }, cw: true });
   segs.push({ type: 'line', start: { x: -hw, y: -hh + r }, end: { x: -hw, y: hh - r } });
-  segs.push({ type: 'arc', start: { x: -hw, y: hh - r }, end: { x: -hw + r, y: hh }, center: { x: -hw + r, y: hh - r }, cw: false });
+  segs.push({ type: 'arc', start: { x: -hw, y: hh - r }, end: { x: -hw + r, y: hh }, center: { x: -hw + r, y: hh - r }, cw: true });
   segs.push({ type: 'line', start: { x: -hw + r, y: hh }, end: { x: hw - r, y: hh } });
-  segs.push({ type: 'arc', start: { x: hw - r, y: hh }, end: { x: hw, y: hh - r }, center: { x: hw - r, y: hh - r }, cw: false });
+  segs.push({ type: 'arc', start: { x: hw - r, y: hh }, end: { x: hw, y: hh - r }, center: { x: hw - r, y: hh - r }, cw: true });
   segs.push({ type: 'line', start: { x: hw, y: hh - r }, end: { x: hw, y: -hh + r } });
-  segs.push({ type: 'arc', start: { x: hw, y: -hh + r }, end: { x: hw - r, y: -hh }, center: { x: hw - r, y: -hh + r }, cw: false });
+  segs.push({ type: 'arc', start: { x: hw, y: -hh + r }, end: { x: hw - r, y: -hh }, center: { x: hw - r, y: -hh + r }, cw: true });
   return segs;
 }
 
