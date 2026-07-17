@@ -4,9 +4,14 @@ import { readFile, stat } from 'node:fs/promises';
 import { dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { LayerId, Op, RenderOpts } from '@flamingo/engine';
 import { ratsnest, renderSVG } from '@flamingo/engine';
+import { fetchPart, searchParts } from '@flamingo/parts';
 import { Doc } from './document.js';
+import type { McpContext, PartsApi } from './mcp.js';
+import { createMcpServer } from './mcp.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 // packages/server/dist/http.js -> packages/ui/dist
@@ -201,7 +206,40 @@ async function handleApi(
   return false;
 }
 
-function makeRequestListener(doc: Doc): (req: IncomingMessage, res: ServerResponse) => void {
+/**
+ * Handle a request to /mcp by spinning up a fresh McpServer + transport for
+ * this request only (stateless mode: `sessionIdGenerator: undefined`).
+ *
+ * Stateless is the simplest reliable pattern for the Streamable HTTP
+ * transport here: Flamingo's MCP tools all read/write through `ctx.doc`,
+ * which already IS the durable state (with its own undo/redo), so there is
+ * nothing session-scoped that a persistent transport would buy us. A new
+ * McpServer/transport pair per request avoids having to manage a session
+ * store, reconnection, or transport cleanup lifecycles.
+ */
+async function handleMcp(
+  ctx: McpContext,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  const mcpServer = createMcpServer(ctx);
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  res.on('close', () => {
+    void transport.close();
+    void mcpServer.close();
+  });
+  try {
+    await mcpServer.connect(transport);
+    await transport.handleRequest(req, res);
+  } catch (err) {
+    if (!res.headersSent) {
+      sendJSON(res, 500, { ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+}
+
+function makeRequestListener(ctx: McpContext): (req: IncomingMessage, res: ServerResponse) => void {
+  const doc = ctx.doc;
   return (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const pathname = url.pathname;
@@ -209,6 +247,18 @@ function makeRequestListener(doc: Doc): (req: IncomingMessage, res: ServerRespon
 
     void (async () => {
       try {
+        if (pathname === '/mcp') {
+          // Mounted ahead of /api/ routing per the MCP endpoint decision --
+          // handleMcp owns the request/response lifecycle from here (it reads
+          // the raw body itself), so return without falling through.
+          if (method === 'POST' || method === 'GET' || method === 'DELETE') {
+            await handleMcp(ctx, req, res);
+          } else {
+            req.resume();
+            sendNotFound(res);
+          }
+          return;
+        }
         if (pathname.startsWith('/api/')) {
           const handled = await handleApi(doc, method, pathname, url, req, res);
           if (!handled) sendNotFound(res);
@@ -289,12 +339,28 @@ export interface StartedServer {
   close(): Promise<void>;
 }
 
+export interface StartServerOptions {
+  /** Base directory MCP tools resolve relative paths against (new_board/open_board). Defaults to process.cwd(). */
+  projectDir?: string;
+  /** Parts lookup implementation for MCP's parts_search/parts_get/place_component tools. Defaults to the real @flamingo/parts network client -- tests should inject a mock. */
+  partsApi?: PartsApi;
+}
+
 /**
  * Start the Flamingo HTTP + WebSocket server for the given Doc.
  * Pass port 0 to bind an ephemeral port (tests must do this).
  */
-export function startServer(doc: Doc, port: number = DEFAULT_PORT): Promise<StartedServer> {
-  const server = http.createServer(makeRequestListener(doc));
+export function startServer(
+  doc: Doc,
+  port: number = DEFAULT_PORT,
+  opts: StartServerOptions = {},
+): Promise<StartedServer> {
+  const ctx: McpContext = {
+    doc,
+    projectDir: opts.projectDir ?? process.cwd(),
+    partsApi: opts.partsApi ?? { fetchPart, searchParts },
+  };
+  const server = http.createServer(makeRequestListener(ctx));
   const wss = attachWebSocket(doc, server);
 
   return new Promise((resolve, reject) => {

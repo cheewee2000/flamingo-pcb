@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync } from 'node:fs';
-import { basename, extname, resolve } from 'node:path';
+import { basename, dirname, extname, resolve } from 'node:path';
 import { newBoard } from '@flamingo/engine';
 import { Doc } from './document.js';
 import { startServer } from './http.js';
@@ -18,7 +18,7 @@ async function serve(fileArg: string): Promise<void> {
   }
 
   const port = process.env.FLAMINGO_PORT ? Number(process.env.FLAMINGO_PORT) : 4242;
-  const started = await startServer(doc, port);
+  const started = await startServer(doc, port, { projectDir: dirname(filePath) });
   console.log(`Flamingo serving ${fileArg} at http://localhost:${started.port}`);
 
   let shuttingDown = false;

@@ -18,7 +18,7 @@ const DEFAULT_DEBOUNCE_MS = 500;
  */
 export class Doc extends EventEmitter {
   private _board: Board;
-  private readonly filePath: string | undefined;
+  private filePath: string | undefined;
   private readonly debounceMs: number;
   private undoStack: Board[] = [];
   private redoStack: Board[] = [];
@@ -76,6 +76,28 @@ export class Doc extends EventEmitter {
     this.emit('change', this._board);
     this.scheduleSave();
     return this._board;
+  }
+
+  /**
+   * Replace the entire board (and, optionally, the file path future saves
+   * target), discarding undo/redo history. Used by the MCP new_board/
+   * open_board tools, which point a *running* server at a different board --
+   * every other route/socket keeps referencing this same Doc instance, so
+   * this mutates state in place rather than requiring a new Doc.
+   */
+  resetBoard(board: Board, filePath?: string): void {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    this._board = board;
+    if (filePath !== undefined) this.filePath = filePath;
+    this.undoStack = [];
+    this.redoStack = [];
+    this.dirty = false;
+    this.markDirty();
+    this.emit('change', this._board);
+    this.scheduleSave();
   }
 
   private markDirty(): void {
