@@ -345,13 +345,15 @@ body {
   color: var(--text-dim);
 }
 
-.status-bar span:last-child {
-  margin-left: auto;
-}
-
 .status-conn {
+  margin-left: auto;
   padding: 1px 6px;
   border-radius: 3px;
+}
+
+.status-version {
+  opacity: 0.75;
+  letter-spacing: 0.02em;
 }
 
 .status-conn.connected {

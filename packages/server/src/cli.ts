@@ -5,6 +5,8 @@ import { newBoard } from '@flamingo/engine';
 import { Doc } from './document.js';
 import { startServer } from './http.js';
 
+const VERSION = '0.1.0';
+
 async function serve(fileArg: string): Promise<void> {
   const filePath = resolve(process.cwd(), fileArg);
 
@@ -19,7 +21,7 @@ async function serve(fileArg: string): Promise<void> {
 
   const port = process.env.FLAMINGO_PORT ? Number(process.env.FLAMINGO_PORT) : 4242;
   const started = await startServer(doc, port, { projectDir: dirname(filePath) });
-  console.log(`Flamingo serving ${fileArg} at http://localhost:${started.port}`);
+  console.log(`Flamingo v${VERSION} serving ${fileArg} at http://localhost:${started.port}`);
 
   let shuttingDown = false;
   const shutdown = (): void => {

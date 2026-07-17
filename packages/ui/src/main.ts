@@ -17,6 +17,11 @@ import { hitTest } from './hit-test.js';
 import { createToolManager } from './tools/manager.js';
 import { snapPoint } from './tools/overlay-utils.js';
 import type { PointerEvt, ToolCtx } from './tools/tool.js';
+import { VERSION } from './version.js';
+
+// Stamp the build version into the status bar (see index.html #status-version).
+const versionEl = document.getElementById('status-version');
+if (versionEl) versionEl.textContent = `Flamingo v${VERSION}`;
 
 const canvas = document.getElementById('board-canvas') as HTMLCanvasElement;
 const viewportEl = document.getElementById('viewport') as HTMLElement;
