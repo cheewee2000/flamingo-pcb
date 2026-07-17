@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -40,6 +40,7 @@ import type { Doc } from './document.js';
 import type { RouteRunner } from './route.js';
 import { formatAutorouteSummary, runAutoroute } from './autoroute.js';
 import { pngDimensions, renderPNG } from './screenshot.js';
+import { exportStep } from './step.js';
 
 /**
  * Parts API injected into the MCP context so tests can supply a mock (no
@@ -1016,6 +1017,32 @@ export function createMcpServer(ctx: McpContext): McpServer {
         lines.push('', `Waived ${violations.length} DRC violation(s):`, formatDrcReport(violations));
       }
       return textResult(lines.join('\n'));
+    },
+  );
+
+  server.registerTool(
+    'export_step',
+    {
+      description:
+        'Export the board as a STEP file for mechanical CAD: the board outline extruded 1.6mm with every drill/slot cut through, plus one named body per component (courtyard box at a per-package height). Faceted B-rep, millimetres.',
+      inputSchema: {
+        outDir: z
+          .string()
+          .optional()
+          .describe('Directory to write into (defaults to "<board dir>/fab"). Absolute, or relative to the project directory.'),
+      },
+    },
+    async ({ outDir }) => {
+      const targetDir = resolveFabOutDir(ctx, outDir);
+      const fileName = `${ctx.doc.board.name.replace(/[^\w.-]+/g, '_') || 'board'}.step`;
+      const path = join(targetDir, fileName);
+      try {
+        await mkdir(targetDir, { recursive: true });
+        await writeFile(path, exportStep(ctx.doc.board), 'utf8');
+      } catch (err) {
+        return errorResult(`export_step failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return textResult(`Wrote ${path}`);
     },
   );
 

@@ -12,6 +12,7 @@
 import type { LayerId } from '@flamingo/engine';
 import { copperLayersOf } from '@flamingo/engine';
 import {
+  DIMS_KEY,
   LABEL_NETS_KEY,
   LABEL_PADS_KEY,
   RATSNEST_KEY,
@@ -100,7 +101,7 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
     els.layerList.replaceChildren();
     const board = state.board;
     if (!board) return;
-    const keys = [...copperLayersOf(board), ZONES_KEY, SILK_KEY, RATSNEST_KEY, LABEL_PADS_KEY, LABEL_NETS_KEY];
+    const keys = [...copperLayersOf(board), ZONES_KEY, SILK_KEY, RATSNEST_KEY, LABEL_PADS_KEY, LABEL_NETS_KEY, DIMS_KEY];
     store.set({ layerVisibility: withLayerKeys(state.layerVisibility, keys) });
     const vis = store.get().layerVisibility;
 
@@ -116,7 +117,7 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
       swatch.className = 'layer-swatch';
       swatch.style.background =
         LABEL_SWATCH[key] ??
-        (key === SILK_KEY || key === RATSNEST_KEY || key === ZONES_KEY ? '#888' : layerSwatchColor(key));
+        (key === SILK_KEY || key === RATSNEST_KEY || key === ZONES_KEY || key === DIMS_KEY ? '#888' : layerSwatchColor(key));
       const text = document.createElement('span');
       text.textContent = key;
       label.append(cb, swatch, text);
@@ -314,6 +315,17 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
           ['text', s.text],
           ['layer', s.layer],
           ['at', `${s.at.x.toFixed(2)}, ${s.at.y.toFixed(2)} mm`],
+        ];
+      }
+      case 'dimension': {
+        const dim = board.dimensions.find((x) => x.id === sel.id);
+        if (!dim) return null;
+        const len = Math.hypot(dim.b.x - dim.a.x, dim.b.y - dim.a.y);
+        return [
+          ['type', 'dimension'],
+          ['length', `${len.toFixed(2)} mm`],
+          ['a', `${dim.a.x.toFixed(2)}, ${dim.a.y.toFixed(2)}`],
+          ['b', `${dim.b.x.toFixed(2)}, ${dim.b.y.toFixed(2)}`],
         ];
       }
     }
@@ -524,6 +536,10 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
 
         row.append(drillLabel, platedLabel);
         els.toolOptions.appendChild(row);
+        break;
+      }
+      case 'dimension': {
+        appendHint('Click the two points to measure, then click a third time to place the dimension line.');
         break;
       }
       case 'measure': {

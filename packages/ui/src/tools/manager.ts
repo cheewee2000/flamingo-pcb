@@ -19,6 +19,7 @@ import { createHoleTool } from './hole.js';
 import { createSilkTool } from './silk.js';
 import { createRipupTool } from './ripup.js';
 import { createMeasureTool } from './measure.js';
+import { createDimensionTool } from './dimension.js';
 
 export interface ToolManager {
   readonly tools: Tool[];
@@ -36,6 +37,7 @@ export function createToolManager(ctx: ToolCtx): ToolManager {
     createSilkTool(),
     createRipupTool(),
     createMeasureTool(),
+    createDimensionTool(),
   ];
   const byId = new Map(tools.map((t) => [t.id, t]));
   const initial = byId.get('select');

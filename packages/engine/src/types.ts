@@ -175,6 +175,19 @@ export interface SilkLine {
   width: number;
 }
 
+/**
+ * A linear dimension annotation between two measured points. Documentation
+ * only — never affects DRC, routing, or fab outputs. The dimension line runs
+ * parallel to a→b, displaced by `offset` mm along the left-hand perpendicular
+ * of a→b (negative = right-hand side).
+ */
+export interface Dimension {
+  id: string;
+  a: Point;
+  b: Point;
+  offset: number;
+}
+
 export interface Board {
   formatVersion: 1;
   name: string;
@@ -190,5 +203,6 @@ export interface Board {
   zones: Zone[];
   silk: SilkText[];
   silkLines: SilkLine[];
+  dimensions: Dimension[];
   rules: 'jlcpcb-2l' | 'jlcpcb-4l' | 'jlcpcb-6l';
 }

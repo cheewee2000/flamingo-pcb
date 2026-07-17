@@ -37,6 +37,7 @@ export function newBoard(name: string, copperLayers: 2 | 4 | 6): Board {
     zones: [],
     silk: [],
     silkLines: [],
+    dimensions: [],
     rules: rulesMap[copperLayers],
   };
 }
@@ -110,10 +111,14 @@ export function parseBoard(json: string): Board {
     }
   }
 
-  // `silkLines` was added after the initial format; older saved boards omit it.
-  // Default it to [] rather than requiring it, so those boards still load.
+  // `silkLines` and `dimensions` were added after the initial format; older
+  // saved boards omit them. Default to [] rather than requiring them, so
+  // those boards still load.
   if (!Array.isArray(obj.silkLines)) {
     obj.silkLines = [];
+  }
+  if (!Array.isArray(obj.dimensions)) {
+    obj.dimensions = [];
   }
 
   return obj as unknown as Board;

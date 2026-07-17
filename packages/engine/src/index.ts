@@ -15,6 +15,7 @@ export type {
   Keepout,
   MountingHole,
   SilkText,
+  Dimension,
   SilkLine,
   Board,
 } from './types.js';

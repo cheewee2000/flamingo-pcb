@@ -43,7 +43,7 @@ import {
   padNetMap,
 } from '@flamingo/engine';
 import type { AppState, ViewTransform } from './state.js';
-import { LABEL_NETS_KEY, LABEL_PADS_KEY, RATSNEST_KEY, SILK_KEY, ZONES_KEY } from './state.js';
+import { DIMS_KEY, LABEL_NETS_KEY, LABEL_PADS_KEY, RATSNEST_KEY, SILK_KEY, ZONES_KEY } from './state.js';
 import { screenToWorld, worldToScreen } from './view.js';
 
 // ---------------------------------------------------------------------------
@@ -209,6 +209,99 @@ function drawRotatedText(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, 0, 0);
+  ctx.restore();
+}
+
+const DIMENSION_COLOR = '#E8E8E8';
+const DIM_ARROW_MM = 1.1;
+const DIM_EXT_OVERSHOOT_MM = 0.7;
+const DIM_TEXT_MM = 1.4;
+
+/**
+ * Compute the world-space endpoints of a dimension's measurement line:
+ * a/b displaced by `offset` mm along the left-hand perpendicular of a→b.
+ * Returns null for degenerate (zero-length) dimensions.
+ */
+export function dimensionLine(a: Point, b: Point, offset: number): { A: Point; B: Point; u: Point; n: Point; len: number } | null {
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  if (len < 1e-6) return null;
+  const u = { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
+  const n = { x: -u.y, y: u.x };
+  return {
+    A: { x: a.x + n.x * offset, y: a.y + n.y * offset },
+    B: { x: b.x + n.x * offset, y: b.y + n.y * offset },
+    u,
+    n,
+    len,
+  };
+}
+
+/** Draw one linear dimension: extension lines, measurement line, arrowheads, mm text. */
+export function drawDimension(
+  ctx: CanvasRenderingContext2D,
+  view: ViewTransform,
+  a: Point,
+  b: Point,
+  offset: number,
+  color: string = DIMENSION_COLOR,
+): void {
+  const d = dimensionLine(a, b, offset);
+  if (!d) return;
+  const { A, B, u, n, len } = d;
+  const over = Math.sign(offset || 1) * DIM_EXT_OVERSHOOT_MM;
+  const lineMm = 0.08;
+
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = Math.max(lineMm * view.scale, 1);
+
+  const seg = (p: Point, q: Point): void => {
+    const s = worldToScreen(view, p);
+    const e = worldToScreen(view, q);
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(e.x, e.y);
+    ctx.stroke();
+  };
+  // Extension lines from the measured points, slightly past the dimension line.
+  seg(a, { x: A.x + n.x * over, y: A.y + n.y * over });
+  seg(b, { x: B.x + n.x * over, y: B.y + n.y * over });
+  seg(A, B);
+
+  // Arrowheads at A and B, pointing outward along ±u.
+  const arrow = (tip: Point, dir: Point): void => {
+    const t = worldToScreen(view, tip);
+    const base = { x: tip.x - dir.x * DIM_ARROW_MM, y: tip.y - dir.y * DIM_ARROW_MM };
+    const half = { x: -dir.y * DIM_ARROW_MM * 0.32, y: dir.x * DIM_ARROW_MM * 0.32 };
+    const p1 = worldToScreen(view, { x: base.x + half.x, y: base.y + half.y });
+    const p2 = worldToScreen(view, { x: base.x - half.x, y: base.y - half.y });
+    ctx.beginPath();
+    ctx.moveTo(t.x, t.y);
+    ctx.lineTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.closePath();
+    ctx.fill();
+  };
+  arrow(A, { x: -u.x, y: -u.y });
+  arrow(B, u);
+
+  // Length text above the middle of the dimension line, kept upright.
+  const textOff = Math.sign(offset || 1) * (DIM_TEXT_MM * 0.9);
+  const mid = {
+    x: (A.x + B.x) / 2 + n.x * textOff,
+    y: (A.y + B.y) / 2 + n.y * textOff,
+  };
+  const p = worldToScreen(view, mid);
+  const pd = worldToScreen(view, { x: mid.x + u.x, y: mid.y + u.y });
+  let angle = Math.atan2(pd.y - p.y, pd.x - p.x);
+  if (angle > Math.PI / 2 || angle < -Math.PI / 2) angle += Math.PI;
+  ctx.translate(p.x, p.y);
+  ctx.rotate(angle);
+  ctx.font = `${Math.max(DIM_TEXT_MM * view.scale, 9)}px ${CANVAS_FONT}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`${len.toFixed(2)}`, 0, 0);
   ctx.restore();
 }
 
@@ -562,6 +655,14 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
           }
         }
       }
+    }
+  }
+
+  // ---- dimensions ----
+  if (vis[DIMS_KEY] !== false) {
+    for (const dim of board.dimensions) {
+      const selected = sel !== null && sel.kind === 'dimension' && sel.id === dim.id;
+      drawDimension(ctx, view, dim.a, dim.b, dim.offset, selected ? SELECTION_COLOR : undefined);
     }
   }
 
