@@ -272,7 +272,7 @@ export function createMcpServer(ctx: McpContext): McpServer {
       const board = newBoard(name, copperLayers);
       const safeName = name.replace(/[^a-zA-Z0-9_-]+/g, '_') || 'board';
       const filePath = join(ctx.projectDir, `${safeName}.flamingo`);
-      ctx.doc.resetBoard(board, filePath);
+      ctx.doc.resetBoard(board, filePath, true);
       try {
         await ctx.doc.save();
       } catch (err) {
@@ -304,7 +304,10 @@ export function createMcpServer(ctx: McpContext): McpServer {
       } catch (err) {
         return errorResult(`invalid board file "${abs}": ${err instanceof Error ? err.message : String(err)}`);
       }
-      ctx.doc.resetBoard(board, abs);
+      // open_board is a pure read of an already-on-disk file -- must not
+      // mark the doc dirty or schedule a debounced rewrite of the file it
+      // just read (see Doc.resetBoard's `persist` param).
+      ctx.doc.resetBoard(board, abs, false);
       return textResult(`Opened "${abs}" — board "${board.name}", ${board.copperLayers}-layer, ${board.components.length} component(s)`);
     },
   );

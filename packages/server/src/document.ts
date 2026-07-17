@@ -84,8 +84,14 @@ export class Doc extends EventEmitter {
    * open_board tools, which point a *running* server at a different board --
    * every other route/socket keeps referencing this same Doc instance, so
    * this mutates state in place rather than requiring a new Doc.
+   *
+   * `persist` (default true) controls whether this swap marks the doc dirty
+   * and schedules a debounced save -- new_board wants that (it's creating
+   * content that needs to land on disk), but open_board is a pure read of an
+   * already-on-disk file and must not trigger a rewrite of the file it just
+   * read. Either way the board is swapped and 'change' is emitted.
    */
-  resetBoard(board: Board, filePath?: string): void {
+  resetBoard(board: Board, filePath?: string, persist = true): void {
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
@@ -95,9 +101,9 @@ export class Doc extends EventEmitter {
     this.undoStack = [];
     this.redoStack = [];
     this.dirty = false;
-    this.markDirty();
+    if (persist) this.markDirty();
     this.emit('change', this._board);
-    this.scheduleSave();
+    if (persist) this.scheduleSave();
   }
 
   private markDirty(): void {
@@ -122,17 +128,20 @@ export class Doc extends EventEmitter {
   }
 
   /**
-   * Force an immediate, atomic write (write tmp file + rename). No-op
-   * without a filePath. Throws on failure -- direct callers (HTTP
+   * Force an immediate, atomic write (write tmp file + rename). Throws if no
+   * filePath is set -- there is nothing to write to, and silently succeeding
+   * would let callers (e.g. the save_board MCP tool) report "Saved." having
+   * written nothing. Also throws on write failure -- direct callers (HTTP
    * /api/save, close()) are responsible for handling/reporting the error;
-   * the debounced path installed by scheduleSave() catches instead.
+   * the debounced path installed by scheduleSave() catches instead (and
+   * never fires without a filePath in the first place -- see scheduleSave).
    */
   async save(): Promise<void> {
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
     }
-    if (!this.filePath) return;
+    if (!this.filePath) throw new Error('no file path set — cannot save');
     const data = serializeBoard(this._board);
     const tmpPath = `${this.filePath}.tmp-${randomUUID()}`;
     await writeFile(tmpPath, data, 'utf8');
@@ -143,14 +152,18 @@ export class Doc extends EventEmitter {
   /**
    * Cancel any pending debounced save and, if there are unsaved changes,
    * flush them synchronously with respect to the caller. Safe to call
-   * multiple times or with nothing dirty (no-op write in that case).
+   * multiple times or with nothing dirty (no-op write in that case). Only
+   * attempts the flush when a filePath is set -- markDirty() never sets
+   * dirty without one, so this is belt-and-suspenders against save()'s new
+   * throw-without-a-filePath behavior, keeping close() on an unpathed Doc a
+   * clean no-op rather than a rejection.
    */
   async close(): Promise<void> {
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
     }
-    if (this.dirty) {
+    if (this.dirty && this.filePath) {
       await this.save();
     }
   }

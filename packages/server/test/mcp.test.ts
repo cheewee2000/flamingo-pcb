@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { newBoard } from '@flamingo/engine';
+import { newBoard, serializeBoard } from '@flamingo/engine';
 import type { Footprint } from '@flamingo/engine';
 import type { PartInfo } from '@flamingo/parts';
 import { Doc } from '../src/document.js';
@@ -308,5 +308,67 @@ describe('MCP endpoint', () => {
     });
     expect(openResult.isError).toBeFalsy();
     expect(doc.board.components).toHaveLength(1);
+  });
+});
+
+describe('MCP endpoint — persistence edge cases', () => {
+  // Short debounce so "wait past the debounce window" is fast without racing
+  // real fs I/O against a fake clock (see document.test.ts for the same
+  // rationale).
+  const DEBOUNCE_MS = 30;
+
+  it('open_board does not schedule a rewrite of the file it just read', async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), 'flamingo-mcp-persist-'));
+    const doc = new Doc(newBoard('mcptest', 2), undefined, DEBOUNCE_MS);
+    const started = await startServer(doc, 0, { partsApi: mockPartsApi, projectDir });
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`http://localhost:${started.port}/mcp`)),
+    );
+
+    try {
+      const boardPath = join(projectDir, 'existing.flamingo');
+      await writeFile(boardPath, serializeBoard(newBoard('existing', 2)), 'utf8');
+      const before = await stat(boardPath);
+      const beforeContent = await readFile(boardPath, 'utf8');
+
+      const result = await client.callTool({ name: 'open_board', arguments: { path: boardPath } });
+      expect(result.isError).toBeFalsy();
+      expect(doc.board.name).toBe('existing');
+
+      // Wait well past the debounce window that a stray scheduleSave() would fire in.
+      await new Promise((resolve) => setTimeout(resolve, DEBOUNCE_MS * 6));
+
+      const after = await stat(boardPath);
+      const afterContent = await readFile(boardPath, 'utf8');
+      expect(after.mtimeMs).toBe(before.mtimeMs);
+      expect(afterContent).toBe(beforeContent);
+    } finally {
+      await client.close();
+      await started.close();
+      await rm(projectDir, { recursive: true, force: true });
+    }
+  });
+
+  it('save_board on an unpathed doc returns an error result instead of falsely reporting success', async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), 'flamingo-mcp-persist-'));
+    const doc = new Doc(newBoard('mcptest', 2)); // constructed without a filePath
+    const started = await startServer(doc, 0, { partsApi: mockPartsApi, projectDir });
+    const client = new Client({ name: 'test-client', version: '0.0.0' });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`http://localhost:${started.port}/mcp`)),
+    );
+
+    try {
+      const result = await client.callTool({ name: 'save_board', arguments: {} });
+      expect(result.isError).toBe(true);
+      const text = textOf(result as any);
+      expect(text).toContain('ERROR:');
+      expect(text).toContain('no file path set');
+    } finally {
+      await client.close();
+      await started.close();
+      await rm(projectDir, { recursive: true, force: true });
+    }
   });
 });

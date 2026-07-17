@@ -150,9 +150,9 @@ describe('Doc', () => {
       expect(saved.name).toBe('A');
     });
 
-    it('is a no-op without a filePath', async () => {
+    it('throws without a filePath instead of silently no-op-ing', async () => {
       const doc = new Doc(newBoard('start', 2));
-      await expect(doc.save()).resolves.toBeUndefined();
+      await expect(doc.save()).rejects.toThrow('no file path set — cannot save');
     });
 
     it('Doc.load reads back a saved board', async () => {
@@ -193,6 +193,65 @@ describe('Doc', () => {
 
       const after = readFileSync(filePath, 'utf8');
       expect(after).toBe(before);
+    });
+
+    it('close() on an unpathed doc resolves without throwing, even with edits applied', async () => {
+      const doc = new Doc(newBoard('start', 2)); // no filePath
+      doc.apply(meta('Edited'));
+      await expect(doc.close()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('resetBoard persist option', () => {
+    const DEBOUNCE_MS = 30;
+    let dir: string;
+    let filePath: string;
+
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), 'flamingo-doc-reset-'));
+      filePath = join(dir, 'board.flamingo');
+    });
+
+    afterEach(() => {
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    function wait(ms: number): Promise<void> {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    it('persist=false swaps the board and emits change, but schedules no save', async () => {
+      const doc = new Doc(newBoard('start', 2), filePath, DEBOUNCE_MS);
+      const seen: string[] = [];
+      doc.on('change', (b) => seen.push(b.name));
+
+      doc.resetBoard(newBoard('opened', 2), filePath, false);
+
+      expect(doc.board.name).toBe('opened');
+      expect(seen).toEqual(['opened']);
+
+      await wait(DEBOUNCE_MS * 4);
+      expect(existsSync(filePath)).toBe(false);
+    });
+
+    it('persist=true (default) still marks dirty and schedules a save', async () => {
+      const doc = new Doc(newBoard('start', 2), filePath, DEBOUNCE_MS);
+
+      doc.resetBoard(newBoard('created', 2), filePath, true);
+
+      await wait(DEBOUNCE_MS * 4);
+      expect(existsSync(filePath)).toBe(true);
+      const saved = parseBoard(readFileSync(filePath, 'utf8'));
+      expect(saved.name).toBe('created');
+    });
+
+    it('persist defaults to true when omitted', async () => {
+      const doc = new Doc(newBoard('start', 2), filePath, DEBOUNCE_MS);
+
+      doc.resetBoard(newBoard('created', 2), filePath);
+
+      await wait(DEBOUNCE_MS * 4);
+      expect(existsSync(filePath)).toBe(true);
     });
   });
 });

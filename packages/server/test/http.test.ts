@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { newBoard } from '@flamingo/engine';
 import { Doc } from '../src/document.js';
 import { startServer } from '../src/http.js';
@@ -129,11 +132,31 @@ describe('HTTP API', () => {
     expect(text).toContain('<svg');
   });
 
-  it('POST /api/save returns ok:true', async () => {
+  it('POST /api/save returns ok:true when a filePath is set', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'flamingo-http-save-'));
+    const filePath = join(dir, 'board.flamingo');
+    const pathedDoc = new Doc(newBoard('httptest-pathed', 2), filePath);
+    const pathedServer = await startServer(pathedDoc, 0);
+    try {
+      const res = await fetch(`http://localhost:${pathedServer.port}/api/save`, { method: 'POST' });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+    } finally {
+      await pathedServer.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Doc.save() now throws instead of silently no-op-ing when no filePath is
+  // set (see document.ts) -- the /api/save route's existing try/catch turns
+  // that into a 500 with the error message rather than a false-positive 200.
+  it('POST /api/save returns 500 with an error message when no filePath is set', async () => {
     const res = await fetch(`${base}/api/save`, { method: 'POST' });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(500);
     const body = await res.json();
-    expect(body.ok).toBe(true);
+    expect(body.ok).toBe(false);
+    expect(body.error).toContain('no file path set');
   });
 
   it('returns 404 with {ok:false,error} for an unknown /api route', async () => {
