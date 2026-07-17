@@ -1,0 +1,20 @@
+{
+  "name": "@flamingo/ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@flamingo/engine": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "vite": "^7",
+    "vitest": "^3"
+  }
+}

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flamingo</title>
+  </head>
+  <body>
+    <div id="app">
+      <div id="toolbar-left" class="panel toolbar-left">
+        <div class="panel-title">Tools</div>
+        <div class="tool-placeholder">(editing tools — Task 10)</div>
+      </div>
+
+      <div id="viewport" class="viewport">
+        <canvas id="board-canvas"></canvas>
+        <div id="side-badge" class="side-badge" hidden>BOTTOM</div>
+      </div>
+
+      <div id="panel-right" class="panel panel-right">
+        <div class="panel-section">
+          <div class="panel-title">Layers</div>
+          <div id="layer-list" class="layer-list"></div>
+        </div>
+        <div class="panel-section">
+          <div class="panel-title">Nets</div>
+          <div id="net-list" class="net-list"></div>
+        </div>
+        <div class="panel-section">
+          <div class="panel-title">Board</div>
+          <div id="board-info" class="board-info"></div>
+        </div>
+      </div>
+
+      <div id="status-bar" class="status-bar">
+        <span id="status-cursor">x: -- y: --</span>
+        <span id="status-zoom">zoom: --</span>
+        <span id="status-hover">&nbsp;</span>
+        <span id="status-conn" class="status-conn">connecting…</span>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
