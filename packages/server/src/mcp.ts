@@ -464,9 +464,13 @@ export function createMcpServer(ctx: McpContext): McpServer {
         rotation: z.number().optional().describe('Rotation in degrees CCW (default 0)'),
         side: sideSchema.optional().describe('Board side (default "top")'),
         value: z.string().optional().describe('Value field override, e.g. "10k", "100nF"'),
+        role: z
+          .string()
+          .optional()
+          .describe('Plain-English note on what this part is for on this board, e.g. "Decouples the 3V3 rail at U2". Shown in the UI selection panel.'),
       },
     },
-    async ({ lcsc, refdes, x, y, rotation, side, value }) => {
+    async ({ lcsc, refdes, x, y, rotation, side, value, role }) => {
       let footprint: Footprint;
       let info: PartInfo;
       try {
@@ -487,6 +491,7 @@ export function createMcpServer(ctx: McpContext): McpServer {
         fields: {
           value: value ?? info.description ?? undefined,
           description: info.description,
+          role,
           mfr: info.mfr,
           package: info.package,
           basic: info.basic,
