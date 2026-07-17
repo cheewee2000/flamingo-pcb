@@ -34,6 +34,7 @@ import type { ImportSESResult } from '@flamingo/fab';
 import type { PartInfo, SearchOpts } from '@flamingo/parts';
 import type { Doc } from './document.js';
 import type { RouteRunner } from './route.js';
+import { pngDimensions, renderPNG } from './screenshot.js';
 
 /**
  * Parts API injected into the MCP context so tests can supply a mock (no
@@ -278,6 +279,13 @@ const pathSegSchema = z.union([
 ]);
 
 const sideSchema = z.enum(['top', 'bottom']);
+
+const regionSchema = z.object({
+  minX: z.number().describe('Region min X in mm'),
+  minY: z.number().describe('Region min Y in mm'),
+  maxX: z.number().describe('Region max X in mm'),
+  maxY: z.number().describe('Region max Y in mm'),
+});
 
 // ---------------------------------------------------------------------------
 // Server construction
@@ -891,6 +899,39 @@ export function createMcpServer(ctx: McpContext): McpServer {
         lines.push('', `Waived ${violations.length} DRC violation(s):`, formatDrcReport(violations));
       }
       return textResult(lines.join('\n'));
+    },
+  );
+
+  server.registerTool(
+    'screenshot',
+    {
+      description:
+        'Render the current board to a PNG image so you can see it. Unrouted airwires (ratsnest) and DRC violation markers are shown by default -- pass showRatsnest:false / showDrc:false to hide them. Filter to specific layers, zoom to a region, or highlight one net.',
+      inputSchema: {
+        layers: z.array(layerIdSchema).optional().describe('Layers to render (omit for all layers)'),
+        region: regionSchema.optional().describe('Zoom to this mm bounding box (omit for the whole board)'),
+        highlightNet: z.string().optional().describe('Net name to highlight in cyan'),
+        widthPx: z.number().int().positive().optional().describe('Image width in px (default 1200, capped at 2400)'),
+        showRatsnest: z.boolean().optional().describe('Overlay unrouted airwires (default true)'),
+        showDrc: z.boolean().optional().describe('Overlay DRC violation markers (default true)'),
+      },
+    },
+    ({ layers, region, highlightNet, widthPx, showRatsnest, showDrc }): CallToolResult => {
+      const board = ctx.doc.board;
+      const png = renderPNG(board, { layers, region, highlightNet, widthPx, showRatsnest, showDrc });
+      const { width, height } = pngDimensions(png);
+
+      const drcCount = showDrc === false ? 0 : runDRC(board).length;
+      const ratCount = showRatsnest === false ? 0 : ratsnest(board).length;
+      const layerStr = layers && layers.length > 0 ? layers.join(',') : 'all layers';
+      const summary = `${width}x${height}px, layers: ${layerStr}, ${drcCount} DRC marker(s), ${ratCount} ratline(s)`;
+
+      return {
+        content: [
+          { type: 'image', data: png.toString('base64'), mimeType: 'image/png' },
+          { type: 'text', text: summary },
+        ],
+      };
     },
   );
 

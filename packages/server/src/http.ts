@@ -15,6 +15,8 @@ import type { McpContext, PartsApi } from './mcp.js';
 import { createMcpServer, resolveFabOutDir } from './mcp.js';
 import type { RouteRunner } from './route.js';
 import { defaultRouteRunner } from './route.js';
+import type { ScreenshotOpts } from './screenshot.js';
+import { renderPNG } from './screenshot.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 // packages/server/dist/http.js -> packages/ui/dist
@@ -195,6 +197,41 @@ async function handleApi(
     const svg = renderSVG(doc.board, opts);
     res.writeHead(200, { 'content-type': 'image/svg+xml' });
     res.end(svg);
+    return true;
+  }
+
+  if (method === 'GET' && pathname === '/api/render.png') {
+    const opts: ScreenshotOpts = {};
+    const layers = url.searchParams.get('layers');
+    if (layers) {
+      opts.layers = layers
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean) as LayerId[];
+    }
+    const region = url.searchParams.get('region');
+    if (region) {
+      const nums = region.split(',').map((s) => Number(s.trim()));
+      if (nums.length === 4 && nums.every((n) => Number.isFinite(n))) {
+        const [minX, minY, maxX, maxY] = nums as [number, number, number, number];
+        opts.region = { minX, minY, maxX, maxY };
+      }
+    }
+    const widthPxRaw = url.searchParams.get('widthPx');
+    if (widthPxRaw) {
+      const n = Number(widthPxRaw);
+      if (Number.isFinite(n)) opts.widthPx = n;
+    }
+    const highlightNet = url.searchParams.get('highlightNet');
+    if (highlightNet) opts.highlightNet = highlightNet;
+    const showRatsnest = url.searchParams.get('showRatsnest');
+    if (showRatsnest !== null) opts.showRatsnest = showRatsnest !== '0';
+    const showDrc = url.searchParams.get('showDrc');
+    if (showDrc !== null) opts.showDrc = showDrc !== '0';
+
+    const png = renderPNG(doc.board, opts);
+    res.writeHead(200, { 'content-type': 'image/png' });
+    res.end(png);
     return true;
   }
 

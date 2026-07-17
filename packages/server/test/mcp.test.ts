@@ -87,6 +87,7 @@ const TOOL_NAMES = [
   'unroute',
   'autoroute',
   'export_fab',
+  'screenshot',
 ];
 
 function textOf(result: { content: Array<{ type: string; text?: string }> }): string {
@@ -121,11 +122,11 @@ describe('MCP endpoint', () => {
     await rm(projectDir, { recursive: true, force: true });
   });
 
-  it('tools/list returns all 27 core tools', async () => {
+  it('tools/list returns all 28 core tools', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([...TOOL_NAMES].sort());
-    expect(tools).toHaveLength(27);
+    expect(tools).toHaveLength(28);
   });
 
   it('place_component (mocked part) then get_board_state reflects it', async () => {
@@ -342,6 +343,53 @@ describe('MCP endpoint', () => {
     const text = textOf(result as any);
     expect(text).toContain('unconnected-net');
     expect(text).toContain('N1');
+  });
+
+  it('screenshot returns PNG image content plus a one-line text summary', async () => {
+    await client.callTool({
+      name: 'set_board_outline',
+      arguments: { shape: 'rect', width: 20, height: 20 },
+    });
+    await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R1', x: 5, y: 10 } });
+    await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R2', x: 15, y: 10 } });
+    await client.callTool({ name: 'connect_pins', arguments: { net: 'N1', pins: ['R1.2', 'R2.1'] } });
+    // Deliberately unrouted -- N1 has two separate islands, so both the
+    // ratsnest overlay and the DRC unconnected-net check have something to
+    // show, and run_drc also finds the missing-outline-free board dirty via
+    // unconnected-net.
+
+    const result = await client.callTool({ name: 'screenshot', arguments: {} });
+    expect(result.isError).toBeFalsy();
+    const content = (result as any).content as Array<{ type: string; data?: string; mimeType?: string; text?: string }>;
+    expect(content).toHaveLength(2);
+
+    const image = content.find((c) => c.type === 'image');
+    expect(image).toBeTruthy();
+    expect(image!.mimeType).toBe('image/png');
+    const buf = Buffer.from(image!.data!, 'base64');
+    expect(buf.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+
+    const text = content.find((c) => c.type === 'text');
+    expect(text).toBeTruthy();
+    expect(text!.text).toContain('1200x');
+    expect(text!.text).toContain('DRC marker');
+    expect(text!.text).toContain('ratline');
+  });
+
+  it('screenshot honors widthPx, layers, and showRatsnest/showDrc flags', async () => {
+    const result = await client.callTool({
+      name: 'screenshot',
+      arguments: { widthPx: 400, layers: ['Edge'], showRatsnest: false, showDrc: false },
+    });
+    expect(result.isError).toBeFalsy();
+    const content = (result as any).content as Array<{ type: string; data?: string; text?: string }>;
+    const image = content.find((c) => c.type === 'image')!;
+    const buf = Buffer.from(image.data!, 'base64');
+    // IHDR width field, big-endian u32 at byte offset 16.
+    expect(buf.readUInt32BE(16)).toBe(400);
+    const text = content.find((c) => c.type === 'text')!;
+    expect(text.text).toContain('0 DRC marker');
+    expect(text.text).toContain('0 ratline');
   });
 
   it('new_board replaces the current board', async () => {

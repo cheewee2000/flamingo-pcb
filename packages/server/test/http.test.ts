@@ -136,6 +136,26 @@ describe('HTTP API', () => {
     expect(text).toContain('<svg');
   });
 
+  it('GET /api/render.png returns a PNG image', async () => {
+    const res = await fetch(`${base}/api/render.png`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/png');
+    const buf = Buffer.from(await res.arrayBuffer());
+    expect(buf.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+  });
+
+  it('GET /api/render.png accepts layers, region, widthPx, highlightNet, showRatsnest/showDrc query params', async () => {
+    const res = await fetch(
+      `${base}/api/render.png?layers=F.Cu,B.Cu&region=0,0,10,10&widthPx=300&highlightNet=NET1&showRatsnest=0&showDrc=0`,
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/png');
+    const buf = Buffer.from(await res.arrayBuffer());
+    expect(buf.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+    // IHDR width field, big-endian u32 at byte offset 16.
+    expect(buf.readUInt32BE(16)).toBe(300);
+  });
+
   it('POST /api/save returns ok:true when a filePath is set', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'flamingo-http-save-'));
     const filePath = join(dir, 'board.flamingo');
