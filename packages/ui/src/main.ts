@@ -129,10 +129,18 @@ canvas.addEventListener('mousedown', (ev) => {
 
 canvas.addEventListener('mouseup', (ev) => {
   if (ev.button !== 0) return;
+  // Mouse events bubble canvas -> ... -> window, and attachViewControls' endPan
+  // is bound on window, so this canvas-level listener runs *before* endPan
+  // resets `panning` to false: isPanning() is still true here for the mouseup
+  // that ends a space+drag pan, letting us skip routing it to the tool as a click.
+  if (viewControls.isPanning()) return;
   toolManager.active().onPointerUp?.(toPointerEvt(ev, store.get()), toolCtx);
 });
 
 canvas.addEventListener('dblclick', (ev) => {
+  // Same bubble-order reasoning as mouseup above: a pan-ending drag can end in
+  // a dblclick if the two mouseups land close together in time, so guard here too.
+  if (viewControls.isPanning()) return;
   toolManager.active().onDoubleClick?.(toPointerEvt(ev, store.get()), toolCtx);
 });
 

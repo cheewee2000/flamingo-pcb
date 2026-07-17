@@ -18,7 +18,9 @@ export function createRipupTool(): Tool {
     onPointerDown(ev: PointerEvt, ctx: ToolCtx): void {
       const state = ctx.getState();
       if (!state.board) return;
-      const hit = hitTrackOrVia(state.board, ev.world, state.view.scale);
+      // worldRaw (unsnapped): with the default 0.5mm snap, a precise click on
+      // a thin track/via can snap to a point that no longer hits it.
+      const hit = hitTrackOrVia(state.board, ev.worldRaw, state.view.scale);
       if (!hit) return;
       if (ev.alt) {
         ctx.sendOp({ op: 'unroute', net: hit.net });

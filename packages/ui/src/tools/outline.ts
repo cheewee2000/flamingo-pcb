@@ -10,10 +10,15 @@
  */
 
 import type { Point } from '@flamingo/engine';
+import { dist } from '@flamingo/engine';
 import type { PointerEvt, Tool, ToolCtx } from './tool.js';
 import { closedPolygonToLineSegs, drawPolygonInProgress, rectCornersFromDrag, strokeOverlayPolygon } from './overlay-utils.js';
 
 const OUTLINE_COLOR = '#ffcc66';
+// Same pattern as select.ts's DRAG_THRESHOLD_PX: below this many screen px of
+// movement, a rect-mode gesture is treated as a click, not a drag, and is
+// discarded rather than sending a degenerate (zero-area) outline.
+const DRAG_THRESHOLD_PX = 4;
 
 export function createOutlineTool(): Tool {
   let dragStart: Point | null = null;
@@ -21,6 +26,7 @@ export function createOutlineTool(): Tool {
   let dragSquare = false;
   let polyPoints: Point[] = [];
   let cursorWorld: Point | null = null;
+  let downScreen: Point | null = null;
 
   function reset(): void {
     dragStart = null;
@@ -28,6 +34,7 @@ export function createOutlineTool(): Tool {
     dragSquare = false;
     polyPoints = [];
     cursorWorld = null;
+    downScreen = null;
   }
 
   function closePolygon(ctx: ToolCtx): void {
@@ -52,6 +59,7 @@ export function createOutlineTool(): Tool {
         dragStart = ev.world;
         dragCurrent = ev.world;
         dragSquare = ev.shift;
+        downScreen = ev.screen;
       } else {
         polyPoints.push(ev.world);
       }
@@ -67,10 +75,14 @@ export function createOutlineTool(): Tool {
 
     onPointerUp(ev: PointerEvt, ctx: ToolCtx): void {
       if (dragStart) {
-        const corners = rectCornersFromDrag(dragStart, ev.world, ev.shift);
-        ctx.sendOp({ op: 'setOutline', outline: closedPolygonToLineSegs(corners) });
+        const moved = downScreen !== null && dist(downScreen, ev.screen) > DRAG_THRESHOLD_PX;
+        if (moved) {
+          const corners = rectCornersFromDrag(dragStart, ev.world, ev.shift);
+          ctx.sendOp({ op: 'setOutline', outline: closedPolygonToLineSegs(corners) });
+        }
         dragStart = null;
         dragCurrent = null;
+        downScreen = null;
       }
     },
 

@@ -91,12 +91,15 @@ export function createSelectTool(): Tool {
       reset();
 
       // Plain click: preserve Task 9's pad/track/via net-highlight behavior...
-      const netHit = hitTest(board, ev.world, state.view.scale);
+      // Use worldRaw (unsnapped), matching onPointerDown above -- with the
+      // default 0.5mm snap, a precise click on a thin track/pad can snap to a
+      // point that no longer hits it.
+      const netHit = hitTest(board, ev.worldRaw, state.view.scale);
       const cur = state.selectedNet;
       const selectedNet = netHit ? (cur === netHit.net ? null : netHit.net) : null;
 
       // ...alongside the broader edit-selection (component shadows its pads).
-      const editHit = hitEditTarget(board, ev.world, state.view.scale);
+      const editHit = hitEditTarget(board, ev.worldRaw, state.view.scale);
       ctx.setState({ selectedNet, selection: editHit });
     },
 
