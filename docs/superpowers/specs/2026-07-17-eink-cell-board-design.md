@@ -10,10 +10,10 @@ JST-SH LRA hookup.
   y-up, origin at board center. GND pours both sides.
 - **Display:** GDEQ0426FT82 (4.26" 800×480, SSD1677) — glass 105.33 × 62.37 mm,
   adhesive-mounted **centered on the back** (not a placed component). Its
-  12.5 mm FPC tail exits the glass bottom edge, passes through a **15 × 2 mm
-  milled slot** below the glass, and mates a 24-pin 0.5 mm flip-lock FPC
-  connector on the front. Dual-contact connector (XUNPU FPC-05FB-24PH20,
-  C2856831) removes the contact-face risk of the fold.
+  24 mm FPC tails exit the glass bottom edge, pass through **milled slots**
+  below the glass (see FT-variant section for verified geometry), and mate
+  flip-lock FPC connectors on the front. Dual-contact connector (XUNPU
+  FPC-05FB-24PH20, C2856831) removes the contact-face risk of the fold.
 - **All other components on the front.**
 
 ## Engine feature: slotted mounting holes
@@ -81,11 +81,13 @@ LEDs: 0603, charge (red, hardware CHRG) + GP (GPIO), ~1 k series.
 
 ## Placement sketch (front, origin center)
 
-- Slot centered x=0, y ≈ −54.3 (just below glass edge at −52.67).
-- FPC connector above slot, entry toward slot.
+- Three tail slots at y=3.5 (bottom-left origin; superseded detail in the
+  FT-variant section).
+- FPC connectors above slots, entry toward slot.
 - EPD boost cluster around connector.
 - Walter vertical, left-of-center; header rows 20 mm apart.
-- USB-C bottom edge right of slot; TP4056 + load share + battery JST nearby.
+- USB-C on the right edge (frontlight tail owns the old bottom-right spot);
+  TP4056 + load share + battery JST bottom-left.
 - Buttons: (±33, y≈25 & 45) edges. Piezo + DRV2605L + LRA JST top region.
 - 4× M2 mounting holes (drill 2.2, pad 4.0), corners inset ~4 mm.
 - Silk: version "v0.1", button labels, USB/VIN warning.
@@ -121,17 +123,45 @@ Wiring: WS→IO18 (H1.7), SCK→IO17 (H1.8), SD→IO16 (H1.9).
 ## FT variant: three tails (frontlight | EPD | touch)
 
 GDEQ0426**FT**82 = FT01C variant. Tails on the bottom edge (front view,
-left→right): frontlight 6P | EPD 24P | touch 6P, 0.5 mm pitch, flanking
-centerlines ±9.6 mm from panel center (±1 mm per drawing), all bottom-contact,
-pin 1 left in front view. Tails sit ~1.5 mm apart ⇒ one combined milled slot
-(25.5 mm × 2 mm at board (33.15, 3.5)) passes all three; bottom strip relaid
-(USB east at x=53, charger west, rail caps north).
+left→right): frontlight 6P | EPD 24P | touch 6P, 0.5 mm pitch, all
+bottom-contact, pin 1 left in front view.
 
-- **Touch (J5, FPC-05FB-6PH20 rot 180 at (23.7,20)):** FT6336U — pin k ↔ pad
+**Corrected 2026-07-17 from the FT01C drawing** (vector-measured +
+dimension-verified; PDF cached at `boards/eink-cell/datasheets/`):
+
+- All three tails are **24.0 mm** long (glass edge → contact tip). The
+  earlier "12.5 mm tail" was a misread — 12.50 is the EPD *contact-section
+  width* (24 pins × 0.5 mm).
+- Flanking tails: outer stalk edge **10.00 mm from each glass side edge**,
+  tail width 3.50 ⇒ contact centerlines 11.75 mm in from the glass edges =
+  **±19.44 mm from panel center** (not ±9.6). Board x (glass edges at
+  1.815/64.185, front-view-left ↔ board +x): touch **13.57**, frontlight
+  **52.44**. Note: the drawing's front-view *sketch* draws the touch tail
+  ~1.2 mm further inboard than its own 10.00 dim; dims trusted, slots sized
+  generously to absorb this.
+- EPD tail: 24.85 from glass left edge to contact-section left edge ⇒
+  contact centerline 31.10 from glass left = board x **33.09**. Its
+  bending/wide section is ~23.7 mm wide (board x ≈ 22.6–46.35) and passes
+  through the slot.
+- Touch tail carries a ~10.1 × ~4.8 mm **device area** (FT6336U + steel
+  reinforcement) 10.9–20 mm down the tail — it must pass through the slot
+  and lands flat on the front over the charger area (low parts only there).
+- ⇒ **Three milled slots** at y=3.5 (2 mm wide): touch 11.5 long c=13.57,
+  EPD 25.6 long c=34.5, frontlight 6.0 long c=52.6; one copper/via keepout
+  band x 7.3–56.1, y 1.9–5.1. Webs between slots ≈2.3 mm.
+- Connectors rot 180 (entry south, toward slot): **J4 (33.09, 17.5)**,
+  **J5 (13.57, 20)**, **J6 (52.44, 20)**. Front-side reach after the fold
+  ≈ y 22 ⇒ ~3–4 mm latched slack each.
+- **USB-C moved to the right edge** (J1 at (62.25, 11.5) rot 90, plug
+  faces +x) — its old bottom-right spot is exactly where the frontlight
+  tail passes. Charger cluster shifted up clear of the touch slot; LED row,
+  CC resistors, EPD-boost cluster and FL-boost stack reshuffled to suit.
+
+- **Touch (J5, FPC-05FB-6PH20 rot 180 at (13.57,20)):** FT6336U — pin k ↔ pad
   7−k. Shares I2C with DRV2605L (0x38 vs 0x5A). INT→IO7 (H1.11). RST = RC
   (internal 3 kΩ pullup to VDDA + 4.7 µF C19 → ~14 ms; no free GPIO left).
   IOVCC/VDD on 3V3 (power-gated). I2C ≤400 kHz.
-- **Frontlight (J6 rot 180 at (42.7,16)):** two channels, each 5 white LEDs in
+- **Frontlight (J6 rot 180 at (52.44,20)):** two channels, each 5 white LEDs in
   series, VF ≤ 15 V, IF ≤ 15 mA. 2× SGM3732 (C116578) boost: pins 1 SW, 2 GND,
   3 FB (200 mV), 4 CTRL (PWM 2–60 kHz), 5 VOUT (OVP 38 V), 6 VIN. RSET = 15 Ω
   (C203326) → 13.3 mA. L = 10 µH CY54 (C2929431); D = SS34 (open-LED OVP 38 V
