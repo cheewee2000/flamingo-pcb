@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { isAbsolute, join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -22,13 +22,14 @@ import type {
 } from '@flamingo/engine';
 import {
   boardBBox,
+  fillAllZones,
   isFullyRouted,
   newBoard,
   parseBoard,
   ratsnest,
   runDRC,
 } from '@flamingo/engine';
-import { exportDSN, importSES } from '@flamingo/fab';
+import { exportDSN, exportFab, importSES } from '@flamingo/fab';
 import type { ImportSESResult } from '@flamingo/fab';
 import type { PartInfo, SearchOpts } from '@flamingo/parts';
 import type { Doc } from './document.js';
@@ -157,6 +158,19 @@ function formatDrcReport(violations: DrcViolation[]): string {
     lines.push(`[${v.rule}] ${v.message} — at (${fmt(v.at.x)}, ${fmt(v.at.y)}); items: ${itemsStr}`);
   }
   return lines.join('\n');
+}
+
+/**
+ * Resolve the output directory for export_fab: an explicit `outDir` (absolute
+ * as-is, else joined onto projectDir); otherwise `<dirname(current board
+ * file)>/fab`, falling back to `<projectDir>/fab` for a board that has never
+ * been saved (no filePath yet). Shared between the export_fab MCP tool and
+ * the POST /api/export HTTP route so both pick the same default.
+ */
+export function resolveFabOutDir(ctx: McpContext, outDir?: string): string {
+  if (outDir) return isAbsolute(outDir) ? outDir : join(ctx.projectDir, outDir);
+  const base = ctx.doc.filePath ? dirname(ctx.doc.filePath) : ctx.projectDir;
+  return join(base, 'fab');
 }
 
 // ---------------------------------------------------------------------------
@@ -830,6 +844,53 @@ export function createMcpServer(ctx: McpContext): McpServer {
       return textResult(
         `Routed ${routedCount} net(s): ${tracks.length} tracks, ${vias.length} vias added. ${remainingStr}`,
       );
+    },
+  );
+
+  server.registerTool(
+    'export_fab',
+    {
+      description:
+        'Export the fabrication fileset for JLCPCB: gerbers.zip (Gerber X2 + Excellon drills), bom.csv, cpl.csv, plus a bonus board.render.svg reference image. Runs DRC first and refuses to export (isError) if it finds unwaived violations -- pass waiveDrc:true to export anyway. Defaults outDir to "<directory of the current board file>/fab".',
+      inputSchema: {
+        outDir: z
+          .string()
+          .optional()
+          .describe('Output directory, absolute or relative to the project directory. Defaults to "<board file dir>/fab"'),
+        waiveDrc: z
+          .boolean()
+          .optional()
+          .describe('Export even if DRC finds violations (default false -- export is refused on any violation)'),
+      },
+    },
+    async ({ outDir, waiveDrc }) => {
+      const board = ctx.doc.board;
+      const filled = fillAllZones(board);
+      const violations = runDRC(filled);
+      if (violations.length > 0 && !waiveDrc) {
+        return errorResult(
+          `${formatDrcReport(violations)}\n\nExport refused; fix the violation(s) above or pass waiveDrc:true to export anyway.`,
+        );
+      }
+
+      const targetDir = resolveFabOutDir(ctx, outDir);
+      let result: { gerberZip: string; bomCsv: string; cplCsv: string };
+      try {
+        result = await exportFab(board, targetDir);
+      } catch (err) {
+        return errorResult(`export_fab failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+
+      const lines = [
+        `Exported fab outputs to ${targetDir}:`,
+        `  ${result.gerberZip}`,
+        `  ${result.bomCsv}`,
+        `  ${result.cplCsv}`,
+      ];
+      if (violations.length > 0) {
+        lines.push('', `Waived ${violations.length} DRC violation(s):`, formatDrcReport(violations));
+      }
+      return textResult(lines.join('\n'));
     },
   );
 

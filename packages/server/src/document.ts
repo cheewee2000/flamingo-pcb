@@ -18,7 +18,7 @@ const DEFAULT_DEBOUNCE_MS = 500;
  */
 export class Doc extends EventEmitter {
   private _board: Board;
-  private filePath: string | undefined;
+  private _filePath: string | undefined;
   private readonly debounceMs: number;
   private undoStack: Board[] = [];
   private redoStack: Board[] = [];
@@ -28,12 +28,17 @@ export class Doc extends EventEmitter {
   constructor(initial: Board, filePath?: string, debounceMs: number = DEFAULT_DEBOUNCE_MS) {
     super();
     this._board = initial;
-    this.filePath = filePath;
+    this._filePath = filePath;
     this.debounceMs = debounceMs;
   }
 
   get board(): Board {
     return this._board;
+  }
+
+  /** The board's current on-disk path, if any (set by the constructor/resetBoard). */
+  get filePath(): string | undefined {
+    return this._filePath;
   }
 
   /**
@@ -97,7 +102,7 @@ export class Doc extends EventEmitter {
       this.saveTimer = null;
     }
     this._board = board;
-    if (filePath !== undefined) this.filePath = filePath;
+    if (filePath !== undefined) this._filePath = filePath;
     this.undoStack = [];
     this.redoStack = [];
     this.dirty = false;
@@ -107,7 +112,7 @@ export class Doc extends EventEmitter {
   }
 
   private markDirty(): void {
-    if (this.filePath) this.dirty = true;
+    if (this._filePath) this.dirty = true;
   }
 
   private pushUndo(board: Board): void {
@@ -116,12 +121,12 @@ export class Doc extends EventEmitter {
   }
 
   private scheduleSave(): void {
-    if (!this.filePath) return;
+    if (!this._filePath) return;
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
       this.save().catch((err: unknown) => {
-        console.error(`[flamingo] failed to save ${this.filePath}:`, err);
+        console.error(`[flamingo] failed to save ${this._filePath}:`, err);
         this.emit('saveError', err);
       });
     }, this.debounceMs);
@@ -141,11 +146,11 @@ export class Doc extends EventEmitter {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
     }
-    if (!this.filePath) throw new Error('no file path set — cannot save');
+    if (!this._filePath) throw new Error('no file path set — cannot save');
     const data = serializeBoard(this._board);
-    const tmpPath = `${this.filePath}.tmp-${randomUUID()}`;
+    const tmpPath = `${this._filePath}.tmp-${randomUUID()}`;
     await writeFile(tmpPath, data, 'utf8');
-    await rename(tmpPath, this.filePath);
+    await rename(tmpPath, this._filePath);
     this.dirty = false;
   }
 
@@ -163,7 +168,7 @@ export class Doc extends EventEmitter {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
     }
-    if (this.dirty && this.filePath) {
+    if (this.dirty && this._filePath) {
       await this.save();
     }
   }

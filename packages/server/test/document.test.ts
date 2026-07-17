@@ -10,6 +10,20 @@ function meta(name: string) {
 }
 
 describe('Doc', () => {
+  describe('filePath', () => {
+    it('is undefined when constructed without one', () => {
+      const doc = new Doc(newBoard('start', 2));
+      expect(doc.filePath).toBeUndefined();
+    });
+
+    it('reflects the constructor path, and resetBoard\'s new path', () => {
+      const doc = new Doc(newBoard('start', 2), '/tmp/x/board.flamingo');
+      expect(doc.filePath).toBe('/tmp/x/board.flamingo');
+      doc.resetBoard(newBoard('other', 2), '/tmp/y/other.flamingo', false);
+      expect(doc.filePath).toBe('/tmp/y/other.flamingo');
+    });
+  });
+
   describe('apply/undo/redo', () => {
     it('round-trips through apply, undo, and redo', () => {
       const doc = new Doc(newBoard('start', 2));

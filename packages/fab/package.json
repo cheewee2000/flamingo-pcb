@@ -14,6 +14,9 @@
     "archiver": "^8.0.0"
   },
   "devDependencies": {
-    "@tracespace/parser": "^5.0.0-next.0"
+    "@tracespace/parser": "^5.0.0-next.0",
+    "@types/adm-zip": "^0.5.8",
+    "@types/archiver": "^8.0.0",
+    "adm-zip": "^0.6.0"
   }
 }

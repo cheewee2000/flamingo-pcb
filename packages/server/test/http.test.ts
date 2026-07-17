@@ -163,6 +163,88 @@ describe('HTTP API', () => {
     expect(body.error).toContain('no file path set');
   });
 
+  describe('POST /api/export', () => {
+    it('returns 400 with a violations report when the board has DRC violations (no outline)', async () => {
+      const res = await fetch(`${base}/api/export`, { method: 'POST' });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.ok).toBe(false);
+      expect(Array.isArray(body.violations)).toBe(true);
+      expect(body.violations.length).toBeGreaterThan(0);
+      expect(body.violations.some((v: { rule: string }) => v.rule === 'missing-outline')).toBe(true);
+    });
+
+    it('exports to outDir and returns 200 with file paths when DRC-clean', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'flamingo-http-export-'));
+      const filePath = join(dir, 'board.flamingo');
+      const cleanDoc = new Doc(newBoard('exporttest', 2), filePath);
+      const cleanServer = await startServer(cleanDoc, 0, { uiDistDir: missingUiDistDir });
+      try {
+        const opRes = await fetch(`http://localhost:${cleanServer.port}/api/op`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            op: 'setOutline',
+            outline: [
+              { type: 'line', start: { x: 0, y: 0 }, end: { x: 10, y: 0 } },
+              { type: 'line', start: { x: 10, y: 0 }, end: { x: 10, y: 10 } },
+              { type: 'line', start: { x: 10, y: 10 }, end: { x: 0, y: 10 } },
+              { type: 'line', start: { x: 0, y: 10 }, end: { x: 0, y: 0 } },
+            ],
+          }),
+        });
+        expect(opRes.status).toBe(200);
+
+        const outDir = join(dir, 'exported-fab');
+        const res = await fetch(`http://localhost:${cleanServer.port}/api/export`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ outDir }),
+        });
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.ok).toBe(true);
+        expect(body.gerberZip).toBe(join(outDir, 'gerbers.zip'));
+        expect(body.bomCsv).toBe(join(outDir, 'bom.csv'));
+        expect(body.cplCsv).toBe(join(outDir, 'cpl.csv'));
+      } finally {
+        await cleanServer.close();
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('defaults outDir to <dirname(board file)>/fab when the body omits outDir', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'flamingo-http-export-default-'));
+      const filePath = join(dir, 'board.flamingo');
+      const defDoc = new Doc(newBoard('exportdefault', 2), filePath);
+      const defServer = await startServer(defDoc, 0, { uiDistDir: missingUiDistDir });
+      try {
+        await fetch(`http://localhost:${defServer.port}/api/op`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            op: 'setOutline',
+            outline: [
+              { type: 'line', start: { x: 0, y: 0 }, end: { x: 10, y: 0 } },
+              { type: 'line', start: { x: 10, y: 0 }, end: { x: 10, y: 10 } },
+              { type: 'line', start: { x: 10, y: 10 }, end: { x: 0, y: 10 } },
+              { type: 'line', start: { x: 0, y: 10 }, end: { x: 0, y: 0 } },
+            ],
+          }),
+        });
+
+        const res = await fetch(`http://localhost:${defServer.port}/api/export`, { method: 'POST' });
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.ok).toBe(true);
+        expect(body.bomCsv).toBe(join(dir, 'fab', 'bom.csv'));
+      } finally {
+        await defServer.close();
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
   it('returns 404 with {ok:false,error} for an unknown /api route', async () => {
     const res = await fetch(`${base}/api/nope`);
     expect(res.status).toBe(404);

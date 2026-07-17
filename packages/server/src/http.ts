@@ -7,11 +7,12 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { LayerId, Op, RenderOpts } from '@flamingo/engine';
-import { ratsnest, renderSVG } from '@flamingo/engine';
+import { fillAllZones, ratsnest, renderSVG, runDRC } from '@flamingo/engine';
+import { exportFab } from '@flamingo/fab';
 import { fetchPart, searchParts } from '@flamingo/parts';
 import { Doc } from './document.js';
 import type { McpContext, PartsApi } from './mcp.js';
-import { createMcpServer } from './mcp.js';
+import { createMcpServer, resolveFabOutDir } from './mcp.js';
 import type { RouteRunner } from './route.js';
 import { defaultRouteRunner } from './route.js';
 
@@ -121,16 +122,18 @@ async function serveStatic(pathname: string, res: ServerResponse, uiDistDir: str
 }
 
 async function handleApi(
-  doc: Doc,
+  ctx: McpContext,
   method: string,
   pathname: string,
   url: URL,
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<boolean> {
-  // Every route below except /api/op ignores the request body -- drain it so
-  // the connection can be reused instead of stalling on unread data.
-  if (!(method === 'POST' && pathname === '/api/op')) {
+  const doc = ctx.doc;
+  // Every route below except /api/op and /api/export ignores the request
+  // body -- drain it so the connection can be reused instead of stalling on
+  // unread data.
+  if (!(method === 'POST' && (pathname === '/api/op' || pathname === '/api/export'))) {
     req.resume();
   }
 
@@ -192,6 +195,44 @@ async function handleApi(
     const svg = renderSVG(doc.board, opts);
     res.writeHead(200, { 'content-type': 'image/svg+xml' });
     res.end(svg);
+    return true;
+  }
+
+  if (method === 'POST' && pathname === '/api/export') {
+    const raw = await readBody(req);
+    let body: unknown = {};
+    if (raw) {
+      try {
+        body = JSON.parse(raw);
+      } catch {
+        sendJSON(res, 400, { ok: false, error: 'invalid JSON body' });
+        return true;
+      }
+    }
+    const outDirRaw = typeof body === 'object' && body !== null ? (body as { outDir?: unknown }).outDir : undefined;
+    if (outDirRaw !== undefined && typeof outDirRaw !== 'string') {
+      sendJSON(res, 400, { ok: false, error: 'outDir must be a string' });
+      return true;
+    }
+
+    const filled = fillAllZones(doc.board);
+    const violations = runDRC(filled);
+    if (violations.length > 0) {
+      sendJSON(res, 400, {
+        ok: false,
+        error: 'DRC violations present; export refused',
+        violations,
+      });
+      return true;
+    }
+
+    const targetDir = resolveFabOutDir(ctx, outDirRaw);
+    try {
+      const result = await exportFab(doc.board, targetDir);
+      sendJSON(res, 200, { ok: true, outDir: targetDir, ...result });
+    } catch (err) {
+      sendJSON(res, 500, { ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
     return true;
   }
 
@@ -265,7 +306,7 @@ function makeRequestListener(
           return;
         }
         if (pathname.startsWith('/api/')) {
-          const handled = await handleApi(doc, method, pathname, url, req, res);
+          const handled = await handleApi(ctx, method, pathname, url, req, res);
           if (!handled) sendNotFound(res);
           return;
         }

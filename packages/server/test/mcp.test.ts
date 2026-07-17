@@ -86,6 +86,7 @@ const TOOL_NAMES = [
   'redo',
   'unroute',
   'autoroute',
+  'export_fab',
 ];
 
 function textOf(result: { content: Array<{ type: string; text?: string }> }): string {
@@ -120,11 +121,11 @@ describe('MCP endpoint', () => {
     await rm(projectDir, { recursive: true, force: true });
   });
 
-  it('tools/list returns all 26 core tools', async () => {
+  it('tools/list returns all 27 core tools', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([...TOOL_NAMES].sort());
-    expect(tools).toHaveLength(26);
+    expect(tools).toHaveLength(27);
   });
 
   it('place_component (mocked part) then get_board_state reflects it', async () => {
@@ -424,6 +425,78 @@ describe('MCP endpoint', () => {
     });
     expect(openResult.isError).toBeFalsy();
     expect(doc.board.components).toHaveLength(1);
+  });
+
+  describe('export_fab', () => {
+    it('refuses to export when DRC violations are present and waiveDrc is not set', async () => {
+      // Fresh board (from beforeEach) has no outline -> guaranteed missing-outline violation.
+      const result = await client.callTool({ name: 'export_fab', arguments: {} });
+      expect(result.isError).toBe(true);
+      const text = textOf(result as any);
+      expect(text).toContain('missing-outline');
+      expect(text).toContain('Export refused');
+      expect(text).toContain('waiveDrc');
+    });
+
+    it('exports anyway when waiveDrc:true is passed, reporting the waived violations', async () => {
+      await client.callTool({ name: 'new_board', arguments: { name: 'expwaive', copperLayers: 2 } });
+      const exportDir = join(projectDir, 'fab');
+
+      const result = await client.callTool({
+        name: 'export_fab',
+        arguments: { waiveDrc: true },
+      });
+      expect(result.isError).toBeFalsy();
+      const text = textOf(result as any);
+      expect(text).toContain('missing-outline');
+      expect(text).toContain('Waived');
+
+      for (const f of ['gerbers.zip', 'bom.csv', 'cpl.csv']) {
+        const st = await stat(join(exportDir, f));
+        expect(st.isFile()).toBe(true);
+      }
+    });
+
+    it('exports without error when the board is DRC-clean, to the given outDir', async () => {
+      await client.callTool({
+        name: 'set_board_outline',
+        arguments: {
+          shape: 'polygon',
+          points: [
+            { x: -10, y: -10 },
+            { x: 50, y: -10 },
+            { x: 50, y: 30 },
+            { x: -10, y: 30 },
+          ],
+        },
+      });
+      await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R1', x: 0, y: 0 } });
+      await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R2', x: 5, y: 0 } });
+      await client.callTool({ name: 'connect_pins', arguments: { net: 'N1', pins: ['R1.2', 'R2.1'] } });
+      await client.callTool({ name: 'autoroute', arguments: {} });
+
+      const customDir = join(projectDir, 'custom-fab-out');
+      const result = await client.callTool({
+        name: 'export_fab',
+        arguments: { outDir: customDir },
+      });
+      expect(result.isError).toBeFalsy();
+      const text = textOf(result as any);
+      expect(text).not.toContain('Waived');
+
+      for (const f of ['gerbers.zip', 'bom.csv', 'cpl.csv', 'board.render.svg']) {
+        const st = await stat(join(customDir, f));
+        expect(st.isFile()).toBe(true);
+      }
+    });
+
+    it('defaults outDir to <dirname(board file)>/fab when outDir is omitted', async () => {
+      await client.callTool({ name: 'new_board', arguments: { name: 'expdefault', copperLayers: 2 } });
+      const result = await client.callTool({ name: 'export_fab', arguments: { waiveDrc: true } });
+      expect(result.isError).toBeFalsy();
+      const st = await stat(join(projectDir, 'fab', 'bom.csv'));
+      expect(st.isFile()).toBe(true);
+    });
   });
 });
 
