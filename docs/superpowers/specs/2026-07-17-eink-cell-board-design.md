@@ -90,6 +90,62 @@ LEDs: 0603, charge (red, hardware CHRG) + GP (GPIO), ~1 k series.
 - 4× M2 mounting holes (drill 2.2, pad 4.0), corners inset ~4 mm.
 - Silk: version "v0.1", button labels, USB/VIN warning.
 
+## Microphone (added mid-build at user request)
+
+ICS-43434 I2S MEMS mic (C5656610), bottom-port → 0.5 mm NPTH acoustic hole
+through the board at the port, placed in the strip above the display glass
+(port at y≈111.8 > glass edge 110.7). Datasheet DS-000069: VDD 1.65–3.63 V,
+0.1 µF bypass close-in; LR→GND = left mono; 100 kΩ pulldown on SD.
+Wiring: WS→IO18 (H1.7), SCK→IO17 (H1.8), SD→IO16 (H1.9).
+
+## Build-time verified facts (agents, 2026-07-17)
+
+- TP4056 (TopPower REV 2.3): 1 TEMP→GND, 2 PROG (1.2 k → 1 A), 3 GND, 4 VCC,
+  5 BAT, 6 STDBY, 7 CHRG (open-drain, low while charging), 8 CE→VCC; EP→GND.
+- SI2301 & Si1308EDL: pad 1=G, 2=S, 3=D. SS34 & MBR0530WS: pad 1=K, 2=A.
+- LEDs: C2286 pad1=A; C72043 pad2=A (they differ).
+- Buttons: switch closes pads 1↔2; pads 3/4 are a shorted frame anchor (→GND).
+  Note: wiring-verify read the family datasheet as top-actuated; user specified
+  this part as side-press and the footprint silk shows an edge tab — kept as
+  side-press per user intent, worth a physical check on first articles.
+- DRV2605L DGS: 1 REG (1 µF req'd), 2 SCL, 3 SDA, 4 IN/TRIG→GND, 5 EN,
+  6 VDD/NC→VDD, 7 OUT+, 8 GND, 9 OUT−, 10 VDD (1 µF + 0.1 µF).
+- Display FPC: pin 1 on the LEFT in front view tail-down (GDEQ0426T82-FT01C
+  drawing, 2025-12-22). After the fold through the slot, pin 1 lands on the
+  board's +x side; J4 (FPC-05FB-24PH20, cable entry over its contact row) is
+  rotated 180° to face the slot ⇒ **display pin k ↔ J4 pad 25−k**.
+- Boost reference circuit (GDEQ0426T82 §8.2, vector-verified): D_pos SW→PREVGH;
+  fly cap SW↔F; D F→GND (cathode GND); D PREVGL→F (anode PREVGL); VGH ties to
+  PREVGH (no own cap); VSL has its own 4.7 µF; VGL ties to PREVGL + 4.7 µF.
+
+## FT variant: three tails (frontlight | EPD | touch)
+
+GDEQ0426**FT**82 = FT01C variant. Tails on the bottom edge (front view,
+left→right): frontlight 6P | EPD 24P | touch 6P, 0.5 mm pitch, flanking
+centerlines ±9.6 mm from panel center (±1 mm per drawing), all bottom-contact,
+pin 1 left in front view. Tails sit ~1.5 mm apart ⇒ one combined milled slot
+(25.5 mm × 2 mm at board (33.15, 3.5)) passes all three; bottom strip relaid
+(USB east at x=53, charger west, rail caps north).
+
+- **Touch (J5, FPC-05FB-6PH20 rot 180 at (23.7,20)):** FT6336U — pin k ↔ pad
+  7−k. Shares I2C with DRV2605L (0x38 vs 0x5A). INT→IO7 (H1.11). RST = RC
+  (internal 3 kΩ pullup to VDDA + 4.7 µF C19 → ~14 ms; no free GPIO left).
+  IOVCC/VDD on 3V3 (power-gated). I2C ≤400 kHz.
+- **Frontlight (J6 rot 180 at (42.7,16)):** two channels, each 5 white LEDs in
+  series, VF ≤ 15 V, IF ≤ 15 mA. 2× SGM3732 (C116578) boost: pins 1 SW, 2 GND,
+  3 FB (200 mV), 4 CTRL (PWM 2–60 kHz), 5 VOUT (OVP 38 V), 6 VIN. RSET = 15 Ω
+  (C203326) → 13.3 mA. L = 10 µH CY54 (C2929431); D = SS34 (open-LED OVP 38 V
+  ⇒ ≥40 V diode + **50 V** output cap CL21B105KBFNNNE C28323; MBR0530 (30 V)
+  is NOT safe here). Warm PWM→IO1 (H2.14), cool PWM→IO15 (H1.10).
+  Mapping pin k ↔ pad 7−k: W−=pad6, W+=pad5, C−=pad2, C+=pad1.
+
+## Microphone / mid-build additions
+
+Mic: ICS-43434 (below). Flamingo gained: silk lines (display outline + tails
+drawn on B.Silk), pad/net label layers, Lock & Route button, right-click pan,
+command-aware footprint region parsing (courtyard arc bug). GPIO budget is now
+FULL: only strap IO0 remains unassigned.
+
 ## Process
 
 1. Slot feature (TDD, subagent) → rebuild, restart server.
