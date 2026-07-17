@@ -402,6 +402,31 @@ describe('applyOp', () => {
     });
   });
 
+  describe('editKeepout', () => {
+    it('patches polygon and flags, rejects degenerate polygons and unknown ids', () => {
+      const board = baseBoard();
+      board.keepouts.push({
+        id: 'KO1',
+        layers: 'all',
+        polygon: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 5 }, { x: 0, y: 5 }],
+        keepout: { copper: true, via: true },
+      });
+      const edited = applyOp(board, {
+        op: 'editKeepout',
+        id: 'KO1',
+        keepout: { polygon: [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 8 }, { x: 0, y: 8 }], keepout: { copper: true, via: false } },
+      });
+      expect(edited.ok).toBe(true);
+      if (edited.ok) {
+        const k = edited.board.keepouts.find((x) => x.id === 'KO1')!;
+        expect(k.polygon[2]).toEqual({ x: 20, y: 8 });
+        expect(k.keepout.via).toBe(false);
+      }
+      expect(applyOp(board, { op: 'editKeepout', id: 'KO1', keepout: { polygon: [{ x: 0, y: 0 }] } }).ok).toBe(false);
+      expect(applyOp(board, { op: 'editKeepout', id: 'NOPE', keepout: {} }).ok).toBe(false);
+    });
+  });
+
   describe('moveComponents', () => {
     it('moves several components in one op and rejects unknown refdes atomically', () => {
       const board = baseBoard();

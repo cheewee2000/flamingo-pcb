@@ -9,7 +9,7 @@
  * highlight and the status bar update unconditionally on every state change.
  */
 
-import type { ComponentInst, LayerId, MountingHole, Op } from '@flamingo/engine';
+import type { ComponentInst, Keepout, LayerId, MountingHole, Op } from '@flamingo/engine';
 import { copperLayersOf } from '@flamingo/engine';
 import {
   DIMS_KEY,
@@ -259,60 +259,105 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
     return div;
   }
 
-  function editRow(k: string, input: HTMLElement): HTMLElement {
+  /**
+   * Click-to-edit row: renders as a plain value; clicking it swaps in an
+   * input built by `buildInput(finish)`. Enter/blur commits (the input's own
+   * 'change' listener), Escape cancels; `finish()` restores the static value
+   * (a successful commit rebuilds the whole panel from the board update
+   * anyway, so restoring the old text never shows stale data for long).
+   */
+  function inlineEditRow(k: string, display: string, buildInput: (finish: () => void) => HTMLElement): HTMLElement {
     const div = document.createElement('div');
-    div.className = 'props-row props-edit';
+    div.className = 'props-row props-editable';
     const kSpan = document.createElement('span');
     kSpan.textContent = k;
-    div.append(kSpan, input);
+    const vSpan = document.createElement('span');
+    vSpan.className = 'props-value';
+    vSpan.textContent = display;
+    vSpan.title = 'click to edit';
+    vSpan.addEventListener('click', () => {
+      const finish = (): void => {
+        if (input.parentElement === div) div.replaceChild(vSpan, input);
+      };
+      const input = buildInput(finish);
+      input.classList.add('props-inline-input');
+      div.replaceChild(input, vSpan);
+      input.focus();
+      if (input instanceof HTMLInputElement) input.select();
+    });
+    div.append(kSpan, vSpan);
     return div;
   }
 
-  function textRow(k: string, value: string, commit: (v: string) => void): HTMLElement {
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.value = value;
-    input.addEventListener('change', () => commit(input.value));
-    input.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Enter') input.blur();
+  function wireInputKeys(input: HTMLInputElement | HTMLSelectElement, finish: () => void, original: string): void {
+    input.addEventListener('keydown', (ev: Event) => {
+      const key = (ev as KeyboardEvent).key;
+      if (key === 'Enter') input.blur();
+      if (key === 'Escape') {
+        ev.stopPropagation(); // don't also fire the global Escape-to-select
+        input.value = original; // so the implicit blur can't fire a 'change' commit
+        finish();
+      }
     });
-    return editRow(k, input);
+    input.addEventListener('blur', () => finish());
+  }
+
+  function textRow(k: string, value: string, commit: (v: string) => void): HTMLElement {
+    return inlineEditRow(k, value || '—', (finish) => {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = value;
+      input.addEventListener('change', () => commit(input.value));
+      wireInputKeys(input, finish, value);
+      return input;
+    });
   }
 
   function numberRow(k: string, value: number, commit: (v: number) => void, step = 0.1): HTMLElement {
-    const input = document.createElement('input');
-    input.type = 'number';
-    input.step = String(step);
-    input.value = String(Math.round(value * 1000) / 1000);
-    input.addEventListener('change', () => {
-      const v = parseFloat(input.value);
-      if (Number.isFinite(v)) commit(v);
+    const shown = String(Math.round(value * 1000) / 1000);
+    return inlineEditRow(k, shown, (finish) => {
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.step = String(step);
+      input.value = shown;
+      input.addEventListener('change', () => {
+        const v = parseFloat(input.value);
+        if (Number.isFinite(v)) commit(v);
+      });
+      wireInputKeys(input, finish, shown);
+      return input;
     });
-    input.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Enter') input.blur();
-    });
-    return editRow(k, input);
   }
 
   function selectRow(k: string, value: string, options: string[], commit: (v: string) => void): HTMLElement {
-    const sel = document.createElement('select');
-    for (const o of options) {
-      const opt = document.createElement('option');
-      opt.value = o;
-      opt.textContent = o;
-      opt.selected = o === value;
-      sel.appendChild(opt);
-    }
-    sel.addEventListener('change', () => commit(sel.value));
-    return editRow(k, sel);
+    return inlineEditRow(k, value, (finish) => {
+      const sel = document.createElement('select');
+      for (const o of options) {
+        const opt = document.createElement('option');
+        opt.value = o;
+        opt.textContent = o;
+        opt.selected = o === value;
+        sel.appendChild(opt);
+      }
+      sel.addEventListener('change', () => sel.value !== value && commit(sel.value));
+      wireInputKeys(sel, finish, value);
+      return sel;
+    });
   }
 
+  /** Boolean rows toggle directly on click — a two-step swap-to-checkbox would be busywork. */
   function checkboxRow(k: string, checked: boolean, commit: (v: boolean) => void): HTMLElement {
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.checked = checked;
-    input.addEventListener('change', () => commit(input.checked));
-    return editRow(k, input);
+    const div = document.createElement('div');
+    div.className = 'props-row props-editable';
+    const kSpan = document.createElement('span');
+    kSpan.textContent = k;
+    const vSpan = document.createElement('span');
+    vSpan.className = 'props-value';
+    vSpan.textContent = checked ? 'yes' : 'no';
+    vSpan.title = 'click to toggle';
+    vSpan.addEventListener('click', () => commit(!checked));
+    div.append(kSpan, vSpan);
+    return div;
   }
 
   function propsRows(state: AppState): Array<[string, string]> | null {
@@ -353,20 +398,8 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
           ['layer', z.layer],
         ];
       }
-      case 'keepout': {
-        const k = board.keepouts.find((x) => x.id === sel.id);
-        if (!k) return null;
-        const xs = k.polygon.map((p) => p.x);
-        const ys = k.polygon.map((p) => p.y);
-        return [
-          ['type', 'keepout'],
-          ['layers', Array.isArray(k.layers) ? k.layers.join(' ') : String(k.layers)],
-          ['blocks', [k.keepout.copper ? 'copper' : '', k.keepout.via ? 'via' : ''].filter(Boolean).join(' + ')],
-          ['extent', `${(Math.max(...xs) - Math.min(...xs)).toFixed(1)} × ${(Math.max(...ys) - Math.min(...ys)).toFixed(1)} mm`],
-          ['x', `${Math.min(...xs).toFixed(2)} – ${Math.max(...xs).toFixed(2)}`],
-          ['y', `${Math.min(...ys).toFixed(2)} – ${Math.max(...ys).toFixed(2)}`],
-        ];
-      }
+      case 'keepout':
+        return null; // editable form built by buildKeepoutProps
       case 'silk': {
         const s = board.silk.find((x) => x.id === sel.id);
         if (!s) return null;
@@ -426,6 +459,13 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
         return;
       }
     }
+    if (sel && board && sel.kind === 'keepout') {
+      const k = board.keepouts.find((x) => x.id === sel.id);
+      if (k) {
+        buildKeepoutProps(k);
+        return;
+      }
+    }
     const rows = propsRows(state);
     if (!rows) {
       const hint = document.createElement('div');
@@ -464,6 +504,55 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
     center.textContent = 'center in view →';
     center.addEventListener('click', () => actions.focusComponent(refdes));
     els.propsPanel.appendChild(center);
+  }
+
+  function buildKeepoutProps(k: Keepout): void {
+    const id = k.id;
+    const edit = (patch: Partial<Omit<Keepout, 'id'>>): void => actions.sendOp({ op: 'editKeepout', id, keepout: patch });
+    const xs = k.polygon.map((p) => p.x);
+    const ys = k.polygon.map((p) => p.y);
+    els.propsPanel.append(
+      staticRow('type', 'keepout'),
+      staticRow('layers', Array.isArray(k.layers) ? k.layers.join(' ') : String(k.layers)),
+      checkboxRow('blocks copper', k.keepout.copper, (v) => edit({ keepout: { ...k.keepout, copper: v } })),
+      checkboxRow('blocks via', k.keepout.via, (v) => edit({ keepout: { ...k.keepout, via: v } })),
+    );
+    // Axis-aligned rectangles (the common case) get editable bounds; anything
+    // else shows its extent read-only.
+    const isRect = k.polygon.length === 4 && new Set(xs).size === 2 && new Set(ys).size === 2;
+    if (isRect) {
+      const x0 = Math.min(...xs);
+      const x1 = Math.max(...xs);
+      const y0 = Math.min(...ys);
+      const y1 = Math.max(...ys);
+      const rect = (nx0: number, nx1: number, ny0: number, ny1: number): void => {
+        if (nx1 <= nx0 || ny1 <= ny0) return;
+        edit({
+          polygon: [
+            { x: nx0, y: ny0 },
+            { x: nx1, y: ny0 },
+            { x: nx1, y: ny1 },
+            { x: nx0, y: ny1 },
+          ],
+        });
+      };
+      els.propsPanel.append(
+        numberRow('x min', x0, (v) => rect(v, x1, y0, y1)),
+        numberRow('x max', x1, (v) => rect(x0, v, y0, y1)),
+        numberRow('y min', y0, (v) => rect(x0, x1, v, y1)),
+        numberRow('y max', y1, (v) => rect(x0, x1, y0, v)),
+        staticRow('size', `${(x1 - x0).toFixed(2)} × ${(y1 - y0).toFixed(2)} mm`),
+      );
+    } else {
+      els.propsPanel.append(
+        staticRow('points', String(k.polygon.length)),
+        staticRow('extent', `${(Math.max(...xs) - Math.min(...xs)).toFixed(1)} × ${(Math.max(...ys) - Math.min(...ys)).toFixed(1)} mm`),
+      );
+      const hint = document.createElement('div');
+      hint.className = 'props-desc';
+      hint.textContent = 'polygon keepout — bounds editing applies to rectangles only';
+      els.propsPanel.appendChild(hint);
+    }
   }
 
   function buildHoleProps(h: MountingHole): void {
