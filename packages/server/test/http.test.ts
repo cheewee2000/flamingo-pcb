@@ -209,6 +209,65 @@ describe('HTTP API', () => {
     expect(body.error).toContain('no file path set');
   });
 
+  describe('GET /api/projects + POST /api/open', () => {
+    it('lists .flamingo files under projectDir and opens one, swapping the live doc', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'flamingo-http-open-'));
+      const aPath = join(dir, 'aaa.flamingo');
+      const bPath = join(dir, 'sub', 'bbb.flamingo');
+      await new Doc(newBoard('aaa', 2), aPath).save();
+      await mkdir(join(dir, 'sub'), { recursive: true });
+      await new Doc(newBoard('bbb', 4), bPath).save();
+      const projDoc = new Doc(newBoard('aaa', 2), aPath);
+      const server = await startServer(projDoc, 0, { uiDistDir: missingUiDistDir, projectDir: dir });
+      const url = `http://localhost:${server.port}`;
+      try {
+        const res = await fetch(`${url}/api/projects`);
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.ok).toBe(true);
+        expect(body.current).toBe(aPath);
+        const paths = body.projects.map((p: { path: string }) => p.path);
+        expect(paths).toContain(aPath);
+        expect(paths).toContain(bPath); // nested one level down is found too
+
+        const openRes = await fetch(`${url}/api/open`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ path: bPath }),
+        });
+        expect(openRes.status).toBe(200);
+        const openBody = await openRes.json();
+        expect(openBody.ok).toBe(true);
+        expect(openBody.name).toBe('bbb');
+        expect(projDoc.board.name).toBe('bbb');
+        expect(projDoc.board.copperLayers).toBe(4);
+        expect(projDoc.filePath).toBe(bPath); // future saves target the opened file
+      } finally {
+        await server.close();
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('rejects paths outside the search roots and non-.flamingo files', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'flamingo-http-open-bad-'));
+      const server = await startServer(new Doc(newBoard('x', 2)), 0, { uiDistDir: missingUiDistDir, projectDir: dir });
+      const url = `http://localhost:${server.port}`;
+      try {
+        for (const path of ['/etc/passwd', '/etc/hosts.flamingo', join(dir, 'x.json')]) {
+          const res = await fetch(`${url}/api/open`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path }),
+          });
+          expect(res.status).toBe(400);
+        }
+      } finally {
+        await server.close();
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe('POST /api/export', () => {
     it('returns 400 with a violations report when the board has DRC violations (no outline)', async () => {
       const res = await fetch(`${base}/api/export`, { method: 'POST' });

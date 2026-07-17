@@ -412,23 +412,19 @@
                 "y": 0.6500876000000244
               },
               {
-                "x": -7.619999992281024e-05,
+                "x": -0.00007619999992281024,
                 "y": 0.6500876000000244
               },
               {
-                "x": -7.619999992281024e-05,
+                "x": -0.00007619999992281024,
                 "y": 0.6500876000000244
               },
               {
-                "x": -7.619999992281024e-05,
+                "x": -0.00007619999992281024,
                 "y": 0.6499352000000624
               },
               {
-                "x": -7.619999992281024e-05,
-                "y": 0.6499352000000624
-              },
-              {
-                "x": -0.3000501999999332,
+                "x": -0.00007619999992281024,
                 "y": 0.6499352000000624
               },
               {
@@ -437,6 +433,10 @@
               },
               {
                 "x": -0.3000501999999332,
+                "y": 0.6499352000000624
+              },
+              {
+                "x": -0.3000501999999332,
                 "y": -0.650087599999909
               },
               {
@@ -444,19 +444,19 @@
                 "y": -0.650087599999909
               },
               {
-                "x": -5.079999998702789e-05,
+                "x": -0.00005079999998702789,
                 "y": -0.650087599999909
               },
               {
-                "x": -5.079999998702789e-05,
+                "x": -0.00005079999998702789,
                 "y": -0.650087599999909
               },
               {
-                "x": -5.079999998702789e-05,
+                "x": -0.00005079999998702789,
                 "y": -0.6499351999999472
               },
               {
-                "x": -5.079999998702789e-05,
+                "x": -0.00005079999998702789,
                 "y": -0.6499351999999472
               },
               {
@@ -652,19 +652,19 @@
                 "y": 0.6499352000000624
               },
               {
-                "x": 5.080000010249108e-05,
+                "x": 0.00005080000010249108,
                 "y": 0.6499352000000624
               },
               {
-                "x": 5.080000010249108e-05,
+                "x": 0.00005080000010249108,
                 "y": 0.6499352000000624
               },
               {
-                "x": 5.080000010249108e-05,
+                "x": 0.00005080000010249108,
                 "y": 0.6499098000000112
               },
               {
-                "x": 5.080000010249108e-05,
+                "x": 0.00005080000010249108,
                 "y": 0.6499098000000112
               },
               {
@@ -1162,7 +1162,7 @@
       "fields": {
         "value": "USB-C",
         "description": "",
-        "mfr": "\u97e9\u56fd\u97e9\u8363",
+        "mfr": "韩国韩荣",
         "package": "USB-C_SMD-TYPE-C-31-M-12_1",
         "basic": false,
         "role": "USB-C port. Charges the battery and powers the board from 5V. Power only, no data."
@@ -1726,7 +1726,7 @@
       "fields": {
         "value": "TP4056",
         "description": "",
-        "mfr": "TOPPOWER(\u5357\u4eac\u62d3\u5fae)",
+        "mfr": "TOPPOWER(南京拓微)",
         "package": "ESOP-8_L4.9-W3.9-P1.27-LS6.0-BL-EP",
         "basic": false,
         "role": "Li-ion battery charger. Charges the cell from USB at the current set by R1."
@@ -1907,8 +1907,8 @@
       "side": "top",
       "fields": {
         "value": "1.2k PROG",
-        "description": "1.2K\u03a9 (1201) \u00b11%",
-        "mfr": "UNI-ROYAL(\u539a\u58f0)",
+        "description": "1.2KΩ (1201) ±1%",
+        "mfr": "UNI-ROYAL(厚声)",
         "package": "R0603",
         "basic": true,
         "role": "Sets the battery charge current (1.2k on PROG, roughly 1A)."
@@ -2157,8 +2157,8 @@
       "side": "top",
       "fields": {
         "value": "22u VBUS",
-        "description": "22uF (226) \u00b120% 10V",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "description": "22uF (226) ±20% 10V",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0805",
         "basic": false,
         "role": "Input filter cap on the USB 5V rail at the charger."
@@ -2407,8 +2407,8 @@
       "side": "top",
       "fields": {
         "value": "22u BAT",
-        "description": "22uF (226) \u00b120% 10V",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "description": "22uF (226) ±20% 10V",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0805",
         "basic": false,
         "role": "Filter cap on the battery rail at the charger."
@@ -2664,7 +2664,7 @@
       "fields": {
         "value": "SI2301",
         "description": "",
-        "mfr": "BORN(\u4f2f\u6069\u534a\u5bfc\u4f53)",
+        "mfr": "BORN(伯恩半导体)",
         "package": "SOT-23-3_L2.9-W1.3-P1.90-LS2.4-BR",
         "basic": false,
         "role": "Power-path switch. Lets the battery feed VSYS and hands over to USB when it is plugged in."
@@ -2845,8 +2845,8 @@
       "side": "top",
       "fields": {
         "value": "100k",
-        "description": "100K\u03a9 (1003) \u00b11%",
-        "mfr": "UNI-ROYAL(\u539a\u58f0)",
+        "description": "100KΩ (1003) ±1%",
+        "mfr": "UNI-ROYAL(厚声)",
         "package": "R0603",
         "basic": true,
         "role": "Gate pulldown for power-path switch Q1 (battery feeds VSYS when USB is absent)."
@@ -3028,7 +3028,7 @@
       "fields": {
         "value": "5.1k CC1",
         "description": "",
-        "mfr": "UNI-ROYAL(\u539a\u58f0)",
+        "mfr": "UNI-ROYAL(厚声)",
         "package": "R0603",
         "basic": true,
         "role": "USB-C CC1 pulldown. Advertises this board as a 5V power sink."
@@ -3210,7 +3210,7 @@
       "fields": {
         "value": "5.1k CC2",
         "description": "",
-        "mfr": "UNI-ROYAL(\u539a\u58f0)",
+        "mfr": "UNI-ROYAL(厚声)",
         "package": "R0603",
         "basic": true,
         "role": "USB-C CC2 pulldown. Advertises this board as a 5V power sink."
@@ -3228,7 +3228,7 @@
             "shape": "rect",
             "at": {
               "x": -0.7500112000000063,
-              "y": -5.079999998724816e-05
+              "y": -0.00005079999998724816
             },
             "rotation": 0,
             "size": {
@@ -3242,7 +3242,7 @@
             "shape": "rect",
             "at": {
               "x": 0.7501127999999808,
-              "y": -5.079999998724816e-05
+              "y": -0.00005079999998724816
             },
             "rotation": 0,
             "size": {
@@ -3498,8 +3498,8 @@
         ]
       },
       "at": {
-        "x": 47.6,
-        "y": 19.9
+        "x": 8.100000000000001,
+        "y": 119.4
       },
       "rotation": 90,
       "side": "top",
@@ -3680,15 +3680,15 @@
         ]
       },
       "at": {
-        "x": 49.4,
-        "y": 19.9
+        "x": 9.899999999999999,
+        "y": 119.4
       },
       "rotation": 90,
       "side": "top",
       "fields": {
         "value": "1k",
-        "description": "1K\u03a9 (1001) \u00b11%",
-        "mfr": "UNI-ROYAL(\u539a\u58f0)",
+        "description": "1KΩ (1001) ±1%",
+        "mfr": "UNI-ROYAL(厚声)",
         "package": "R0603",
         "basic": true,
         "role": "Current limit for the charge LED."
@@ -4036,15 +4036,15 @@
         ]
       },
       "at": {
-        "x": 55.5,
-        "y": 19.9
+        "x": 43,
+        "y": 122.4
       },
       "rotation": 90,
       "side": "top",
       "fields": {
         "value": "GP green",
         "description": "0603",
-        "mfr": "EVERLIGHT(\u4ebf\u5149)",
+        "mfr": "EVERLIGHT(亿光)",
         "package": "LED0603-RD",
         "basic": false,
         "role": "General-purpose LED, driven by a Walter GPIO."
@@ -4218,15 +4218,15 @@
         ]
       },
       "at": {
-        "x": 57.5,
-        "y": 19.9
+        "x": 41.5,
+        "y": 122.4
       },
       "rotation": 90,
       "side": "top",
       "fields": {
         "value": "1k",
-        "description": "1K\u03a9 (1001) \u00b11%",
-        "mfr": "UNI-ROYAL(\u539a\u58f0)",
+        "description": "1KΩ (1001) ±1%",
+        "mfr": "UNI-ROYAL(厚声)",
         "package": "R0603",
         "basic": true,
         "role": "Current limit for the general-purpose LED."
@@ -5079,7 +5079,7 @@
       "fields": {
         "value": "WALTER 28-15",
         "description": "",
-        "mfr": "JXTCONN(\u805a\u5174\u6cf0)",
+        "mfr": "JXTCONN(聚兴泰)",
         "package": "HDR-TH_14P-P2.54-V-M",
         "basic": false,
         "role": "Walter modem header, pins 15-28: power, I2C, I2S mic, right buttons, haptics, cool frontlight control."
@@ -5689,7 +5689,7 @@
       "fields": {
         "value": "WALTER 1-14",
         "description": "",
-        "mfr": "JXTCONN(\u805a\u5174\u6cf0)",
+        "mfr": "JXTCONN(聚兴泰)",
         "package": "HDR-TH_14P-P2.54-V-M",
         "basic": false,
         "role": "Walter modem header, pins 1-14: e-paper SPI, left buttons, warm frontlight control, GP LED."
@@ -5938,8 +5938,8 @@
       "side": "top",
       "fields": {
         "value": "22u VSYS",
-        "description": "22uF (226) \u00b120% 10V",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "description": "22uF (226) ±20% 10V",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0805",
         "basic": false,
         "role": "Bulk cap on the system rail (VSYS)."
@@ -6188,8 +6188,8 @@
       "side": "top",
       "fields": {
         "value": "22u VSYS",
-        "description": "22uF (226) \u00b120% 10V",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "description": "22uF (226) ±20% 10V",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0805",
         "basic": false,
         "role": "Bulk cap on the system rail (VSYS)."
@@ -6541,7 +6541,7 @@
       "fields": {
         "value": "BTN-L1",
         "description": "",
-        "mfr": "G-Switch(\u54c1\u8d5e)",
+        "mfr": "G-Switch(品赞)",
         "package": "SW-SMD_L4.7-W3.5-P3.35-EH",
         "basic": false,
         "role": "Left button 1. Grounds BTN1 when pressed."
@@ -6893,7 +6893,7 @@
       "fields": {
         "value": "BTN-L2",
         "description": "",
-        "mfr": "G-Switch(\u54c1\u8d5e)",
+        "mfr": "G-Switch(品赞)",
         "package": "SW-SMD_L4.7-W3.5-P3.35-EH",
         "basic": false,
         "role": "Left button 2. Grounds BTN2 when pressed."
@@ -7245,7 +7245,7 @@
       "fields": {
         "value": "BTN-R1",
         "description": "",
-        "mfr": "G-Switch(\u54c1\u8d5e)",
+        "mfr": "G-Switch(品赞)",
         "package": "SW-SMD_L4.7-W3.5-P3.35-EH",
         "basic": false,
         "role": "Right button 1. Grounds BTN3 when pressed."
@@ -7597,7 +7597,7 @@
       "fields": {
         "value": "BTN-R2",
         "description": "",
-        "mfr": "G-Switch(\u54c1\u8d5e)",
+        "mfr": "G-Switch(品赞)",
         "package": "SW-SMD_L4.7-W3.5-P3.35-EH",
         "basic": false,
         "role": "Right button 2. Grounds BTN4 when pressed."
@@ -8229,7 +8229,7 @@
       "fields": {
         "value": "DRV2605L",
         "description": "",
-        "mfr": "TI(\u5fb7\u5dde\u4eea\u5668)",
+        "mfr": "TI(德州仪器)",
         "package": "VSSOP-10_L3.0-W3.0-P0.50-LS4.9-BL",
         "basic": false,
         "role": "Haptic driver. Drives the LRA vibration motor, controlled over I2C."
@@ -8410,8 +8410,8 @@
       "side": "top",
       "fields": {
         "value": "4.7k SDA",
-        "description": "4.7K\u03a9 (4701) \u00b11%",
-        "mfr": "UNI-ROYAL(\u539a\u58f0)",
+        "description": "4.7KΩ (4701) ±1%",
+        "mfr": "UNI-ROYAL(厚声)",
         "package": "R0603",
         "basic": true,
         "role": "I2C pull-up on SDA."
@@ -8592,8 +8592,8 @@
       "side": "top",
       "fields": {
         "value": "4.7k SCL",
-        "description": "4.7K\u03a9 (4701) \u00b11%",
-        "mfr": "UNI-ROYAL(\u539a\u58f0)",
+        "description": "4.7KΩ (4701) ±1%",
+        "mfr": "UNI-ROYAL(厚声)",
         "package": "R0603",
         "basic": true,
         "role": "I2C pull-up on SCL."
@@ -8843,7 +8843,7 @@
       "fields": {
         "value": "100n",
         "description": "",
-        "mfr": "YAGEO(\u56fd\u5de8)",
+        "mfr": "YAGEO(国巨)",
         "package": "C0603",
         "basic": false,
         "role": "Decoupling for the haptic driver."
@@ -9092,8 +9092,8 @@
       "side": "top",
       "fields": {
         "value": "1u",
-        "description": "1uF (105) \u00b110% 25V",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "description": "1uF (105) ±10% 25V",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0603",
         "basic": false,
         "role": "Bulk decoupling for the haptic driver."
@@ -9382,7 +9382,7 @@
           {
             "kind": "line",
             "start": {
-              "x": 2.5399999935871167e-05,
+              "x": 0.000025399999935871167,
               "y": 6.096
             },
             "end": {
@@ -9598,7 +9598,7 @@
       "fields": {
         "value": "PIEZO",
         "description": "",
-        "mfr": "muRata(\u6751\u7530)",
+        "mfr": "muRata(村田)",
         "package": "BUZ-SMD_2P-L12.0-W12.0-L_PKLCS1212E4001-R1",
         "basic": false,
         "role": "Piezo buzzer, driven from the Walter PIEZO pin through R9."
@@ -9779,8 +9779,8 @@
       "side": "top",
       "fields": {
         "value": "100R",
-        "description": "100\u03a9 (1000) \u00b11%",
-        "mfr": "UNI-ROYAL(\u539a\u58f0)",
+        "description": "100Ω (1000) ±1%",
+        "mfr": "UNI-ROYAL(厚声)",
         "package": "R0603",
         "basic": true,
         "role": "Series drive resistor for the piezo buzzer."
@@ -10751,7 +10751,7 @@
       "fields": {
         "value": "FPC24 EPD",
         "description": "",
-        "mfr": "XUNPU(\u8baf\u666e)",
+        "mfr": "XUNPU(讯普)",
         "package": "FPC-SMD_24P-P0.50_FPC-05FB-24PH20",
         "basic": false,
         "role": "24-pin FPC connector for the e-paper display."
@@ -10884,8 +10884,8 @@
       "side": "top",
       "fields": {
         "value": "47uH",
-        "description": "47\u03bcH",
-        "mfr": "Sunlord(\u987a\u7edc)",
+        "description": "47μH",
+        "mfr": "Sunlord(顺络)",
         "package": "IND-SMD_L4.0-W4.0_SLS3DXX",
         "basic": false,
         "role": "Boost inductor for the e-paper power supply."
@@ -11092,7 +11092,7 @@
       "fields": {
         "value": "Si1308EDL",
         "description": "",
-        "mfr": "VISHAY(\u5a01\u4e16)",
+        "mfr": "VISHAY(威世)",
         "package": "SOT-323_L2.0-W1.3-P1.30-LS2.1-BR",
         "basic": false,
         "role": "Boost switch FET for the e-paper supply, gated by the display driver (GDR)."
@@ -11474,7 +11474,7 @@
       "fields": {
         "value": "MBR0530",
         "description": "",
-        "mfr": "CBI(\u521b\u57fa)",
+        "mfr": "CBI(创基)",
         "package": "SOD-323_L1.7-W1.3-LS2.5-RD",
         "basic": false,
         "role": "Boost rectifier for the positive e-paper rail (PREVGH)."
@@ -11856,7 +11856,7 @@
       "fields": {
         "value": "MBR0530",
         "description": "",
-        "mfr": "CBI(\u521b\u57fa)",
+        "mfr": "CBI(创基)",
         "package": "SOD-323_L1.7-W1.3-LS2.5-RD",
         "basic": false,
         "role": "Charge-pump diode generating the negative e-paper rail (PREVGL)."
@@ -12238,7 +12238,7 @@
       "fields": {
         "value": "MBR0530",
         "description": "",
-        "mfr": "CBI(\u521b\u57fa)",
+        "mfr": "CBI(创基)",
         "package": "SOD-323_L1.7-W1.3-LS2.5-RD",
         "basic": false,
         "role": "Charge-pump diode clamping the flying node to ground."
@@ -12419,8 +12419,8 @@
       "side": "top",
       "fields": {
         "value": "1M",
-        "description": "1M\u03a9 (1004) \u00b11%",
-        "mfr": "UNI-ROYAL(\u539a\u58f0)",
+        "description": "1MΩ (1004) ±1%",
+        "mfr": "UNI-ROYAL(厚声)",
         "package": "R0603",
         "basic": true,
         "role": "Gate bleed resistor for boost FET Q2."
@@ -12602,7 +12602,7 @@
       "fields": {
         "value": "2.2R",
         "description": "",
-        "mfr": "LIZ(\u4e3d\u667a\u7535\u5b50)",
+        "mfr": "LIZ(丽智电子)",
         "package": "R0603",
         "basic": false,
         "role": "Current-sense resistor for the e-paper boost converter."
@@ -12852,7 +12852,7 @@
       "fields": {
         "value": "4u7 VSH2",
         "description": "",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0805",
         "basic": false,
         "role": "Reservoir cap on the VSH2 e-paper rail."
@@ -13102,7 +13102,7 @@
       "fields": {
         "value": "4u7 NEG",
         "description": "",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0805",
         "basic": false,
         "role": "Flying cap for the negative-rail charge pump."
@@ -13352,7 +13352,7 @@
       "fields": {
         "value": "4u7 PREVGH",
         "description": "",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0805",
         "basic": false,
         "role": "Reservoir cap on the PREVGH e-paper rail."
@@ -13602,7 +13602,7 @@
       "fields": {
         "value": "4u7 VSH1",
         "description": "",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0805",
         "basic": false,
         "role": "Reservoir cap on the VSH1 e-paper rail."
@@ -13852,7 +13852,7 @@
       "fields": {
         "value": "4u7 VSL",
         "description": "",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0805",
         "basic": false,
         "role": "Reservoir cap on the VSL e-paper rail."
@@ -14102,7 +14102,7 @@
       "fields": {
         "value": "4u7 PREVGL",
         "description": "",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0805",
         "basic": false,
         "role": "Reservoir cap on the PREVGL e-paper rail."
@@ -14352,7 +14352,7 @@
       "fields": {
         "value": "4u7 3V3",
         "description": "",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0805",
         "basic": false,
         "role": "Decoupling for the display logic supply."
@@ -14601,8 +14601,8 @@
       "side": "top",
       "fields": {
         "value": "1u VCI",
-        "description": "1uF (105) \u00b110% 25V",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "description": "1uF (105) ±10% 25V",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0603",
         "basic": false,
         "role": "VCI decoupling at the display connector."
@@ -14851,8 +14851,8 @@
       "side": "top",
       "fields": {
         "value": "1u VDD",
-        "description": "1uF (105) \u00b110% 25V",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "description": "1uF (105) ±10% 25V",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0603",
         "basic": false,
         "role": "Decoupling for the display internal VDD."
@@ -15101,8 +15101,8 @@
       "side": "top",
       "fields": {
         "value": "1u VCOM",
-        "description": "1uF (105) \u00b110% 25V",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "description": "1uF (105) ±10% 25V",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0603",
         "basic": false,
         "role": "VCOM storage cap for the display."
@@ -15326,7 +15326,7 @@
       "fields": {
         "value": "SS34",
         "description": "SS34",
-        "mfr": "MDD(\u8fb0\u8fbe\u534a\u5bfc\u4f53)",
+        "mfr": "MDD(辰达半导体)",
         "package": "SMA_L4.3-W2.6-LS5.2-RD",
         "basic": true,
         "role": "Feeds VSYS from USB. ORs with the battery path through Q1."
@@ -15575,8 +15575,8 @@
       "side": "top",
       "fields": {
         "value": "1u REG",
-        "description": "1uF (105) \u00b110% 25V",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "description": "1uF (105) ±10% 25V",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0603",
         "basic": false,
         "role": "Output cap for the haptic driver internal regulator."
@@ -15826,7 +15826,7 @@
       "fields": {
         "value": "100n MIC",
         "description": "",
-        "mfr": "YAGEO(\u56fd\u5de8)",
+        "mfr": "YAGEO(国巨)",
         "package": "C0603",
         "basic": false,
         "role": "Decoupling for the microphone."
@@ -16007,8 +16007,8 @@
       "side": "top",
       "fields": {
         "value": "100k SD",
-        "description": "100K\u03a9 (1003) \u00b11%",
-        "mfr": "UNI-ROYAL(\u539a\u58f0)",
+        "description": "100KΩ (1003) ±1%",
+        "mfr": "UNI-ROYAL(厚声)",
         "package": "R0603",
         "basic": true,
         "role": "Pulldown on the mic I2S data line."
@@ -16453,7 +16453,7 @@
       "fields": {
         "value": "FPC6 TOUCH",
         "description": "",
-        "mfr": "XUNPU(\u8baf\u666e)",
+        "mfr": "XUNPU(讯普)",
         "package": "FPC-SMD_6P-P0.50_FPC-05FB-6PH20",
         "basic": false,
         "role": "6-pin FPC connector for the touch panel (I2C + interrupt)."
@@ -16898,7 +16898,7 @@
       "fields": {
         "value": "FPC6 FRONTLIGHT",
         "description": "",
-        "mfr": "XUNPU(\u8baf\u666e)",
+        "mfr": "XUNPU(讯普)",
         "package": "FPC-SMD_6P-P0.50_FPC-05FB-6PH20",
         "basic": false,
         "role": "6-pin FPC connector for the frontlight LEDs (warm + cool channels)."
@@ -17148,7 +17148,7 @@
       "fields": {
         "value": "4u7 TP_RST",
         "description": "",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0805",
         "basic": false,
         "role": "Power-on reset delay cap for the touch controller."
@@ -17527,7 +17527,7 @@
       "fields": {
         "value": "SGM3732 W",
         "description": "",
-        "mfr": "SGMICRO(\u5723\u90a6\u5fae)",
+        "mfr": "SGMICRO(圣邦微)",
         "package": "TSOT-23-6_L2.9-W1.6-P0.95-LS2.8-BR",
         "basic": false,
         "role": "Boost LED driver for the warm frontlight channel, dimmed via FL_CTRL_W."
@@ -17777,7 +17777,7 @@
       "fields": {
         "value": "4u7 VIN",
         "description": "",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0805",
         "basic": false,
         "role": "Input cap for the warm frontlight boost."
@@ -18047,7 +18047,7 @@
       "fields": {
         "value": "10uH",
         "description": "",
-        "mfr": "SHOU HAN(\u9996\u97e9)",
+        "mfr": "SHOU HAN(首韩)",
         "package": "IND-SMD_L5.8-W5.2",
         "basic": false,
         "role": "Boost inductor for the warm frontlight driver."
@@ -18271,7 +18271,7 @@
       "fields": {
         "value": "SS34",
         "description": "SS34",
-        "mfr": "MDD(\u8fb0\u8fbe\u534a\u5bfc\u4f53)",
+        "mfr": "MDD(辰达半导体)",
         "package": "SMA_L4.3-W2.6-LS5.2-RD",
         "basic": true,
         "role": "Boost rectifier for the warm frontlight rail."
@@ -18520,8 +18520,8 @@
       "side": "top",
       "fields": {
         "value": "1u 50V",
-        "description": "1uF (105) \u00b110% 50V",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "description": "1uF (105) ±10% 50V",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0805",
         "basic": true,
         "role": "Output cap for the warm frontlight rail."
@@ -19082,7 +19082,7 @@
       "fields": {
         "value": "SGM3732 C",
         "description": "",
-        "mfr": "SGMICRO(\u5723\u90a6\u5fae)",
+        "mfr": "SGMICRO(圣邦微)",
         "package": "TSOT-23-6_L2.9-W1.6-P0.95-LS2.8-BR",
         "basic": false,
         "role": "Boost LED driver for the cool frontlight channel, dimmed via FL_CTRL_C."
@@ -19332,7 +19332,7 @@
       "fields": {
         "value": "4u7 VIN",
         "description": "",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0805",
         "basic": false,
         "role": "Input cap for the cool frontlight boost."
@@ -19602,7 +19602,7 @@
       "fields": {
         "value": "10uH",
         "description": "",
-        "mfr": "SHOU HAN(\u9996\u97e9)",
+        "mfr": "SHOU HAN(首韩)",
         "package": "IND-SMD_L5.8-W5.2",
         "basic": false,
         "role": "Boost inductor for the cool frontlight driver."
@@ -19826,7 +19826,7 @@
       "fields": {
         "value": "SS34",
         "description": "SS34",
-        "mfr": "MDD(\u8fb0\u8fbe\u534a\u5bfc\u4f53)",
+        "mfr": "MDD(辰达半导体)",
         "package": "SMA_L4.3-W2.6-LS5.2-RD",
         "basic": true,
         "role": "Boost rectifier for the cool frontlight rail."
@@ -20075,8 +20075,8 @@
       "side": "top",
       "fields": {
         "value": "1u 50V",
-        "description": "1uF (105) \u00b110% 50V",
-        "mfr": "SAMSUNG(\u4e09\u661f)",
+        "description": "1uF (105) ±10% 50V",
+        "mfr": "SAMSUNG(三星)",
         "package": "C0805",
         "basic": true,
         "role": "Output cap for the cool frontlight rail."
@@ -21553,7 +21553,7 @@
       "fields": {
         "value": "ICS-43434",
         "description": "",
-        "mfr": "TDK InvenSense(\u5e94\u7f8e\u76db)",
+        "mfr": "TDK InvenSense(应美盛)",
         "package": "MIC-SMD_6P-L3.5-W2.7-P0.90-BL",
         "basic": false,
         "role": "Digital I2S microphone."
@@ -21965,7 +21965,7 @@
       "fields": {
         "value": "9.1nH",
         "description": "",
-        "mfr": "muRata(\u6751\u7530)",
+        "mfr": "muRata(村田)",
         "package": "L0603",
         "basic": false,
         "role": "GNSS antenna matching, series 9.1nH."
@@ -22195,7 +22195,7 @@
       "fields": {
         "value": "3.9nH",
         "description": "",
-        "mfr": "muRata(\u6751\u7530)",
+        "mfr": "muRata(村田)",
         "package": "L0402",
         "basic": false,
         "role": "GNSS antenna matching, shunt 3.9nH."
@@ -22452,8 +22452,8 @@
       "side": "top",
       "fields": {
         "value": "u.FL GNSS",
-        "description": "3310472210\uff0cIPE-X IPX\uff0c",
-        "mfr": "HRS(\u5e7f\u6fd1)",
+        "description": "3310472210，IPE-X IPX，",
+        "mfr": "HRS(广濑)",
         "package": "ANT-SMD_UFL-R-SMT-1-10",
         "basic": false,
         "role": "u.FL jack. Cables the GNSS antenna feed to the Walter module."
@@ -23158,7 +23158,7 @@
         "x": 33.5,
         "y": 86.5
       },
-      "text": "PWR VIA VIN \u2014 NEVER USB-C + VIN TOGETHER",
+      "text": "PWR VIA VIN — NEVER USB-C + VIN TOGETHER",
       "height": 1,
       "rotation": 90
     },

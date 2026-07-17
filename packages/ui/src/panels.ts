@@ -44,11 +44,16 @@ export interface PanelEls {
   routeStatus: HTMLElement;
   bomList: HTMLElement;
   propsPanel: HTMLElement;
+  projectName: HTMLElement;
+  openBtn: HTMLButtonElement;
+  saveBtn: HTMLButtonElement;
 }
 
 /** Actions the panels trigger that need canvas/view access (owned by main.ts). */
 export interface PanelActions {
   focusComponent(refdes: string): void;
+  /** Called after /api/open succeeds: refetch the board and refit the view. */
+  boardOpened(): void;
 }
 
 // Swatch colors for the two label pseudo-layers, matching the overlay colors in
@@ -563,6 +568,125 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Project controls: Save (explicit flush; the server also autosaves after
+  // every op) and Open (modal listing every .flamingo the server can see).
+  // ---------------------------------------------------------------------------
+
+  function wireProjectControls(): void {
+    els.saveBtn.addEventListener('click', () => {
+      void (async () => {
+        try {
+          const res = await fetch('/api/save', { method: 'POST' });
+          const body = await res.json();
+          if (!res.ok || !body.ok) throw new Error(body.error ?? res.statusText);
+          els.saveBtn.textContent = 'Saved';
+        } catch {
+          els.saveBtn.textContent = 'Save failed';
+          els.saveBtn.classList.add('err');
+        }
+        setTimeout(() => {
+          els.saveBtn.textContent = 'Save';
+          els.saveBtn.classList.remove('err');
+        }, 1500);
+      })();
+    });
+    els.openBtn.addEventListener('click', showProjectsModal);
+  }
+
+  function showProjectsModal(): void {
+    const scrim = document.createElement('div');
+    scrim.className = 'modal-scrim';
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    const head = document.createElement('div');
+    head.className = 'modal-head';
+    const title = document.createElement('span');
+    title.className = 'modal-title';
+    title.textContent = 'Open project';
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'modal-close';
+    closeBtn.textContent = '×';
+    head.append(title, closeBtn);
+    const list = document.createElement('div');
+    list.className = 'project-list';
+    list.textContent = 'loading…';
+    modal.append(head, list);
+    scrim.appendChild(modal);
+    document.body.appendChild(scrim);
+
+    const close = (): void => {
+      document.removeEventListener('keydown', onKey);
+      scrim.remove();
+    };
+    const onKey = (ev: KeyboardEvent): void => {
+      if (ev.key === 'Escape') close();
+    };
+    document.addEventListener('keydown', onKey);
+    scrim.addEventListener('click', (ev) => {
+      if (ev.target === scrim) close();
+    });
+    closeBtn.addEventListener('click', close);
+
+    void (async () => {
+      interface ProjectEntry {
+        path: string;
+        name: string;
+        mtimeMs: number;
+      }
+      try {
+        const res = await fetch('/api/projects');
+        const body = (await res.json()) as { ok: boolean; error?: string; current: string | null; projects: ProjectEntry[] };
+        if (!res.ok || !body.ok) throw new Error(body.error ?? res.statusText);
+        list.replaceChildren();
+        if (body.projects.length === 0) {
+          list.textContent = 'no .flamingo files found';
+          return;
+        }
+        for (const p of body.projects) {
+          const isCurrent = p.path === body.current;
+          const row = document.createElement('button');
+          row.type = 'button';
+          row.className = 'project-row' + (isCurrent ? ' current' : '');
+          const nm = document.createElement('span');
+          nm.className = 'project-row-name';
+          nm.textContent = isCurrent ? `${p.name} · current` : p.name;
+          const pth = document.createElement('span');
+          pth.className = 'project-row-path';
+          pth.textContent = p.path;
+          pth.title = p.path;
+          row.append(nm, pth);
+          if (!isCurrent) {
+            row.addEventListener('click', () => {
+              void (async () => {
+                row.disabled = true;
+                try {
+                  const r = await fetch('/api/open', {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ path: p.path }),
+                  });
+                  const b = await r.json();
+                  if (!r.ok || !b.ok) throw new Error(b.error ?? r.statusText);
+                  close();
+                  actions.boardOpened();
+                } catch (err) {
+                  row.disabled = false;
+                  nm.textContent = `${p.name} — failed: ${err instanceof Error ? err.message : String(err)}`;
+                  nm.classList.add('err');
+                }
+              })();
+            });
+          }
+          list.appendChild(row);
+        }
+      } catch (err) {
+        list.textContent = `failed to list projects: ${err instanceof Error ? err.message : String(err)}`;
+      }
+    })();
+  }
+
   function wireToolbarControls(): void {
     els.snapToggle.checked = store.get().snapEnabled;
     els.snapToggle.addEventListener('change', () => {
@@ -667,6 +791,7 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
     const boardChanged = state.board !== lastBoard;
     if (boardChanged) {
       lastBoard = state.board;
+      els.projectName.textContent = state.board ? state.board.name : '';
       buildLayerList(state);
       buildNetList(state);
       buildBoardInfo(state);
@@ -690,6 +815,7 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
 
   buildToolButtons();
   wireToolbarControls();
+  wireProjectControls();
   wireRouteControls();
   store.subscribe(onStateChange);
   onStateChange(store.get());
