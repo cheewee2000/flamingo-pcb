@@ -42,7 +42,7 @@ import {
   padNetMap,
 } from '@flamingo/engine';
 import type { AppState, ViewTransform } from './state.js';
-import { LABEL_NETS_KEY, LABEL_PADS_KEY, RATSNEST_KEY, SILK_KEY } from './state.js';
+import { LABEL_NETS_KEY, LABEL_PADS_KEY, RATSNEST_KEY, SILK_KEY, ZONES_KEY } from './state.js';
 import { screenToWorld, worldToScreen } from './view.js';
 
 // ---------------------------------------------------------------------------
@@ -343,12 +343,14 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
     if (vis[layer] === false) continue;
     const color = COPPER_COLOR[layer]!;
 
-    for (const z of board.zones) {
-      if (z.layer !== layer) continue;
-      if (z.fill && z.fill.length > 0) {
-        for (const poly of z.fill) fillPolygon(ctx, view, poly, color, 0.55);
-      } else {
-        fillPolygon(ctx, view, z.polygon, color, 0.25);
+    if (vis[ZONES_KEY] !== false) {
+      for (const z of board.zones) {
+        if (z.layer !== layer) continue;
+        if (z.fill && z.fill.length > 0) {
+          for (const poly of z.fill) fillPolygon(ctx, view, poly, color, 0.55);
+        } else {
+          fillPolygon(ctx, view, z.polygon, color, 0.25);
+        }
       }
     }
 

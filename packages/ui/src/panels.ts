@@ -16,6 +16,7 @@ import {
   LABEL_PADS_KEY,
   RATSNEST_KEY,
   SILK_KEY,
+  ZONES_KEY,
   store,
   withLayerKeys,
   type AppState,
@@ -84,7 +85,7 @@ export function initPanels(els: PanelEls, toolManager: ToolManager): void {
     els.layerList.replaceChildren();
     const board = state.board;
     if (!board) return;
-    const keys = [...copperLayersOf(board), SILK_KEY, RATSNEST_KEY, LABEL_PADS_KEY, LABEL_NETS_KEY];
+    const keys = [...copperLayersOf(board), ZONES_KEY, SILK_KEY, RATSNEST_KEY, LABEL_PADS_KEY, LABEL_NETS_KEY];
     store.set({ layerVisibility: withLayerKeys(state.layerVisibility, keys) });
     const vis = store.get().layerVisibility;
 
@@ -99,7 +100,8 @@ export function initPanels(els: PanelEls, toolManager: ToolManager): void {
       const swatch = document.createElement('span');
       swatch.className = 'layer-swatch';
       swatch.style.background =
-        LABEL_SWATCH[key] ?? (key === SILK_KEY || key === RATSNEST_KEY ? '#888' : layerSwatchColor(key));
+        LABEL_SWATCH[key] ??
+        (key === SILK_KEY || key === RATSNEST_KEY || key === ZONES_KEY ? '#888' : layerSwatchColor(key));
       const text = document.createElement('span');
       text.textContent = key;
       label.append(cb, swatch, text);
