@@ -9593,7 +9593,7 @@
         "x": 46.5,
         "y": 76.5
       },
-      "rotation": 0,
+      "rotation": 90,
       "side": "top",
       "fields": {
         "value": "PIEZO",
@@ -13850,7 +13850,7 @@
       "rotation": 90,
       "side": "top",
       "fields": {
-        "value": "4u7 VGH",
+        "value": "4u7 VSL",
         "description": "",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
@@ -14100,7 +14100,7 @@
       "rotation": 90,
       "side": "top",
       "fields": {
-        "value": "4u7 VSL",
+        "value": "4u7 PREVGL",
         "description": "",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
