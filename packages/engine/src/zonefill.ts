@@ -4,7 +4,10 @@
  *
  * `fillZone` computes the filled copper of a zone as the zone polygon MINUS a
  * clearance buffer around every *other-net* copper item on the zone's layer,
- * intersected with the board outline inset by the zone clearance.
+ * MINUS a clearance buffer around every copper keepout (keepout.copper ===
+ * true) affecting the zone's layer, intersected with the board outline inset
+ * by the zone clearance. Via-only keepouts (keepout.copper === false) are
+ * not subtracted -- they constrain via placement, not copper pours.
  *
  * Winding-encoding of the result (documented, relied on by the SVG renderer and
  * the Gerber writer): `fill` is a flat list of rings. A ring with POSITIVE
@@ -172,6 +175,17 @@ export function fillZone(b: Board, zone: Zone): Point[][] {
       if (net === zone.net) continue;
       obstacles.push(bufferPolygon(padOutline(c, pad), zone.clearance));
     }
+  }
+
+  // Copper keepouts are a hard exclusion (no associated net to compare
+  // against) affecting this layer. Buffer by zone.clearance like every
+  // other obstacle above for conservative, consistent behavior -- a pour
+  // shouldn't hug a keepout boundary any closer than it hugs a track.
+  // Via-only keepouts (keepout.copper === false) don't clip copper pours.
+  for (const k of b.keepouts) {
+    if (!k.keepout.copper) continue;
+    if (k.layers !== 'all' && !k.layers.includes(zone.layer)) continue;
+    obstacles.push(bufferPolygon(k.polygon, zone.clearance));
   }
 
   const filled: MultiPolygon =

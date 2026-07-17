@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createParser, GERBER, DRILL, UNIMPLEMENTED } from '@tracespace/parser';
-import { newBoard, parseBoard } from '@flamingo/engine';
-import type { Board } from '@flamingo/engine';
+import { newBoard, parseBoard, fillZone, fillAllZones, pointInPolygon } from '@flamingo/engine';
+import type { Board, Point } from '@flamingo/engine';
 import { generateGerbers, buildDrills } from '../src/gerber.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -221,6 +221,92 @@ describe('buildDrills', () => {
     assertDrillParses(d.plated!);
     // slot centerline is 1.0mm long (slotLength 1.6 - diameter 0.6), centered at (5,5)
     expect(d.plated).toMatch(/X4\.500Y5\.000G85X5\.500Y5\.000/);
+  });
+});
+
+describe('generateGerbers - zone coverage', () => {
+  /** GND zone overlapping one SIG track and a copper keepout, all on F.Cu. */
+  function zoneKeepoutBoard(): Board {
+    const b = newBoard('zk', 2);
+    b.nets.push({ name: 'GND', class: 'default', pins: [] });
+    b.nets.push({ name: 'SIG', class: 'default', pins: [] });
+    b.tracks.push({
+      id: 't1',
+      layer: 'F.Cu',
+      width: 0.3,
+      net: 'SIG',
+      seg: { type: 'line', start: { x: 0, y: 3 }, end: { x: 10, y: 3 } },
+    });
+    b.keepouts.push({
+      id: 'k1',
+      layers: 'all',
+      polygon: [
+        { x: 7, y: 7 },
+        { x: 9, y: 7 },
+        { x: 9, y: 9 },
+        { x: 7, y: 9 },
+      ],
+      keepout: { copper: true, via: false },
+    });
+    b.zones.push({
+      id: 'z1',
+      layer: 'F.Cu',
+      net: 'GND',
+      polygon: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 10, y: 10 },
+        { x: 0, y: 10 },
+      ],
+      clearance: 0.3,
+      minWidth: 0.2,
+      thermal: { gap: 0.3, spokeWidth: 0.3 },
+    });
+    return b;
+  }
+
+  it('renders a filled GND zone (clipped by a track + a copper keepout) into a clean, correctly-ordered GTL', () => {
+    const b = zoneKeepoutBoard();
+    const { files } = generateGerbers(b);
+    const gtl = files.get('zk.GTL')!;
+
+    // (a) tracespace-parses clean
+    assertGerberParses(gtl);
+
+    // (b) at least one %LPD + G36/G37 region present (the zone fill)
+    expect(/%LPD\*%\nG36\*[\s\S]*?G37\*/.test(gtl)).toBe(true);
+
+    // (c) if the fill produced holes (%LPC), each one is preceded by an
+    // earlier %LPD -- fillZone always emits an outer (dark) ring before any
+    // hole (clear) ring it contains, so a %LPC can never appear as the first
+    // polarity command.
+    const lines = gtl.split('\n');
+    const lpdIdx: number[] = [];
+    const lpcIdx: number[] = [];
+    lines.forEach((line, i) => {
+      if (line === '%LPD*%') lpdIdx.push(i);
+      if (line === '%LPC*%') lpcIdx.push(i);
+    });
+    for (const idx of lpcIdx) {
+      expect(lpdIdx.some((d) => d < idx)).toBe(true);
+    }
+
+    // (d) the keepout is actually excluded from the fill: a point at the
+    // keepout's center is not solid copper under even-odd winding.
+    const filled = fillAllZones(b);
+    const zone = filled.zones.find((z) => z.id === 'z1')!;
+    expect(zone.fill).toBeDefined();
+    expect(zone.fill!.length).toBeGreaterThan(0);
+    const keepoutCenter: Point = { x: 8, y: 8 };
+    let count = 0;
+    for (const ring of zone.fill!) if (pointInPolygon(keepoutCenter, ring)) count++;
+    expect(count % 2 === 1).toBe(false);
+
+    // sanity: a point well clear of the track and keepout IS solid copper.
+    const clearFillZone = fillZone(b, b.zones[0]);
+    let clearCount = 0;
+    for (const ring of clearFillZone) if (pointInPolygon({ x: 1, y: 8 }, ring)) clearCount++;
+    expect(clearCount % 2 === 1).toBe(true);
   });
 });
 

@@ -116,6 +116,70 @@ describe('fillZone', () => {
     expect(dropped.length).toBe(0); // 1 < 4 -> whole island dropped
   });
 
+  it('excludes a clearance-buffered area around an all-layer copper keepout', () => {
+    let b = baseBoard(false);
+    b = apply(b, {
+      op: 'addKeepout',
+      keepout: {
+        layers: 'all',
+        polygon: [
+          { x: 4, y: 4 },
+          { x: 6, y: 4 },
+          { x: 6, y: 6 },
+          { x: 4, y: 6 },
+        ],
+        keepout: { copper: true, via: false },
+      },
+    });
+    const fill = fillZone(b, zoneOf(b));
+    expect(fill.length).toBeGreaterThan(0);
+    // inside the keepout -> excluded
+    expect(inFill(fill, { x: 5, y: 5 })).toBe(false);
+    // clear of the keepout (and its clearance buffer) -> filled
+    expect(inFill(fill, { x: 1, y: 1 })).toBe(true);
+    expect(inFill(fill, { x: 9, y: 9 })).toBe(true);
+  });
+
+  it('does not clip the pour for a via-only keepout (copper: false)', () => {
+    let b = baseBoard(false);
+    b = apply(b, {
+      op: 'addKeepout',
+      keepout: {
+        layers: 'all',
+        polygon: [
+          { x: 4, y: 4 },
+          { x: 6, y: 4 },
+          { x: 6, y: 6 },
+          { x: 4, y: 6 },
+        ],
+        keepout: { copper: false, via: true },
+      },
+    });
+    const fill = fillZone(b, zoneOf(b));
+    // the via-only keepout must not remove copper here
+    expect(inFill(fill, { x: 5, y: 5 })).toBe(true);
+  });
+
+  it('does not clip the pour for a copper keepout on a different layer', () => {
+    let b = baseBoard(false);
+    b = apply(b, {
+      op: 'addKeepout',
+      keepout: {
+        layers: ['B.Cu'],
+        polygon: [
+          { x: 4, y: 4 },
+          { x: 6, y: 4 },
+          { x: 6, y: 6 },
+          { x: 4, y: 6 },
+        ],
+        keepout: { copper: true, via: false },
+      },
+    });
+    const fill = fillZone(b, zoneOf(b, { layer: 'F.Cu' }));
+    // the B.Cu-only keepout must not remove F.Cu copper
+    expect(inFill(fill, { x: 5, y: 5 })).toBe(true);
+  });
+
   it('winding-encodes holes: outer CCW, hole CW (via an enclosed different-net via)', () => {
     let b = baseBoard(false);
     b = apply(b, {
