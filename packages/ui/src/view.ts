@@ -91,14 +91,16 @@ export function fitToBoard(
 
 export interface ViewControls {
   detach(): void;
-  /** True while a middle-button or space+left-drag pan gesture is in progress --
-   * main.ts uses this to suppress editing-tool pointerdown routing so panning
-   * never also starts a tool gesture (component drag, new polygon point, ...). */
+  /** True while a middle-button, right-button, or space+left-drag pan gesture is
+   * in progress -- main.ts uses this to suppress editing-tool pointerdown routing
+   * so panning never also starts a tool gesture (component drag, new polygon
+   * point, ...). */
   isPanning(): boolean;
 }
 
 /**
- * Wire wheel-zoom-at-cursor and middle-button/space+drag pan onto `canvas`.
+ * Wire wheel-zoom-at-cursor and middle-button/right-button/space+drag pan onto
+ * `canvas` (the canvas context menu is suppressed so right-drag pans cleanly).
  * Reads the current view via `getView`, writes updates via `setView`
  * (typically `store.set({view})`); does not own state itself.
  */
@@ -132,8 +134,9 @@ export function attachViewControls(
 
   function onMouseDown(ev: MouseEvent): void {
     const isMiddle = ev.button === 1;
+    const isRight = ev.button === 2;
     const isSpaceDrag = ev.button === 0 && spaceHeld;
-    if (!isMiddle && !isSpaceDrag) return;
+    if (!isMiddle && !isRight && !isSpaceDrag) return;
     ev.preventDefault();
     startPan(ev.clientX, ev.clientY);
   }
@@ -160,12 +163,19 @@ export function attachViewControls(
     if (ev.code === 'Space') spaceHeld = false;
   }
 
+  // Right-button drag pans too, so suppress the canvas context menu -- otherwise
+  // the menu pops on right-button release and interrupts the gesture.
+  function onContextMenu(ev: MouseEvent): void {
+    ev.preventDefault();
+  }
+
   canvas.addEventListener('wheel', onWheel, { passive: false });
   canvas.addEventListener('mousedown', onMouseDown);
   window.addEventListener('mousemove', onMouseMove);
   window.addEventListener('mouseup', endPan);
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
+  canvas.addEventListener('contextmenu', onContextMenu);
   // Prevent the browser's default middle-click autoscroll cursor from showing.
   canvas.addEventListener('auxclick', (ev) => ev.preventDefault());
 
@@ -177,6 +187,7 @@ export function attachViewControls(
       window.removeEventListener('mouseup', endPan);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      canvas.removeEventListener('contextmenu', onContextMenu);
     },
     isPanning: () => panning,
   };

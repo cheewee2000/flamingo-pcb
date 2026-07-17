@@ -158,6 +158,18 @@ export interface SilkText {
   rotation: number;
 }
 
+/**
+ * A straight silkscreen line segment, used for mechanical reference outlines
+ * (e.g. display-glass and FPC-tail footprints drawn on the legend layer).
+ */
+export interface SilkLine {
+  id: string;
+  layer: 'F.Silk' | 'B.Silk';
+  start: Point;
+  end: Point;
+  width: number;
+}
+
 export interface Board {
   formatVersion: 1;
   name: string;
@@ -172,5 +184,6 @@ export interface Board {
   vias: Via[];
   zones: Zone[];
   silk: SilkText[];
+  silkLines: SilkLine[];
   rules: 'jlcpcb-2l' | 'jlcpcb-4l' | 'jlcpcb-6l';
 }

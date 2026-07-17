@@ -36,6 +36,7 @@ export function newBoard(name: string, copperLayers: 2 | 4 | 6): Board {
     vias: [],
     zones: [],
     silk: [],
+    silkLines: [],
     rules: rulesMap[copperLayers],
   };
 }
@@ -107,6 +108,12 @@ export function parseBoard(json: string): Board {
     if (!Array.isArray(obj[field])) {
       throw new Error(`Field "${field}" must be an array`);
     }
+  }
+
+  // `silkLines` was added after the initial format; older saved boards omit it.
+  // Default it to [] rather than requiring it, so those boards still load.
+  if (!Array.isArray(obj.silkLines)) {
+    obj.silkLines = [];
   }
 
   return obj as unknown as Board;

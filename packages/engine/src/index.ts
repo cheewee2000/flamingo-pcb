@@ -15,6 +15,7 @@ export type {
   Keepout,
   MountingHole,
   SilkText,
+  SilkLine,
   Board,
 } from './types.js';
 
@@ -59,8 +60,18 @@ export type { RatLine } from './connectivity.js';
 export { padAnchor, connectedGroups, ratsnest, isFullyRouted } from './connectivity.js';
 
 // Re-export renderer
-export type { RenderOpts } from './render.js';
-export { renderSVG, LAYER_COLORS } from './render.js';
+export type { RenderOpts, SplitLayers } from './render.js';
+export {
+  renderSVG,
+  LAYER_COLORS,
+  LABEL_PADS_LAYER,
+  LABEL_NETS_LAYER,
+  splitLabelLayers,
+  labelFontMm,
+  padNetMap,
+  LABEL_FONT_MIN_MM,
+  LABEL_FONT_MAX_MM,
+} from './render.js';
 
 // Re-export zone fill
 export { fillZone, fillAllZones, bufferPolygon } from './zonefill.js';

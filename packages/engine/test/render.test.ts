@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderSVG } from '../src/index.js';
+import { renderSVG, splitLabelLayers, labelFontMm } from '../src/index.js';
 import { newBoard } from '../src/index.js';
 import type { Board, Footprint, ComponentInst, Pad } from '../src/index.js';
 
@@ -202,6 +202,80 @@ describe('renderSVG - DRC markers', () => {
   });
 });
 
+describe('splitLabelLayers', () => {
+  it('undefined selection => all physical layers + both label overlays', () => {
+    expect(splitLabelLayers(undefined)).toEqual({
+      layers: undefined,
+      showPadLabels: true,
+      showNetLabels: true,
+    });
+  });
+
+  it('a real-layer-only list turns both label overlays off', () => {
+    expect(splitLabelLayers(['F.Cu', 'B.Cu'])).toEqual({
+      layers: ['F.Cu', 'B.Cu'],
+      showPadLabels: false,
+      showNetLabels: false,
+    });
+  });
+
+  it('extracts the label pseudo-layers out of a mixed list', () => {
+    expect(splitLabelLayers(['F.Cu', 'labels:pads', 'labels:nets'])).toEqual({
+      layers: ['F.Cu'],
+      showPadLabels: true,
+      showNetLabels: true,
+    });
+  });
+
+  it('a label-only list yields no physical layers', () => {
+    expect(splitLabelLayers(['labels:nets'])).toEqual({
+      layers: [],
+      showPadLabels: false,
+      showNetLabels: true,
+    });
+  });
+});
+
+describe('labelFontMm', () => {
+  it('scales with the pad, clamped to the min for tiny pads and the max for large pads', () => {
+    const tiny: Pad = { number: '1', shape: 'rect', at: { x: 0, y: 0 }, rotation: 0, size: { w: 0.2, h: 0.2 }, layer: 'top' };
+    const big: Pad = { number: '1', shape: 'rect', at: { x: 0, y: 0 }, rotation: 0, size: { w: 10, h: 10 }, layer: 'top' };
+    const mid: Pad = { number: '1', shape: 'rect', at: { x: 0, y: 0 }, rotation: 0, size: { w: 1, h: 1 }, layer: 'top' };
+    expect(labelFontMm(tiny)).toBeCloseTo(0.35); // clamped up to the min
+    expect(labelFontMm(big)).toBeCloseTo(1.2); // clamped down to the max
+    expect(labelFontMm(mid)).toBeCloseTo(0.6); // 1 * 0.6
+  });
+});
+
+describe('renderSVG - label overlays', () => {
+  it('off by default: no pad-number / net-name overlay colors', () => {
+    const svg = renderSVG(tinyBoard());
+    expect(svg).not.toContain('#22D3EE');
+    expect(svg).not.toContain('#FACC15');
+  });
+
+  it('showPadLabels renders each pad number in the pad-label color', () => {
+    const svg = renderSVG(tinyBoard(), { showPadLabels: true });
+    expect(svg).toContain('#22D3EE');
+    expect(svg).toContain('>1<');
+    expect(svg).toContain('>2<');
+  });
+
+  it('showNetLabels renders the net name each pad belongs to in the net-label color', () => {
+    const svg = renderSVG(tinyBoard(), { showNetLabels: true });
+    expect(svg).toContain('#FACC15');
+    expect(svg).toContain('>NET1<');
+  });
+
+  it('showNetLabels emits no net text for a pad on no net', () => {
+    const b = tinyBoard();
+    b.nets = []; // R1.1/R1.2 now belong to nothing
+    const svg = renderSVG(b, { showNetLabels: true });
+    expect(svg).not.toContain('>NET1<');
+    expect(svg).not.toContain('#FACC15');
+  });
+});
+
 describe('renderSVG - arc rendering (tracks)', () => {
   /**
    * Arc centered at (5,5), radius 3: start=(8,5) is at angle 0 rad;
@@ -305,6 +379,22 @@ describe('renderSVG - slotted mounting hole', () => {
     b.holes = [{ id: 'H1', at: { x: 5, y: 5 }, drill: 1, padDiameter: 1, plated: false, slotLength: 6 }];
     const svg = renderSVG(b);
     expect(svg).toMatch(/<polygon points="[^"]*" fill="none" stroke="#D0D2CD" stroke-width="0.1"\/>/);
+  });
+});
+
+describe('renderSVG - board-level silk lines', () => {
+  it('draws an F.Silk line as a stroked <line> in the silk layer color', () => {
+    const b = newBoard('silk', 2);
+    b.silkLines = [{ id: 'SL1', layer: 'F.Silk', start: { x: 0, y: 0 }, end: { x: 10, y: 0 }, width: 0.15 }];
+    const svg = renderSVG(b);
+    expect(svg).toMatch(/<line [^>]*stroke="#F2EDA1" stroke-width="0.1500" stroke-linecap="round"\/>/);
+  });
+
+  it('honors layer filtering (excluding F.Silk removes the line)', () => {
+    const b = newBoard('silk', 2);
+    b.silkLines = [{ id: 'SL1', layer: 'F.Silk', start: { x: 0, y: 0 }, end: { x: 10, y: 0 }, width: 0.15 }];
+    const filtered = renderSVG(b, { layers: ['B.Cu', 'Edge'] });
+    expect(filtered).not.toContain('#F2EDA1');
   });
 });
 

@@ -308,6 +308,35 @@ describe('runDRC', () => {
     expect(violations[0].items).toEqual(expect.arrayContaining(['R1', 'R1.1']));
   });
 
+  it('silk-over-pad: a board-level silk LINE crossing an exposed pad violates', () => {
+    const b = base();
+    b.components.push(makeComponent('R1', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })]));
+    // F.Silk line running straight across the top-side pad at the origin.
+    b.silkLines.push({ id: 'SL1', layer: 'F.Silk', start: { x: -2, y: 0 }, end: { x: 2, y: 0 }, width: 0.15 });
+
+    const violations = violationsOf(b, 'silk-over-pad');
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations[0].items).toEqual(expect.arrayContaining(['SL1', 'R1.1']));
+  });
+
+  it('silk-over-pad: a silk line clear of every pad does NOT violate', () => {
+    const b = base();
+    b.components.push(makeComponent('R1', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })]));
+    // Line well away from the pad at the origin.
+    b.silkLines.push({ id: 'SL1', layer: 'F.Silk', start: { x: 5, y: 5 }, end: { x: 8, y: 5 }, width: 0.15 });
+
+    expect(violationsOf(b, 'silk-over-pad')).toHaveLength(0);
+  });
+
+  it('silk-over-pad: a silk line on the opposite side of the pad does NOT violate', () => {
+    const b = base();
+    b.components.push(makeComponent('R1', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })]));
+    // Same crossing geometry but on B.Silk -> different side than the top pad.
+    b.silkLines.push({ id: 'SL1', layer: 'B.Silk', start: { x: -2, y: 0 }, end: { x: 2, y: 0 }, width: 0.15 });
+
+    expect(violationsOf(b, 'silk-over-pad')).toHaveLength(0);
+  });
+
   it('unconnected-net: net with two unbridged pads violates', () => {
     const b = base();
     b.components.push(makeComponent('R1', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })]));

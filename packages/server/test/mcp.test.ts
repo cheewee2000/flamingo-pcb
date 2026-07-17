@@ -79,6 +79,7 @@ const TOOL_NAMES = [
   'add_zone',
   'add_mounting_hole',
   'add_silk_text',
+  'add_silk_line',
   'remove_item',
   'add_track',
   'add_via',
@@ -124,11 +125,11 @@ describe('MCP endpoint', () => {
     await rm(projectDir, { recursive: true, force: true });
   });
 
-  it('tools/list returns all 30 core tools', async () => {
+  it('tools/list returns all 31 core tools', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([...TOOL_NAMES].sort());
-    expect(tools).toHaveLength(30);
+    expect(tools).toHaveLength(31);
   });
 
   it('place_component (mocked part) then get_board_state reflects it', async () => {
@@ -315,6 +316,51 @@ describe('MCP endpoint', () => {
     expect(doc.board.holes).toHaveLength(1); // unchanged
   });
 
+  it('add_silk_line (single segment) creates one removable silk line', async () => {
+    const result = await client.callTool({
+      name: 'add_silk_line',
+      arguments: { layer: 'F.Silk', start: { x: 0, y: 0 }, end: { x: 10, y: 0 } },
+    });
+    expect(result.isError).toBeFalsy();
+    expect(doc.board.silkLines).toHaveLength(1);
+    expect(doc.board.silkLines[0]!.width).toBe(0.15); // default width
+    const id = doc.board.silkLines[0]!.id;
+    const removed = await client.callTool({ name: 'remove_item', arguments: { id } });
+    expect(removed.isError).toBeFalsy();
+    expect(doc.board.silkLines).toHaveLength(0);
+  });
+
+  it('add_silk_line (polyline) creates N-1 connected segments in one call', async () => {
+    const result = await client.callTool({
+      name: 'add_silk_line',
+      arguments: {
+        layer: 'F.Silk',
+        polyline: [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+          { x: 10, y: 5 },
+          { x: 0, y: 5 },
+          { x: 0, y: 0 },
+        ],
+        width: 0.2,
+      },
+    });
+    expect(result.isError).toBeFalsy();
+    // 5 points -> 4 segments (a closed rectangle outline).
+    expect(doc.board.silkLines).toHaveLength(4);
+    expect(doc.board.silkLines.every((l) => l.width === 0.2)).toBe(true);
+    expect(textOf(result as any)).toContain('4 silk lines');
+  });
+
+  it('add_silk_line rejects a polyline with fewer than 2 points', async () => {
+    const result = await client.callTool({
+      name: 'add_silk_line',
+      arguments: { layer: 'F.Silk', polyline: [{ x: 0, y: 0 }] },
+    });
+    expect(result.isError).toBe(true);
+    expect(doc.board.silkLines).toHaveLength(0);
+  });
+
   it('add_track adds a straight track on a net, defaulting width from the net class', async () => {
     await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R1', x: 0, y: 0 } });
     await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R2', x: 5, y: 0 } });
@@ -483,6 +529,24 @@ describe('MCP endpoint', () => {
     const text = content.find((c) => c.type === 'text')!;
     expect(text.text).toContain('0 DRC marker');
     expect(text.text).toContain('0 ratline');
+  });
+
+  it('screenshot accepts the label pseudo-layers in the layers list', async () => {
+    await client.callTool({ name: 'set_board_outline', arguments: { shape: 'rect', width: 20, height: 20 } });
+    await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R1', x: 5, y: 10 } });
+    await client.callTool({ name: 'connect_pins', arguments: { net: 'N1', pins: ['R1.1', 'R1.2'] } });
+
+    const result = await client.callTool({
+      name: 'screenshot',
+      arguments: { layers: ['F.Cu', 'B.Cu', 'labels:pads', 'labels:nets'], showRatsnest: false, showDrc: false },
+    });
+    expect(result.isError).toBeFalsy();
+    const content = (result as any).content as Array<{ type: string; data?: string; text?: string }>;
+    const image = content.find((c) => c.type === 'image');
+    expect(image).toBeTruthy();
+    const text = content.find((c) => c.type === 'text')!;
+    expect(text.text).toContain('labels:pads');
+    expect(text.text).toContain('labels:nets');
   });
 
   it('new_board replaces the current board', async () => {

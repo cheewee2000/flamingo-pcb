@@ -384,6 +384,13 @@ function buildSilk(b: Board, side: 'F' | 'B'): string {
     strokes(strokeText(s.text, s.at, s.height, s.rotation, false), Math.max(0.12, s.height * 0.12));
   }
 
+  // Board-level silk lines (mechanical reference outlines) stroked at their width.
+  for (const line of b.silkLines) {
+    if (line.layer !== silkLayer) continue;
+    g.select(g.aperture(`C,${ap(line.width)}`));
+    g.drawSeg({ type: 'line', start: line.start, end: line.end });
+  }
+
   const fn = side === 'F' ? 'Legend,Top' : 'Legend,Bot';
   return g.assemble(fn, 'Positive');
 }

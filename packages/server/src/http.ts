@@ -6,10 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import type { LayerId, Op, RenderOpts } from '@flamingo/engine';
-import { fillAllZones, ratsnest, renderSVG, runDRC } from '@flamingo/engine';
+import type { Op, RenderOpts } from '@flamingo/engine';
+import { fillAllZones, ratsnest, renderSVG, runDRC, splitLabelLayers } from '@flamingo/engine';
 import { exportFab } from '@flamingo/fab';
 import { fetchPart, searchParts } from '@flamingo/parts';
+import { runAutoroute } from './autoroute.js';
 import { Doc } from './document.js';
 import type { McpContext, PartsApi } from './mcp.js';
 import { createMcpServer, resolveFabOutDir } from './mcp.js';
@@ -132,10 +133,12 @@ async function handleApi(
   res: ServerResponse,
 ): Promise<boolean> {
   const doc = ctx.doc;
-  // Every route below except /api/op and /api/export ignores the request
-  // body -- drain it so the connection can be reused instead of stalling on
-  // unread data.
-  if (!(method === 'POST' && (pathname === '/api/op' || pathname === '/api/export'))) {
+  // Every route below except the body-reading POSTs ignores the request body --
+  // drain it so the connection can be reused instead of stalling on unread data.
+  const readsBody =
+    method === 'POST' &&
+    (pathname === '/api/op' || pathname === '/api/export' || pathname === '/api/route');
+  if (!readsBody) {
     req.resume();
   }
 
@@ -185,13 +188,14 @@ async function handleApi(
 
   if (method === 'GET' && pathname === '/api/render.svg') {
     const opts: RenderOpts = {};
-    const layers = url.searchParams.get('layers');
-    if (layers) {
-      opts.layers = layers
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean) as LayerId[];
-    }
+    const layersParam = url.searchParams.get('layers');
+    const rawLayers = layersParam
+      ? layersParam.split(',').map((s) => s.trim()).filter(Boolean)
+      : undefined;
+    const split = splitLabelLayers(rawLayers);
+    opts.layers = split.layers;
+    opts.showPadLabels = split.showPadLabels;
+    opts.showNetLabels = split.showNetLabels;
     const highlightNet = url.searchParams.get('highlightNet');
     if (highlightNet) opts.highlightNet = highlightNet;
     const svg = renderSVG(doc.board, opts);
@@ -207,7 +211,7 @@ async function handleApi(
       opts.layers = layers
         .split(',')
         .map((s) => s.trim())
-        .filter(Boolean) as LayerId[];
+        .filter(Boolean);
     }
     const region = url.searchParams.get('region');
     if (region) {
@@ -270,6 +274,43 @@ async function handleApi(
     try {
       const result = await exportFab(doc.board, targetDir);
       sendJSON(res, 200, { ok: true, outDir: targetDir, ...result });
+    } catch (err) {
+      sendJSON(res, 500, { ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  if (method === 'POST' && pathname === '/api/route') {
+    const raw = await readBody(req);
+    let body: unknown = {};
+    if (raw) {
+      try {
+        body = JSON.parse(raw);
+      } catch {
+        sendJSON(res, 400, { ok: false, error: 'invalid JSON body' });
+        return true;
+      }
+    }
+    const netsRaw = typeof body === 'object' && body !== null ? (body as { nets?: unknown }).nets : undefined;
+    const passesRaw = typeof body === 'object' && body !== null ? (body as { passes?: unknown }).passes : undefined;
+    if (netsRaw !== undefined && !(Array.isArray(netsRaw) && netsRaw.every((n) => typeof n === 'string'))) {
+      sendJSON(res, 400, { ok: false, error: 'nets must be an array of strings' });
+      return true;
+    }
+    if (passesRaw !== undefined && (typeof passesRaw !== 'number' || !Number.isFinite(passesRaw))) {
+      sendJSON(res, 400, { ok: false, error: 'passes must be a number' });
+      return true;
+    }
+    try {
+      const result = await runAutoroute(doc, ctx.route, {
+        nets: netsRaw as string[] | undefined,
+        passes: passesRaw as number | undefined,
+      });
+      sendJSON(res, 200, {
+        ok: true,
+        ...result,
+        fullyRouted: result.remaining.length === 0,
+      });
     } catch (err) {
       sendJSON(res, 500, { ok: false, error: err instanceof Error ? err.message : String(err) });
     }

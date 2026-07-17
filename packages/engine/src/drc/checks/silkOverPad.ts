@@ -13,7 +13,7 @@
  *    approximated by its bounding rect: w = 0.6 * height * text.length,
  *    h = height, centered at `at` and rotated by `rotation`.
  */
-import type { Board, ComponentInst, Point, SilkItem, SilkText } from '../../types.js';
+import type { Board, ComponentInst, Point, SilkItem, SilkLine, SilkText } from '../../types.js';
 import { add, componentTransformPoints, polyIntersects, rotate } from '../../geometry.js';
 import { circlePolygon } from '../util.js';
 import type { RuleSet } from '../rules.js';
@@ -83,10 +83,16 @@ function boardSilkTextShape(st: SilkText): SilkShape {
   return { poly, side: st.layer === 'F.Silk' ? 'top' : 'bottom', ref: st.id };
 }
 
+function boardSilkLineShape(line: SilkLine): SilkShape {
+  const poly = lineStrokeRect(line.start, line.end, line.width / 2);
+  return { poly, side: line.layer === 'F.Silk' ? 'top' : 'bottom', ref: line.id };
+}
+
 function buildSilkShapes(b: Board): SilkShape[] {
   const shapes: SilkShape[] = [];
   for (const c of b.components) shapes.push(...footprintSilkShapes(c));
   for (const st of b.silk) shapes.push(boardSilkTextShape(st));
+  for (const line of b.silkLines) shapes.push(boardSilkLineShape(line));
   return shapes;
 }
 

@@ -10,11 +10,16 @@
  */
 
 import { Resvg } from '@resvg/resvg-js';
-import type { Board, LayerId } from '@flamingo/engine';
-import { ratsnest, renderSVG, runDRC } from '@flamingo/engine';
+import type { Board } from '@flamingo/engine';
+import { ratsnest, renderSVG, runDRC, splitLabelLayers } from '@flamingo/engine';
 
 export interface ScreenshotOpts {
-  layers?: LayerId[];
+  /**
+   * Layers/labels to render. May include the real LayerIds plus the two label
+   * pseudo-layers 'labels:pads' and 'labels:nets'. Omit for "show everything":
+   * all physical layers AND both label overlays (see `splitLabelLayers`).
+   */
+  layers?: string[];
   region?: { minX: number; minY: number; maxX: number; maxY: number };
   highlightNet?: string;
   widthPx?: number;
@@ -42,13 +47,16 @@ export function renderPNG(b: Board, opts: ScreenshotOpts = {}): Buffer {
   const widthPx = resolveWidthPx(opts.widthPx);
   const showRatsnest = opts.showRatsnest !== false;
   const showDrc = opts.showDrc !== false;
+  const { layers, showPadLabels, showNetLabels } = splitLabelLayers(opts.layers);
 
   const svg = renderSVG(b, {
-    layers: opts.layers,
+    layers,
     region: opts.region,
     highlightNet: opts.highlightNet,
     widthPx,
     showRatsnest,
+    showPadLabels,
+    showNetLabels,
     ratsnest: showRatsnest ? ratsnest(b) : undefined,
     drcMarkers: showDrc ? runDRC(b).map((v) => v.at) : undefined,
   });
