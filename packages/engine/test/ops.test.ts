@@ -359,6 +359,49 @@ describe('applyOp', () => {
     });
   });
 
+  describe('setComponentFields', () => {
+    it('merges the patch into fields without clobbering other keys', () => {
+      const board = baseBoard();
+      const result = applyOp(board, {
+        op: 'setComponentFields',
+        refdes: 'R1',
+        fields: { value: '47k', role: 'pull-up on TEST' },
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const comp = result.board.components.find((c) => c.refdes === 'R1')!;
+        expect(comp.fields.value).toBe('47k');
+        expect(comp.fields.role).toBe('pull-up on TEST');
+      }
+      expect(applyOp(board, { op: 'setComponentFields', refdes: 'NOPE', fields: {} }).ok).toBe(false);
+    });
+  });
+
+  describe('editHole', () => {
+    it('patches hole geometry and demotes a slot to a round hole when slotLength <= drill', () => {
+      const board = baseBoard();
+      board.holes.push({ id: 'SLOT1', at: { x: 10, y: 10 }, drill: 2, padDiameter: 2, plated: false, slotLength: 44, rotation: 0 });
+
+      const widened = applyOp(board, { op: 'editHole', id: 'SLOT1', hole: { drill: 4 } });
+      expect(widened.ok).toBe(true);
+      if (widened.ok) {
+        const h = widened.board.holes.find((x) => x.id === 'SLOT1')!;
+        expect(h.drill).toBe(4);
+        expect(h.slotLength).toBe(44);
+        expect(h.at).toEqual({ x: 10, y: 10 });
+      }
+
+      const demoted = applyOp(board, { op: 'editHole', id: 'SLOT1', hole: { slotLength: 0 } });
+      expect(demoted.ok).toBe(true);
+      if (demoted.ok) {
+        expect(demoted.board.holes.find((x) => x.id === 'SLOT1')!.slotLength).toBeUndefined();
+      }
+
+      expect(applyOp(board, { op: 'editHole', id: 'SLOT1', hole: { drill: 0 } }).ok).toBe(false);
+      expect(applyOp(board, { op: 'editHole', id: 'NOPE', hole: {} }).ok).toBe(false);
+    });
+  });
+
   describe('moveComponents', () => {
     it('moves several components in one op and rejects unknown refdes atomically', () => {
       const board = baseBoard();
