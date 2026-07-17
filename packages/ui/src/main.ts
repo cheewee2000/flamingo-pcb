@@ -85,6 +85,32 @@ function focusComponent(refdes: string): void {
   });
 }
 
+/**
+ * After /api/open succeeds: clear all selection state and load the new board
+ * by GET rather than waiting on the websocket push — the ws 'board' message
+ * may have raced ahead of the fetch response, in which case no further push
+ * comes and the view would stay fit to the previous board.
+ */
+function boardOpened(): void {
+  store.set({ selection: null, selectedNet: null, hover: null });
+  void (async () => {
+    try {
+      const board = (await (await fetch('/api/board')).json()) as Board;
+      const rect = canvas.getBoundingClientRect();
+      const state = store.get();
+      store.set({
+        board,
+        ratsnestLines: ratsnest(board),
+        view: fitToBoard(state.view, boardBBox(board), rect.width, rect.height),
+        hasFitOnce: true,
+      });
+    } catch {
+      // Fall back to refitting whenever the next ws board message lands.
+      store.set({ hasFitOnce: false });
+    }
+  })();
+}
+
 initPanels(
   {
     layerList: document.getElementById('layer-list')!,
@@ -105,9 +131,12 @@ initPanels(
     routeStatus: document.getElementById('route-status')!,
     bomList: document.getElementById('bom-list')!,
     propsPanel: document.getElementById('props-panel')!,
+    projectName: document.getElementById('project-name')!,
+    openBtn: document.getElementById('open-btn') as HTMLButtonElement,
+    saveBtn: document.getElementById('save-btn') as HTMLButtonElement,
   },
   toolManager,
-  { focusComponent },
+  { focusComponent, boardOpened },
 );
 
 const renderer = createRenderer(canvas, () => store.get(), (ctx2d, view, state) => {

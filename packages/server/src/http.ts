@@ -1,13 +1,13 @@
 import http from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
-import { dirname, extname, join, normalize } from 'node:path';
+import { readdir, readFile, stat } from 'node:fs/promises';
+import { basename, dirname, extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import type { Op, RenderOpts } from '@flamingo/engine';
-import { fillAllZones, ratsnest, renderSVG, runDRC, splitLabelLayers } from '@flamingo/engine';
+import type { Board, Op, RenderOpts } from '@flamingo/engine';
+import { fillAllZones, parseBoard, ratsnest, renderSVG, runDRC, splitLabelLayers } from '@flamingo/engine';
 import { exportFab } from '@flamingo/fab';
 import { fetchPart, searchParts } from '@flamingo/parts';
 import { runAutoroute } from './autoroute.js';
@@ -125,6 +125,53 @@ async function serveStatic(pathname: string, res: ServerResponse, uiDistDir: str
   }
 }
 
+/** Directories /api/projects lists boards from (and /api/open may open from). */
+function boardSearchRoots(ctx: McpContext): string[] {
+  return [...new Set([resolve(ctx.projectDir), resolve(process.cwd())])];
+}
+
+const SCAN_SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'fab', 'fixtures']);
+const SCAN_MAX_DEPTH = 4;
+
+export interface ProjectEntry {
+  /** Absolute path — feed back to POST /api/open verbatim. */
+  path: string;
+  /** File basename without the .flamingo extension. */
+  name: string;
+  mtimeMs: number;
+}
+
+/** Find every *.flamingo file under `roots` (bounded depth, build/vcs dirs skipped), newest first. */
+async function findBoardFiles(roots: string[]): Promise<ProjectEntry[]> {
+  const found = new Map<string, ProjectEntry>();
+
+  async function walk(dir: string, depth: number): Promise<void> {
+    if (depth > SCAN_MAX_DEPTH) return;
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return; // unreadable dir: skip
+    }
+    for (const e of entries) {
+      const full = join(dir, e.name);
+      if (e.isDirectory()) {
+        if (!SCAN_SKIP_DIRS.has(e.name) && !e.name.startsWith('.')) await walk(full, depth + 1);
+      } else if (e.isFile() && extname(e.name) === '.flamingo' && !found.has(full)) {
+        try {
+          const s = await stat(full);
+          found.set(full, { path: full, name: basename(e.name, '.flamingo'), mtimeMs: s.mtimeMs });
+        } catch {
+          // raced deletion: skip
+        }
+      }
+    }
+  }
+
+  for (const root of roots) await walk(root, 0);
+  return [...found.values()].sort((a, b) => b.mtimeMs - a.mtimeMs);
+}
+
 async function handleApi(
   ctx: McpContext,
   method: string,
@@ -138,7 +185,7 @@ async function handleApi(
   // drain it so the connection can be reused instead of stalling on unread data.
   const readsBody =
     method === 'POST' &&
-    (pathname === '/api/op' || pathname === '/api/export' || pathname === '/api/route');
+    (pathname === '/api/op' || pathname === '/api/export' || pathname === '/api/route' || pathname === '/api/open');
   if (!readsBody) {
     req.resume();
   }
@@ -315,6 +362,52 @@ async function handleApi(
     } catch (err) {
       sendJSON(res, 500, { ok: false, error: err instanceof Error ? err.message : String(err) });
     }
+    return true;
+  }
+
+  if (method === 'GET' && pathname === '/api/projects') {
+    try {
+      const roots = boardSearchRoots(ctx);
+      const projects = await findBoardFiles(roots);
+      const current = doc.filePath ? resolve(doc.filePath) : null;
+      sendJSON(res, 200, { ok: true, current, projects });
+    } catch (err) {
+      sendJSON(res, 500, { ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  if (method === 'POST' && pathname === '/api/open') {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse((await readBody(req)) || '{}');
+    } catch {
+      sendJSON(res, 400, { ok: false, error: 'invalid JSON body' });
+      return true;
+    }
+    const pathRaw = (parsed as { path?: unknown }).path;
+    if (typeof pathRaw !== 'string' || pathRaw.length === 0) {
+      sendJSON(res, 400, { ok: false, error: 'body must be {"path": "<board.flamingo>"}' });
+      return true;
+    }
+    const abs = resolve(isAbsolute(pathRaw) ? pathRaw : join(ctx.projectDir, pathRaw));
+    const roots = boardSearchRoots(ctx);
+    if (extname(abs) !== '.flamingo' || !roots.some((r) => abs.startsWith(r + sep))) {
+      sendJSON(res, 400, { ok: false, error: 'path must be a .flamingo file inside the project' });
+      return true;
+    }
+    let board: Board;
+    try {
+      board = parseBoard(await readFile(abs, 'utf8'));
+    } catch (err) {
+      sendJSON(res, 400, { ok: false, error: `could not open "${abs}": ${err instanceof Error ? err.message : String(err)}` });
+      return true;
+    }
+    // Pure read of an on-disk file: swap the board without marking dirty (same
+    // rule as the open_board MCP tool). The doc's 'change' event broadcasts the
+    // new board to every websocket client.
+    doc.resetBoard(board, abs, false);
+    sendJSON(res, 200, { ok: true, path: abs, name: board.name });
     return true;
   }
 
