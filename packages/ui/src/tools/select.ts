@@ -22,7 +22,7 @@
 
 import type { ComponentInst, Point } from '@flamingo/engine';
 import { bboxOf, componentTransformPoints, dist, padOutline } from '@flamingo/engine';
-import { hitEditTarget, hitTest } from '../hit-test.js';
+import { hitEditTarget, hitEditTargets, hitTest, sameEditTarget } from '../hit-test.js';
 import type { PointerEvt, Tool, ToolCtx } from './tool.js';
 import { fillOverlayPolygon, strokeOverlayPolygon } from './overlay-utils.js';
 import { worldToScreen } from '../view.js';
@@ -158,7 +158,14 @@ export function createSelectTool(): Tool {
       const selectedNet = netHit ? (cur === netHit.net ? null : netHit.net) : null;
 
       // ...alongside the broader edit-selection (component shadows its pads).
-      const editHit = hitEditTarget(board, ev.worldRaw, state.view.scale);
+      // Clicking the same spot again cycles to the next item stacked under
+      // the current selection (hole -> keepout -> zone -> hole -> ...).
+      const hits = hitEditTargets(board, ev.worldRaw, state.view.scale);
+      let editHit = hits[0] ?? null;
+      if (state.selection && hits.length > 1) {
+        const idx = hits.findIndex((h) => sameEditTarget(h, state.selection!));
+        if (idx !== -1) editHit = hits[(idx + 1) % hits.length];
+      }
       ctx.setState({ selectedNet, selection: editHit, multiSelection: [] });
     },
 

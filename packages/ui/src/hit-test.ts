@@ -109,36 +109,57 @@ function componentContains(c: ComponentInst, world: Point): boolean {
  * operates on the whole component.
  */
 export function hitEditTarget(board: Board, world: Point, scale: number): EditTarget | null {
+  return hitEditTargets(board, world, scale)[0] ?? null;
+}
+
+/**
+ * ALL edit targets under `world`, in priority order. The select tool cycles
+ * through this list on repeated clicks, so items stacked under a bigger item
+ * (a keepout under its slot, a zone under everything) stay reachable.
+ */
+export function hitEditTargets(board: Board, world: Point, scale: number): EditTarget[] {
   const tolMm = TOLERANCE_PX / scale;
+  const hits: EditTarget[] = [];
 
   for (const c of board.components) {
-    if (componentContains(c, world)) return { kind: 'component', refdes: c.refdes };
+    if (componentContains(c, world)) hits.push({ kind: 'component', refdes: c.refdes });
   }
-  const trackOrVia = hitTrackOrVia(board, world, scale);
-  if (trackOrVia) return trackOrVia;
+  for (const t of board.tracks) {
+    if (pointSegDistance(world, t.seg) < t.width / 2 + tolMm) hits.push({ kind: 'track', id: t.id, net: t.net });
+  }
+  for (const v of board.vias) {
+    if (dist(world, v.at) < v.diameter / 2 + tolMm) hits.push({ kind: 'via', id: v.id, net: v.net });
+  }
   for (const h of board.holes) {
     const { start, end } = holeSlotCenterline(h);
     if (pointSegDistance(world, { type: 'line', start, end }) < Math.max(h.padDiameter, h.drill) / 2 + tolMm) {
-      return { kind: 'hole', id: h.id };
+      hits.push({ kind: 'hole', id: h.id });
     }
   }
   for (const s of board.silk) {
-    if (dist(world, s.at) < Math.max(s.height, 1) + tolMm) return { kind: 'silk', id: s.id };
+    if (dist(world, s.at) < Math.max(s.height, 1) + tolMm) hits.push({ kind: 'silk', id: s.id });
   }
   for (const dim of board.dimensions) {
     const line = dimensionLine(dim.a, dim.b, dim.offset);
     if (!line) continue;
     if (pointSegDistance(world, { type: 'line', start: line.A, end: line.B }) < 0.5 + tolMm) {
-      return { kind: 'dimension', id: dim.id };
+      hits.push({ kind: 'dimension', id: dim.id });
     }
   }
   for (const k of board.keepouts) {
-    if (pointInPolygon(world, k.polygon)) return { kind: 'keepout', id: k.id };
+    if (pointInPolygon(world, k.polygon)) hits.push({ kind: 'keepout', id: k.id });
   }
   for (const z of board.zones) {
-    if (pointInPolygon(world, z.polygon)) return { kind: 'zone', id: z.id };
+    if (pointInPolygon(world, z.polygon)) hits.push({ kind: 'zone', id: z.id });
   }
-  return null;
+  return hits;
+}
+
+/** True when two edit targets refer to the same board item. */
+export function sameEditTarget(a: EditTarget, b: EditTarget): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === 'component') return b.kind === 'component' && a.refdes === b.refdes;
+  return 'id' in b && a.id === b.id;
 }
 
 /** Track/via-only hit test, used by ripup (which never acts on components/zones/etc). */
