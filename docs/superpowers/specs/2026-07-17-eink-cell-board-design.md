@@ -146,16 +146,20 @@ dimension-verified; PDF cached at `boards/eink-cell/datasheets/`):
 - Touch tail carries a ~10.1 × ~4.8 mm **device area** (FT6336U + steel
   reinforcement) 10.9–20 mm down the tail — it must pass through the slot
   and lands flat on the front over the charger area (low parts only there).
-- ⇒ **Three milled slots** at y=3.5 (2 mm wide): touch 11.5 long c=13.57,
-  EPD 25.6 long c=34.5, frontlight 6.0 long c=52.6; one copper/via keepout
-  band x 7.3–56.1, y 1.9–5.1. Webs between slots ≈2.3 mm.
-- Connectors rot 180 (entry south, toward slot): **J4 (33.09, 17.5)**,
-  **J5 (13.57, 20)**, **J6 (52.44, 20)**. Front-side reach after the fold
-  ≈ y 22 ⇒ ~3–4 mm latched slack each.
-- **USB-C moved to the right edge** (J1 at (62.25, 11.5) rot 90, plug
-  faces +x) — its old bottom-right spot is exactly where the frontlight
-  tail passes. Charger cluster shifted up clear of the touch slot; LED row,
-  CC resistors, EPD-boost cluster and FL-boost stack reshuffled to suit.
+- ⇒ **One merged milled slot** (user preference): 44 × 2 mm, plus a
+  copper/via keepout band over it. All components moved out of the three
+  tail landing zones on the front.
+- **Connector orientation (XUNPU datasheet-verified, cached):** FPC-05FB
+  is a REAR-flip connector — cable enters on the EAR-pad side, solder-tail
+  row is the back. So J4/J5/J6 are **rot 0** (ears/mouth south toward the
+  slot) and the mapping is **display pin k ↔ pad k** (NOT 25−k / 7−k;
+  the fold mirror is absorbed by the connector's own pad order). Verified:
+  J5's map lands exactly on the FT6336U CTP table; J4's NC pads = display
+  NC pins.
+- **USB-C**: user placed J1 top-left (17.75, y_top) plug out the top edge;
+  C1/R3/R4 satellites nearby below it.
+- **2026-07-17 v2: board grew to 66 × 126.5** (all content shifted +10.5 in y)
+  to host a GNSS antenna strip below the slot.
 
 - **Touch (J5, FPC-05FB-6PH20 rot 180 at (13.57,20)):** FT6336U — pin k ↔ pad
   7−k. Shares I2C with DRV2605L (0x38 vs 0x5A). INT→IO7 (H1.11). RST = RC
@@ -183,3 +187,23 @@ FULL: only strap IO0 remains unassigned.
 3. Build board via MCP tools (parts_get everything first), net classes
    (power: 0.5 mm track; default signal 0.25).
 4. Autoroute → run_drc → export_fab (no waiver) → screenshots → commit.
+
+## GNSS antenna (added 2026-07-17, v2 board 66×126.5)
+
+Ignion NN02-224 RUN mXTEND (C5702652) tuned for GNSS per Ignion AN
+"GPS/Glonass/Beidou" + UM + DS (all cached in `boards/eink-cell/datasheets/`):
+
+- Bottom antenna strip: copper/via keepout y 0–9.5 both layers (eval board
+  clearance is 6.5 × 60; ours is taller because the user wants the antenna
+  ≥3 mm off the board edge). GND zones start at y 9.5.
+- ANT1 at (7.6, 4.5) rot 180 — body y 3–6, long axis parallel to the edge,
+  corner placement per eval board. Pad 1 = feed (per DS footprint fig), at
+  (13.217, 4.5); pad 2 is mechanical-only, left floating per DS.
+- Feed: 2.0 mm-wide stub (DS "D" dim) north through a keepout gap
+  (x 12.0–14.4), necking to 0.6 mm into the matching network.
+- Matching (AN Fig 2): series 9.1 nH LQW18AN9N1G80 (L4, C2049208) then
+  shunt 3.9 nH LQW15AN3N9B80 (L5, C1329507) to GND; nets ANT / GNSS_RF.
+- GNSS_RF terminates at u.FL J7 (HRS U.FL-R-SMT-1(10), C88373) — jumper to
+  the Walter module's GNSS u.FL. Note: Ignion recommends final matching
+  verification on the assembled device (their free Oxion/support service).
+- Bottom M2 holes now at (3.5/62.5, 13.5) — moved up out of the RF strip.
