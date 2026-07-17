@@ -258,10 +258,10 @@
         "x": 33,
         "y": 14
       },
-      "drill": 4,
-      "padDiameter": 4,
+      "drill": 3,
+      "padDiameter": 3,
       "plated": false,
-      "slotLength": 44,
+      "slotLength": 49,
       "rotation": 0
     }
   ],

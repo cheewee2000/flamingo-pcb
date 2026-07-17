@@ -353,8 +353,20 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
           ['layer', z.layer],
         ];
       }
-      case 'keepout':
-        return [['type', 'keepout'], ['id', sel.id]];
+      case 'keepout': {
+        const k = board.keepouts.find((x) => x.id === sel.id);
+        if (!k) return null;
+        const xs = k.polygon.map((p) => p.x);
+        const ys = k.polygon.map((p) => p.y);
+        return [
+          ['type', 'keepout'],
+          ['layers', Array.isArray(k.layers) ? k.layers.join(' ') : String(k.layers)],
+          ['blocks', [k.keepout.copper ? 'copper' : '', k.keepout.via ? 'via' : ''].filter(Boolean).join(' + ')],
+          ['extent', `${(Math.max(...xs) - Math.min(...xs)).toFixed(1)} × ${(Math.max(...ys) - Math.min(...ys)).toFixed(1)} mm`],
+          ['x', `${Math.min(...xs).toFixed(2)} – ${Math.max(...xs).toFixed(2)}`],
+          ['y', `${Math.min(...ys).toFixed(2)} – ${Math.max(...ys).toFixed(2)}`],
+        ];
+      }
       case 'silk': {
         const s = board.silk.find((x) => x.id === sel.id);
         if (!s) return null;

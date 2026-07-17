@@ -633,6 +633,21 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
       const { start, end } = holeSlotCenterline(h);
       strokePolygon(ctx, view, capsulePolygon(start, end, Math.max(h.padDiameter, h.drill) / 2 + 0.15), SELECTION_COLOR, 0.12);
     }
+  } else if (sel && sel.kind === 'keepout') {
+    const k = board.keepouts.find((x) => x.id === sel.id);
+    if (k) strokePolygon(ctx, view, k.polygon, SELECTION_COLOR, 0.15);
+  } else if (sel && sel.kind === 'zone') {
+    const z = board.zones.find((x) => x.id === sel.id);
+    if (z) strokePolygon(ctx, view, z.polygon, SELECTION_COLOR, 0.15);
+  } else if (sel && sel.kind === 'track') {
+    const t = board.tracks.find((x) => x.id === sel.id);
+    if (t) strokeTrack(ctx, view, t, SELECTION_COLOR, 0.12);
+  } else if (sel && sel.kind === 'via') {
+    const v = board.vias.find((x) => x.id === sel.id);
+    if (v) strokeCircle(ctx, view, v.at, v.diameter / 2 + 0.1, SELECTION_COLOR, 0.1);
+  } else if (sel && sel.kind === 'silk') {
+    const s = board.silk.find((x) => x.id === sel.id);
+    if (s) strokeCircle(ctx, view, s.at, Math.max(s.height, 1) + 0.3, SELECTION_COLOR, 0.1);
   }
 
   // ---- label overlays (pad numbers + net names) ----
