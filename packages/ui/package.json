@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "predev": "npm run build -w @flamingo/engine",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",

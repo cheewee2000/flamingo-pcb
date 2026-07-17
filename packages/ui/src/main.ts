@@ -6,10 +6,7 @@
 
 import './style.css';
 import type { Board, ComponentInst, Pad, Point, Track, Via } from '@flamingo/engine';
-// See the note in renderer.ts: value imports go straight at the submodule to
-// avoid pulling the engine barrel's ops.ts (node:crypto) into the browser bundle.
-import { boardBBox, dist, padOutline, pointInPolygon, pointSegDistance } from '@flamingo/engine/dist/geometry.js';
-import { ratsnest } from '@flamingo/engine/dist/connectivity.js';
+import { boardBBox, dist, padOutline, pointInPolygon, pointSegDistance, ratsnest } from '@flamingo/engine';
 import { store, type AppState, type HitInfo } from './state.js';
 import { attachViewControls, fitToBoard, flipView, screenToWorld } from './view.js';
 import { createRenderer } from './renderer.js';

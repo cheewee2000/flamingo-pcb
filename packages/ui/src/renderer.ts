@@ -28,15 +28,13 @@ import type {
   SilkItem,
   Track,
 } from '@flamingo/engine';
-// Value imports deliberately bypass the '@flamingo/engine' barrel (index.ts)
-// and go straight at the submodules that hold them. The barrel also
-// re-exports applyOp from ops.ts, which imports 'node:crypto' -- fine in
-// Node (the server), but Vite's browser build chokes trying to resolve that
-// through its node-builtin-external stub even though nothing here ever
-// calls applyOp. geometry.js/layers.js/connectivity.js never touch ops.js,
-// so importing them directly keeps the UI bundle browser-clean.
-import { componentTransformPoints, componentTransformRotation, padOutline, outlineToPolygon } from '@flamingo/engine/dist/geometry.js';
-import { copperLayersOf } from '@flamingo/engine/dist/layers.js';
+import {
+  componentTransformPoints,
+  componentTransformRotation,
+  padOutline,
+  outlineToPolygon,
+  copperLayersOf,
+} from '@flamingo/engine';
 import type { AppState, ViewTransform } from './state.js';
 import { RATSNEST_KEY, SILK_KEY } from './state.js';
 import { screenToWorld, worldToScreen } from './view.js';

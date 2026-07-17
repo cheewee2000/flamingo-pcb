@@ -9,9 +9,7 @@
  * highlight and the status bar update unconditionally on every state change.
  */
 
-// See the note in renderer.ts: value imports go straight at the submodule to
-// avoid pulling the engine barrel's ops.ts (node:crypto) into the browser bundle.
-import { copperLayersOf } from '@flamingo/engine/dist/layers.js';
+import { copperLayersOf } from '@flamingo/engine';
 import { RATSNEST_KEY, SILK_KEY, store, withLayerKeys, type AppState, type HitInfo } from './state.js';
 
 export interface PanelEls {

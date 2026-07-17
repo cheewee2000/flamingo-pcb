@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type {
   Board,
   ComponentInst,
@@ -157,7 +156,7 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
     }
 
     case 'addKeepout': {
-      const id = randomUUID();
+      const id = globalThis.crypto.randomUUID();
       const keepout: Keepout = { id, ...op.keepout };
       board.keepouts.push(keepout);
       createdIds.push(id);
@@ -165,7 +164,7 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
     }
 
     case 'addZone': {
-      const id = randomUUID();
+      const id = globalThis.crypto.randomUUID();
       const zone: Zone = { id, ...op.zone };
       board.zones.push(zone);
       createdIds.push(id);
@@ -173,7 +172,7 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
     }
 
     case 'addHole': {
-      const id = randomUUID();
+      const id = globalThis.crypto.randomUUID();
       const hole: MountingHole = { id, ...op.hole };
       board.holes.push(hole);
       createdIds.push(id);
@@ -181,7 +180,7 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
     }
 
     case 'addSilkText': {
-      const id = randomUUID();
+      const id = globalThis.crypto.randomUUID();
       const text: SilkText = { id, ...op.text };
       board.silk.push(text);
       createdIds.push(id);
@@ -284,7 +283,7 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
           `Layer "${op.track.layer}" is not valid for a ${board.copperLayers}-layer board`,
         );
       }
-      const id = randomUUID();
+      const id = globalThis.crypto.randomUUID();
       const track: Track = { id, ...op.track };
       board.tracks.push(track);
       createdIds.push(id);
@@ -295,7 +294,7 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
       if (!board.nets.some((n) => n.name === op.via.net)) {
         return err(`Unknown net "${op.via.net}"`);
       }
-      const id = randomUUID();
+      const id = globalThis.crypto.randomUUID();
       const via: Via = { id, ...op.via };
       board.vias.push(via);
       createdIds.push(id);
@@ -320,12 +319,12 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
         }
       }
       const trackIds = op.tracks.map((t) => {
-        const id = randomUUID();
+        const id = globalThis.crypto.randomUUID();
         board.tracks.push({ id, ...t });
         return id;
       });
       const viaIds = op.vias.map((v) => {
-        const id = randomUUID();
+        const id = globalThis.crypto.randomUUID();
         board.vias.push({ id, ...v });
         return id;
       });
