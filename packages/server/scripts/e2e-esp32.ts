@@ -254,6 +254,7 @@ async function main(): Promise<void> {
     // reports zone-clearance noise; we surface its non-zone findings for the
     // log but gate on the authoritative filled-board export.)
     let exported = false;
+    let exportedNonZone: string[] = [];
     let lastReport = '';
     for (let attempt = 1; attempt <= 3 && !exported; attempt++) {
       step(`autoroute (attempt ${attempt}/3, passes 20)`);
@@ -271,6 +272,7 @@ async function main(): Promise<void> {
       const exp = (await cli.callTool({ name: 'export_fab', arguments: { outDir: fabDir } })) as CallToolResult;
       if (!exp.isError) {
         exported = true;
+        exportedNonZone = nonZone;
         console.log('  ' + textOf(exp).split('\n')[0]);
         console.log('  DRC-clean on the filled board (export not waived).');
         break;
@@ -281,6 +283,9 @@ async function main(): Promise<void> {
       if (attempt < 3) await call('unroute'); // fresh re-route next attempt
     }
     assert(exported, `export_fab (DRC gate) failed after 3 attempts:\n${lastReport}`);
+    assert(exportedNonZone.length === 0,
+      `run_drc reported ${exportedNonZone.length} non-zone finding(s) on the exported (DRC-clean) board:\n` +
+        exportedNonZone.join('\n'));
     summary.push(['DRC gate', 'clean filled board (export not waived)']);
 
     step('screenshot after-route.png');

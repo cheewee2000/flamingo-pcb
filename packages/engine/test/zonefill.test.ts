@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import polygonClipping from 'polygon-clipping';
 import { applyOp, newBoard, pointInPolygon } from '../src/index.js';
 import type { Board, Op, PathSeg, Point, Zone } from '../src/index.js';
 import { fillZone, fillAllZones } from '../src/zonefill.js';
@@ -55,6 +56,10 @@ function zoneOf(b: Board, over: Partial<Zone> = {}): Zone {
 }
 
 describe('fillZone', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('excludes a clearance-buffered corridor around a different-net track', () => {
     let b = baseBoard();
     b = apply(b, {
@@ -195,6 +200,63 @@ describe('fillZone', () => {
     const areas = fill.map((r) => signedArea(r));
     expect(areas.some((a) => a > 0)).toBe(true);
     expect(areas.some((a) => a < 0)).toBe(true);
+  });
+
+  it('recovers via the snap retry when the clipper throws once (SweepLine failure)', () => {
+    // No board outline so the only polygonClipping.difference call is the one
+    // inside robustDifference (the outline-inset uses a separate difference we
+    // don't want to trip). A different-net track gives us obstacles.length > 0.
+    let b = baseBoard(false);
+    b = apply(b, {
+      op: 'addTrack',
+      track: {
+        layer: 'F.Cu',
+        width: 0.5,
+        net: 'SIG',
+        seg: { type: 'line', start: { x: 0, y: 5 }, end: { x: 10, y: 5 } },
+      },
+    });
+    // First difference call throws the real SweepLine failure; every later call
+    // (the 10µm snap retry) falls through to the genuine implementation.
+    const spy = vi
+      .spyOn(polygonClipping, 'difference')
+      .mockImplementationOnce(() => {
+        throw new Error('Unable to find segment … in SweepLine tree');
+      });
+    const fill = fillZone(b, zoneOf(b));
+    expect(spy).toHaveBeenCalled();
+    // Snap-retry result matches the un-mocked happy path at the same samples:
+    expect(fill.length).toBeGreaterThan(0);
+    expect(inFill(fill, { x: 5, y: 5 })).toBe(false); // on the track centerline -> excluded
+    expect(inFill(fill, { x: 5, y: 5.5 })).toBe(false); // within the clearance band -> excluded
+    expect(inFill(fill, { x: 5, y: 7 })).toBe(true); // clear of the band -> filled
+    expect(inFill(fill, { x: 5, y: 3 })).toBe(true);
+    // Winding-encoding invariant still holds: at least one CCW (+area) outer ring.
+    const areas = fill.map((r) => signedArea(r));
+    expect(areas.some((a) => a > 0)).toBe(true);
+  });
+
+  it('degrades to the unobstructed base when the clipper always throws (last resort)', () => {
+    // Same fixture, but every difference attempt (direct + 10µm + 20µm snap)
+    // throws, so robustDifference falls through to `return base`.
+    let b = baseBoard(false);
+    b = apply(b, {
+      op: 'addTrack',
+      track: {
+        layer: 'F.Cu',
+        width: 0.5,
+        net: 'SIG',
+        seg: { type: 'line', start: { x: 0, y: 5 }, end: { x: 10, y: 5 } },
+      },
+    });
+    vi.spyOn(polygonClipping, 'difference').mockImplementation(() => {
+      throw new Error('sweepline failure');
+    });
+    const fill = fillZone(b, zoneOf(b));
+    expect(fill.length).toBeGreaterThan(0);
+    // The track corridor is no longer subtracted: a point the happy path would
+    // exclude (on the track centerline) is now poured over. Deliberate degrade.
+    expect(inFill(fill, { x: 5, y: 5 })).toBe(true);
   });
 });
 

@@ -142,7 +142,12 @@ function robustDifference(base: MultiPolygon, obstacles: MultiPolygon[]): MultiP
       }
     }
     // Last resort: pour the un-obstructed base rather than throwing away the
-    // whole fill (and blocking fab export) over a clipper hiccup.
+    // whole fill (and blocking fab export) over a clipper hiccup. Safe because
+    // this doesn't reach fabrication silently: export_fab's filled-board DRC
+    // clearance check (runDRC over the fillAllZones output) catches an
+    // unobstructed fill overlapping other-net copper as a clearance violation
+    // and refuses the export, so the failure surfaces loudly instead of
+    // producing a bad board.
     return base;
   }
 }
