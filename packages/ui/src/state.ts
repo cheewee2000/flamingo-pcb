@@ -92,6 +92,9 @@ export const MAX_SCALE = 200;
 
 export const SILK_KEY = 'Silk';
 export const RATSNEST_KEY = 'Ratsnest';
+/** Copper pour zones, toggled independently of the copper layers they sit on
+ * so placement can be reviewed without the pour tint. */
+export const ZONES_KEY = 'Zones';
 /** Display-only overlays: pad numbers and per-pad net names. Toggled like a
  * layer but rendered from the board model, not a physical copper/silk layer. */
 export const LABEL_PADS_KEY = 'Pad #';
@@ -104,7 +107,7 @@ function initialState(): AppState {
     selectedNet: null,
     hover: null,
     view: { scale: 10, originPxX: 0, originPxY: 0, flipped: false },
-    layerVisibility: { [SILK_KEY]: true, [RATSNEST_KEY]: true, [LABEL_PADS_KEY]: true, [LABEL_NETS_KEY]: true },
+    layerVisibility: { [SILK_KEY]: true, [RATSNEST_KEY]: true, [ZONES_KEY]: true, [LABEL_PADS_KEY]: true, [LABEL_NETS_KEY]: true },
     connected: false,
     drcMarkers: [],
     cursorMm: null,
