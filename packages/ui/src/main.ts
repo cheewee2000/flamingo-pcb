@@ -7,9 +7,9 @@
 
 import './style.css';
 import type { Board, Op, Point } from '@flamingo/engine';
-import { boardBBox, ratsnest } from '@flamingo/engine';
+import { boardBBox, padOutline, ratsnest } from '@flamingo/engine';
 import { store, type AppState } from './state.js';
-import { attachViewControls, fitToBoard, flipView, screenToWorld } from './view.js';
+import { attachViewControls, centerOn, fitToBoard, flipView, screenToWorld } from './view.js';
 import { createRenderer } from './renderer.js';
 import { initPanels } from './panels.js';
 import { connectWs } from './ws.js';
@@ -62,6 +62,29 @@ const toolCtx: ToolCtx = {
 
 const toolManager = createToolManager(toolCtx);
 
+/** Select a component and center the view on it (BOM/properties click-through). */
+function focusComponent(refdes: string): void {
+  const state = store.get();
+  const board = state.board;
+  if (!board) return;
+  const comp = board.components.find((c) => c.refdes === refdes);
+  if (!comp) return;
+  const pts = comp.footprint.pads.flatMap((pad) => padOutline(comp, pad));
+  let center: Point = comp.at;
+  if (pts.length > 0) {
+    const minX = Math.min(...pts.map((p) => p.x));
+    const maxX = Math.max(...pts.map((p) => p.x));
+    const minY = Math.min(...pts.map((p) => p.y));
+    const maxY = Math.max(...pts.map((p) => p.y));
+    center = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+  }
+  const rect = canvas.getBoundingClientRect();
+  store.set({
+    selection: { kind: 'component', refdes },
+    view: centerOn(state.view, center, rect.width, rect.height),
+  });
+}
+
 initPanels(
   {
     layerList: document.getElementById('layer-list')!,
@@ -80,8 +103,11 @@ initPanels(
     redoBtn: document.getElementById('redo-btn') as HTMLButtonElement,
     routeBtn: document.getElementById('route-btn') as HTMLButtonElement,
     routeStatus: document.getElementById('route-status')!,
+    bomList: document.getElementById('bom-list')!,
+    propsPanel: document.getElementById('props-panel')!,
   },
   toolManager,
+  { focusComponent },
 );
 
 const renderer = createRenderer(canvas, () => store.get(), (ctx2d, view, state) => {

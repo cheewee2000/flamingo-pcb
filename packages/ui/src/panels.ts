@@ -42,6 +42,13 @@ export interface PanelEls {
   redoBtn: HTMLButtonElement;
   routeBtn: HTMLButtonElement;
   routeStatus: HTMLElement;
+  bomList: HTMLElement;
+  propsPanel: HTMLElement;
+}
+
+/** Actions the panels trigger that need canvas/view access (owned by main.ts). */
+export interface PanelActions {
+  focusComponent(refdes: string): void;
 }
 
 // Swatch colors for the two label pseudo-layers, matching the overlay colors in
@@ -74,11 +81,14 @@ function hoverText(hit: HitInfo): string {
   return `via  net:${hit.net}`;
 }
 
-/** Wire the layer list, net list, board-info panel, toolbar, and status bar to `store`. */
-export function initPanels(els: PanelEls, toolManager: ToolManager): void {
+/** Wire the layer list, net list, BOM, properties, board-info panel, toolbar, and status bar to `store`. */
+export function initPanels(els: PanelEls, toolManager: ToolManager, actions: PanelActions): void {
   let lastBoard: AppState['board'] = null;
   let lastToolOptionsTool: string | null = null;
+  let lastSelection: AppState['selection'] = null;
+  let lastPropsBoard: AppState['board'] = null;
   const netRows = new Map<string, HTMLElement>();
+  const bomRowsByRefdes = new Map<string, HTMLElement>();
   let measureReadoutEl: HTMLElement | null = null;
 
   function buildLayerList(state: AppState): void {
@@ -153,9 +163,196 @@ export function initPanels(els: PanelEls, toolManager: ToolManager): void {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // BOM: components grouped by part (LCSC id, falling back to footprint name).
+  // Clicking a refdes chip selects that component and centers the view on it.
+  // ---------------------------------------------------------------------------
+
+  function refdesCompare(a: string, b: string): number {
+    const ma = a.match(/^([A-Za-z]+)(\d+)$/);
+    const mb = b.match(/^([A-Za-z]+)(\d+)$/);
+    if (ma && mb && ma[1] === mb[1]) return Number(ma[2]) - Number(mb[2]);
+    return a.localeCompare(b);
+  }
+
+  function buildBom(state: AppState): void {
+    els.bomList.replaceChildren();
+    bomRowsByRefdes.clear();
+    const board = state.board;
+    if (!board) return;
+
+    interface BomLine {
+      key: string;
+      lcsc: string;
+      title: string;
+      refs: string[];
+    }
+    const lines = new Map<string, BomLine>();
+    for (const c of board.components) {
+      const key = c.lcsc || c.footprint.name || c.refdes;
+      let line = lines.get(key);
+      if (!line) {
+        const title = c.fields.value || c.fields.package || c.footprint.name || key;
+        line = { key, lcsc: c.lcsc, title, refs: [] };
+        lines.set(key, line);
+      }
+      line.refs.push(c.refdes);
+    }
+    const sorted = [...lines.values()].sort((a, b) => refdesCompare(a.refs[0], b.refs[0]));
+
+    for (const line of sorted) {
+      line.refs.sort(refdesCompare);
+      const row = document.createElement('div');
+      row.className = 'bom-row';
+
+      const head = document.createElement('div');
+      head.className = 'bom-row-head';
+      const title = document.createElement('span');
+      title.className = 'bom-title';
+      title.textContent = line.title;
+      title.title = line.lcsc ? `${line.title} · ${line.lcsc}` : line.title;
+      const qty = document.createElement('span');
+      qty.className = 'bom-qty';
+      qty.textContent = `×${line.refs.length}`;
+      head.append(title, qty);
+
+      const refs = document.createElement('div');
+      refs.className = 'bom-refs';
+      for (const refdes of line.refs) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'bom-ref';
+        chip.textContent = refdes;
+        chip.addEventListener('click', () => actions.focusComponent(refdes));
+        refs.appendChild(chip);
+        bomRowsByRefdes.set(refdes, chip);
+      }
+
+      row.append(head, refs);
+      els.bomList.appendChild(row);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Properties: key/value rows for the current edit selection.
+  // ---------------------------------------------------------------------------
+
+  function propsRows(state: AppState): Array<[string, string]> | null {
+    const board = state.board;
+    const sel = state.selection;
+    if (!board || !sel) return null;
+    switch (sel.kind) {
+      case 'component': {
+        const c = board.components.find((x) => x.refdes === sel.refdes);
+        if (!c) return null;
+        const rows: Array<[string, string]> = [['refdes', c.refdes]];
+        if (c.fields.value) rows.push(['value', c.fields.value]);
+        if (c.fields.package) rows.push(['package', c.fields.package]);
+        if (c.footprint.name && c.footprint.name !== c.fields.package) rows.push(['footprint', c.footprint.name]);
+        if (c.lcsc) rows.push(['lcsc', c.lcsc]);
+        if (c.fields.mfr) rows.push(['mfr', c.fields.mfr]);
+        rows.push(
+          ['side', c.side],
+          ['at', `${c.at.x.toFixed(2)}, ${c.at.y.toFixed(2)} mm`],
+          ['rotation', `${c.rotation}°`],
+          ['pads', String(c.footprint.pads.length)],
+        );
+        return rows;
+      }
+      case 'track': {
+        const t = board.tracks.find((x) => x.id === sel.id);
+        if (!t) return null;
+        return [
+          ['type', 'track'],
+          ['net', t.net],
+          ['layer', t.layer],
+          ['width', `${t.width} mm`],
+        ];
+      }
+      case 'via': {
+        const v = board.vias.find((x) => x.id === sel.id);
+        if (!v) return null;
+        return [
+          ['type', 'via'],
+          ['net', v.net],
+          ['at', `${v.at.x.toFixed(2)}, ${v.at.y.toFixed(2)} mm`],
+          ['size', `${v.diameter} / ${v.drill} mm`],
+        ];
+      }
+      case 'zone': {
+        const z = board.zones.find((x) => x.id === sel.id);
+        if (!z) return null;
+        return [
+          ['type', 'zone'],
+          ['net', z.net],
+          ['layer', z.layer],
+        ];
+      }
+      case 'keepout':
+        return [['type', 'keepout'], ['id', sel.id]];
+      case 'hole': {
+        const h = board.holes.find((x) => x.id === sel.id);
+        if (!h) return null;
+        const rows: Array<[string, string]> = [
+          ['type', h.plated ? 'plated hole' : 'hole'],
+          ['at', `${h.at.x.toFixed(2)}, ${h.at.y.toFixed(2)} mm`],
+          ['drill', `${h.drill} mm`],
+        ];
+        if (h.plated) rows.push(['pad', `${h.padDiameter} mm`]);
+        return rows;
+      }
+      case 'silk': {
+        const s = board.silk.find((x) => x.id === sel.id);
+        if (!s) return null;
+        return [
+          ['type', 'silk text'],
+          ['text', s.text],
+          ['layer', s.layer],
+          ['at', `${s.at.x.toFixed(2)}, ${s.at.y.toFixed(2)} mm`],
+        ];
+      }
+    }
+  }
+
+  function buildProps(state: AppState): void {
+    els.propsPanel.replaceChildren();
+    const rows = propsRows(state);
+    if (!rows) {
+      const hint = document.createElement('div');
+      hint.className = 'props-empty';
+      hint.textContent = 'nothing selected';
+      els.propsPanel.appendChild(hint);
+      return;
+    }
+    for (const [k, v] of rows) {
+      const div = document.createElement('div');
+      div.className = 'props-row';
+      const kSpan = document.createElement('span');
+      kSpan.textContent = k;
+      const vSpan = document.createElement('span');
+      vSpan.textContent = v;
+      vSpan.title = v;
+      div.append(kSpan, vSpan);
+      els.propsPanel.appendChild(div);
+    }
+    const sel = state.selection;
+    if (sel && sel.kind === 'component') {
+      const center = document.createElement('button');
+      center.type = 'button';
+      center.className = 'props-center';
+      center.textContent = 'center in view →';
+      center.addEventListener('click', () => actions.focusComponent(sel.refdes));
+      els.propsPanel.appendChild(center);
+    }
+  }
+
   function updateSelection(state: AppState): void {
     for (const [name, row] of netRows) {
       row.classList.toggle('selected', state.selectedNet === name);
+    }
+    const selRefdes = state.selection?.kind === 'component' ? state.selection.refdes : null;
+    for (const [refdes, chip] of bomRowsByRefdes) {
+      chip.classList.toggle('selected', refdes === selRefdes);
     }
   }
 
@@ -458,11 +655,17 @@ export function initPanels(els: PanelEls, toolManager: ToolManager): void {
       buildLayerList(state);
       buildNetList(state);
       buildBoardInfo(state);
+      buildBom(state);
       syncToolOptionDefaults(state);
     }
     if (state.activeTool !== lastToolOptionsTool || boardChanged) {
       lastToolOptionsTool = state.activeTool;
       buildToolOptions(state);
+    }
+    if (state.selection !== lastSelection || state.board !== lastPropsBoard) {
+      lastSelection = state.selection;
+      lastPropsBoard = state.board;
+      buildProps(state);
     }
     updateSelection(state);
     updateStatusBar(state);

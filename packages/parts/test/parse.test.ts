@@ -104,6 +104,35 @@ describe('parseEasyedaFootprint', () => {
     expect(footprint.silk.some((s) => s.kind === 'arc')).toBe(true);
   });
 
+  it('ARC sweep flag maps to visually-consistent cw (corner arcs bow outward)', () => {
+    // Quarter arc "M 10 0 A 10 10 0 0 1 0 10" about head origin (0,0):
+    // sweep=1 goes positive-angle in the y-down canvas frame, from (10,0) to
+    // (0,10) through (7.07,7.07) -- center is the origin, arc bows away from it.
+    // In our y-up frame that's start (2.54,0) -> end (0,-2.54) through
+    // (1.796,-1.796): the angle *decreases* (0deg -> -90deg), i.e. clockwise,
+    // so cw must be true (cw = sweep flag). The old `cw: !fS` bowed every such
+    // arc toward the wrong side ("radius flipped on the corners").
+    const synthetic = {
+      packageDetail: {
+        dataStr: {
+          head: { x: 0, y: 0 },
+          shape: ['ARC~1~3~~M 10 0 A 10 10 0 0 1 0 10~~gge1'],
+        },
+      },
+    };
+    const { footprint } = parseEasyedaFootprint(synthetic);
+    const arc = footprint.silk.find((s) => s.kind === 'arc');
+    expect(arc).toBeDefined();
+    if (arc?.kind !== 'arc') throw new Error('unreachable');
+    expect(arc.start.x).toBeCloseTo(2.54, 4);
+    expect(arc.start.y).toBeCloseTo(0, 4);
+    expect(arc.end.x).toBeCloseTo(0, 4);
+    expect(arc.end.y).toBeCloseTo(-2.54, 4);
+    expect(arc.center.x).toBeCloseTo(0, 4);
+    expect(arc.center.y).toBeCloseTo(0, 4);
+    expect(arc.cw).toBe(true);
+  });
+
   it('never throws on unknown cosmetic shapes (all fixtures parse)', () => {
     for (const l of ['C25804', 'C2150', 'C2040', 'C2913204', 'C165948', 'C8734']) {
       expect(() => parseEasyedaFootprint(fixture(l))).not.toThrow();

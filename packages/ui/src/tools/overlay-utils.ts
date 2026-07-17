@@ -139,7 +139,7 @@ export function drawOverlayLabel(ctx: CanvasRenderingContext2D, view: ViewTransf
   const s = worldToScreen(view, at);
   ctx.save();
   ctx.fillStyle = color;
-  ctx.font = '11px var(--mono, monospace)';
+  ctx.font = `11px 'Space Mono', 'Menlo', monospace`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'bottom';
   ctx.fillText(text, s.x + 6, s.y - 6);
