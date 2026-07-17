@@ -613,17 +613,25 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
     }
   }
 
-  // ---- selection halo (component: pads + courtyard) ----
+  // ---- selection halo (components incl. window selection; hole/slot outline) ----
   const sel = state.selection;
-  if (sel && sel.kind === 'component') {
-    const comp = board.components.find((c) => c.refdes === sel.refdes);
-    if (comp) {
+  const selectedRefdes = new Set(state.multiSelection);
+  if (sel && sel.kind === 'component') selectedRefdes.add(sel.refdes);
+  if (selectedRefdes.size > 0) {
+    for (const comp of board.components) {
+      if (!selectedRefdes.has(comp.refdes)) continue;
       for (const pad of comp.footprint.pads) {
         strokePolygon(ctx, view, padOutline(comp, pad), SELECTION_COLOR, 0.1);
       }
       for (const ring of comp.footprint.courtyard) {
         if (ring.length >= 3) strokePolygon(ctx, view, componentTransformPoints(comp, ring), SELECTION_COLOR, 0.12);
       }
+    }
+  } else if (sel && sel.kind === 'hole') {
+    const h = board.holes.find((x) => x.id === sel.id);
+    if (h) {
+      const { start, end } = holeSlotCenterline(h);
+      strokePolygon(ctx, view, capsulePolygon(start, end, Math.max(h.padDiameter, h.drill) / 2 + 0.15), SELECTION_COLOR, 0.12);
     }
   }
 

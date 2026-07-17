@@ -114,35 +114,6 @@
   ],
   "keepouts": [
     {
-      "id": "7736e907-1cea-4c3d-a7ef-2c9ea26d95df",
-      "layers": [
-        "F.Cu",
-        "B.Cu"
-      ],
-      "polygon": [
-        {
-          "x": 10.4,
-          "y": 12.4
-        },
-        {
-          "x": 55.6,
-          "y": 12.4
-        },
-        {
-          "x": 55.6,
-          "y": 15.6
-        },
-        {
-          "x": 10.4,
-          "y": 15.6
-        }
-      ],
-      "keepout": {
-        "copper": true,
-        "via": true
-      }
-    },
-    {
       "id": "ce68b0cc-37da-4858-b43e-a57f000b0db8",
       "layers": [
         "F.Cu",
@@ -199,6 +170,35 @@
         "copper": true,
         "via": true
       }
+    },
+    {
+      "id": "95cb544c-6d9f-4f93-9820-2c3a08e53b59",
+      "layers": [
+        "F.Cu",
+        "B.Cu"
+      ],
+      "polygon": [
+        {
+          "x": 10.4,
+          "y": 11.7
+        },
+        {
+          "x": 55.6,
+          "y": 11.7
+        },
+        {
+          "x": 55.6,
+          "y": 16.6
+        },
+        {
+          "x": 10.4,
+          "y": 16.6
+        }
+      ],
+      "keepout": {
+        "copper": true,
+        "via": true
+      }
     }
   ],
   "holes": [
@@ -243,18 +243,6 @@
       "plated": false
     },
     {
-      "id": "107ec01f-ba17-4793-8f52-bae23c3ba093",
-      "at": {
-        "x": 33,
-        "y": 14
-      },
-      "drill": 2,
-      "padDiameter": 2,
-      "plated": false,
-      "slotLength": 44,
-      "rotation": 0
-    },
-    {
       "id": "8a2b7298-c847-45f1-96b8-d3ecaee0029b",
       "at": {
         "x": 33,
@@ -263,6 +251,18 @@
       "drill": 0.5,
       "padDiameter": 0.5,
       "plated": false
+    },
+    {
+      "id": "a3c28e72-4e09-4fec-a56b-680113b4151a",
+      "at": {
+        "x": 33,
+        "y": 14
+      },
+      "drill": 4,
+      "padDiameter": 4,
+      "plated": false,
+      "slotLength": 44,
+      "rotation": 0
     }
   ],
   "components": [
@@ -11466,7 +11466,7 @@
         ]
       },
       "at": {
-        "x": 58.7,
+        "x": 59.2,
         "y": 26.4
       },
       "rotation": 0,
@@ -11848,7 +11848,7 @@
         ]
       },
       "at": {
-        "x": 58.3,
+        "x": 58.8,
         "y": 29.5
       },
       "rotation": 0,
@@ -12230,7 +12230,7 @@
         ]
       },
       "at": {
-        "x": 58.5,
+        "x": 59,
         "y": 28
       },
       "rotation": 0,
@@ -20251,7 +20251,7 @@
       },
       "at": {
         "x": 38,
-        "y": 51.7
+        "y": 52.2
       },
       "rotation": 90,
       "side": "top",
@@ -23573,5 +23573,6 @@
       },
       "width": 0.2
     }
-  ]
+  ],
+  "dimensions": []
 }

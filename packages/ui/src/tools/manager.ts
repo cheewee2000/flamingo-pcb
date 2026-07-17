@@ -53,7 +53,7 @@ export function createToolManager(ctx: ToolCtx): ToolManager {
       if (!next || next === current) return;
       current.onDeactivate?.(ctx);
       current = next;
-      ctx.setState({ activeTool: current.id, selection: null });
+      ctx.setState({ activeTool: current.id, selection: null, multiSelection: [] });
       current.onActivate?.(ctx);
     },
   };

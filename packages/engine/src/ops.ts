@@ -33,6 +33,7 @@ export type Op =
       fields: ComponentInst['fields'];
     }
   | { op: 'moveComponent'; refdes: string; at?: Point; rotation?: number; side?: 'top' | 'bottom' }
+  | { op: 'moveComponents'; moves: Array<{ refdes: string; at: Point }> }
   | { op: 'removeComponent'; refdes: string }
   | { op: 'setOutline'; outline: PathSeg[] }
   | { op: 'addKeepout'; keepout: Omit<Keepout, 'id'> }
@@ -140,6 +141,21 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
       if (op.at !== undefined) comp.at = op.at;
       if (op.rotation !== undefined) comp.rotation = op.rotation;
       if (op.side !== undefined) comp.side = op.side;
+      return ok(board, createdIds);
+    }
+
+    case 'moveComponents': {
+      // Group move as ONE op so a single undo restores every position.
+      // Validate all refs before touching anything.
+      for (const move of op.moves) {
+        if (!board.components.some((c) => c.refdes === move.refdes)) {
+          return err(`Unknown refdes "${move.refdes}"`);
+        }
+      }
+      for (const move of op.moves) {
+        const comp = board.components.find((c) => c.refdes === move.refdes)!;
+        comp.at = move.at;
+      }
       return ok(board, createdIds);
     }
 

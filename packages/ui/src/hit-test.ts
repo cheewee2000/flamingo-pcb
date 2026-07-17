@@ -101,9 +101,12 @@ function componentContains(c: ComponentInst, world: Point): boolean {
 
 /**
  * Broader item-level hit test for the editing tools: component (any pad or
- * courtyard ring contains the point) > track > via > zone > keepout > hole >
- * silk. Component hits intentionally shadow individual pads -- selecting a
- * part for move/rotate/flip/delete operates on the whole component.
+ * courtyard ring contains the point) > track > via > hole > silk > dimension
+ * > keepout > zone. Small/point-like items come before area items on purpose:
+ * a full-board copper pour or a keepout rectangle would otherwise shadow
+ * every hole, slot, and annotation inside it. Component hits intentionally
+ * shadow individual pads -- selecting a part for move/rotate/flip/delete
+ * operates on the whole component.
  */
 export function hitEditTarget(board: Board, world: Point, scale: number): EditTarget | null {
   const tolMm = TOLERANCE_PX / scale;
@@ -113,15 +116,9 @@ export function hitEditTarget(board: Board, world: Point, scale: number): EditTa
   }
   const trackOrVia = hitTrackOrVia(board, world, scale);
   if (trackOrVia) return trackOrVia;
-  for (const z of board.zones) {
-    if (pointInPolygon(world, z.polygon)) return { kind: 'zone', id: z.id };
-  }
-  for (const k of board.keepouts) {
-    if (pointInPolygon(world, k.polygon)) return { kind: 'keepout', id: k.id };
-  }
   for (const h of board.holes) {
     const { start, end } = holeSlotCenterline(h);
-    if (pointSegDistance(world, { type: 'line', start, end }) < h.padDiameter / 2 + tolMm) {
+    if (pointSegDistance(world, { type: 'line', start, end }) < Math.max(h.padDiameter, h.drill) / 2 + tolMm) {
       return { kind: 'hole', id: h.id };
     }
   }
@@ -134,6 +131,12 @@ export function hitEditTarget(board: Board, world: Point, scale: number): EditTa
     if (pointSegDistance(world, { type: 'line', start: line.A, end: line.B }) < 0.5 + tolMm) {
       return { kind: 'dimension', id: dim.id };
     }
+  }
+  for (const k of board.keepouts) {
+    if (pointInPolygon(world, k.polygon)) return { kind: 'keepout', id: k.id };
+  }
+  for (const z of board.zones) {
+    if (pointInPolygon(world, z.polygon)) return { kind: 'zone', id: z.id };
   }
   return null;
 }
