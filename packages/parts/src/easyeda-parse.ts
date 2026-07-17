@@ -200,9 +200,11 @@ function parseCircle(fields: string[], conv: Convert): SilkItem[] {
  * pathStr is an SVG path: "M sx sy A rx ry xRot largeArc sweep ex ey".
  * We compute the arc center from the SVG endpoint parameters (see spec
  * "Conversion from endpoint to center parameterization"), convert start/end/
- * center to our frame, and set `cw` from the sweep flag. Because the Y-flip
- * reverses handedness, a canvas sweep-flag of 1 (clockwise on the y-down
- * screen) is counter-clockwise in our y-up frame, so cw = (sweep === 0).
+ * center to our frame, and set `cw` from the sweep flag. A sweep-flag of 1
+ * draws in the positive-angle direction of the y-down canvas frame, which
+ * reads visually clockwise on screen; our y-up frame renders the same visual
+ * picture (the conv() y-flip and the renderer's y-down screen flip cancel),
+ * and `cw` means visually-clockwise in that picture, so cw = (sweep === 1).
  * Silk arcs are cosmetic; on any parse failure we skip.
  */
 function parseArc(fields: string[], conv: Convert): SilkItem[] {
@@ -254,7 +256,7 @@ function parseArc(fields: string[], conv: Convert): SilkItem[] {
       start: conv(x1, y1),
       end: conv(x2, y2),
       center: conv(cx, cy),
-      cw: !fS,
+      cw: fS,
       width: num(fields[1]) * UNIT_MM,
     },
   ];

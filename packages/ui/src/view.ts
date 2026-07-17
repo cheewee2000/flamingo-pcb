@@ -11,7 +11,12 @@
 import type { Point } from '@flamingo/engine';
 import { MAX_SCALE, MIN_SCALE, type ViewTransform } from './state.js';
 
-const ZOOM_STEP = 1.15;
+// Exponential wheel zoom, proportional to the actual scroll delta: a notched
+// mouse wheel (|deltaY| ~ 100/notch) steps ~1.11x per notch, while trackpad
+// pixel deltas glide smoothly. Delta is clamped so momentum flings can't jump.
+const WHEEL_ZOOM_PER_PX = 0.001;
+const WHEEL_DELTA_CLAMP_PX = 400;
+const LINE_DELTA_PX = 16; // deltaMode===1 (Firefox line scrolling) -> px
 const FIT_MARGIN_PX = 32;
 const FIT_MARGIN_MM = 2;
 
@@ -51,6 +56,16 @@ export function zoomAt(view: ViewTransform, screenPt: Point, factor: number): Vi
 /** Pan by a screen-space delta (px). Independent of scale/flip. */
 export function panBy(view: ViewTransform, dxPx: number, dyPx: number): ViewTransform {
   return { ...view, originPxX: view.originPxX + dxPx, originPxY: view.originPxY + dyPx };
+}
+
+/** Center the view on a world point at the current zoom. Preserves scale and flip. */
+export function centerOn(view: ViewTransform, world: Point, canvasWidthPx: number, canvasHeightPx: number): ViewTransform {
+  const s = view.flipped ? -1 : 1;
+  return {
+    ...view,
+    originPxX: canvasWidthPx / 2 - world.x * view.scale * s,
+    originPxY: canvasHeightPx / 2 + world.y * view.scale,
+  };
 }
 
 /** Toggle top/bottom viewing, mirroring X about the current canvas center. */
@@ -121,7 +136,9 @@ export function attachViewControls(
 
   function onWheel(ev: WheelEvent): void {
     ev.preventDefault();
-    const factor = ev.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
+    const rawPx = ev.deltaMode === 1 ? ev.deltaY * LINE_DELTA_PX : ev.deltaY;
+    const px = Math.max(-WHEEL_DELTA_CLAMP_PX, Math.min(WHEEL_DELTA_CLAMP_PX, rawPx));
+    const factor = Math.exp(-px * WHEEL_ZOOM_PER_PX);
     setView(zoomAt(getView(), canvasPoint(ev), factor));
   }
 

@@ -25,6 +25,7 @@ import type {
   Pad,
   PathSeg,
   Point,
+  RatLine,
   SilkItem,
   Track,
 } from '@flamingo/engine';
@@ -73,6 +74,9 @@ const HIGHLIGHT_COLOR = '#00FFFF';
 const DRC_COLOR = '#FF0000';
 const KEEPOUT_COLOR = '#FF6600';
 const HOVER_COLOR = '#ffffffcc';
+// Matches SELECT_COLOR in tools/select.ts (the drag ghost) so "selected" reads
+// as one color everywhere.
+const SELECTION_COLOR = '#4da6ff';
 const BACKGROUND = '#1a1a1a';
 // Label overlay colors -- kept in sync by hand with PAD_LABEL_COLOR /
 // NET_LABEL_COLOR in packages/engine/src/render.ts (the SVG renderer).
@@ -81,6 +85,11 @@ const NET_LABEL_COLOR = '#FACC15';
 const LABEL_MIN_PX = 7;
 
 const REFDES_HEIGHT_MM = 1.0;
+
+// ctx.font cannot resolve CSS custom properties (`var(--mono)` is silently
+// rejected and the previous font sticks), so spell the stack out here. Kept
+// in sync with --mono in style.css.
+const CANVAS_FONT = `'Space Mono', 'Menlo', monospace`;
 
 // ---------------------------------------------------------------------------
 // Small path/shape helpers
@@ -196,7 +205,7 @@ function drawRotatedText(
   ctx.translate(p.x, p.y);
   ctx.rotate(angle);
   ctx.fillStyle = color;
-  ctx.font = `${Math.max(heightMm * view.scale, 6)}px var(--mono, monospace)`;
+  ctx.font = `${Math.max(heightMm * view.scale, 6)}px ${CANVAS_FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, 0, 0);
@@ -412,7 +421,7 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
         const [origin] = componentTransformPoints(c, [{ x: 0, y: 0 }]);
         const p = worldToScreen(view, origin);
         ctx.fillStyle = color;
-        ctx.font = `${Math.max(REFDES_HEIGHT_MM * view.scale, 6)}px var(--mono, monospace)`;
+        ctx.font = `${Math.max(REFDES_HEIGHT_MM * view.scale, 6)}px ${CANVAS_FONT}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(c.refdes, p.x, p.y);
@@ -449,19 +458,29 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
   // ---- keepouts ----
   for (const k of board.keepouts) drawKeepout(ctx, view, widthPx, heightPx, k);
 
-  // ---- ratsnest ----
+  // ---- ratsnest (selected-net lines drawn on top, highlighted) ----
   if (vis[RATSNEST_KEY] !== false) {
     ctx.save();
-    ctx.strokeStyle = RATSNEST_COLOR;
     ctx.setLineDash([Math.max(0.5 * view.scale, 2), Math.max(0.5 * view.scale, 2)]);
-    ctx.lineWidth = Math.max(0.1 * view.scale, 0.5);
-    for (const line of state.ratsnestLines) {
+    const strokeRat = (line: RatLine): void => {
       const s = worldToScreen(view, line.from);
       const e = worldToScreen(view, line.to);
       ctx.beginPath();
       ctx.moveTo(s.x, s.y);
       ctx.lineTo(e.x, e.y);
       ctx.stroke();
+    };
+    ctx.strokeStyle = RATSNEST_COLOR;
+    ctx.lineWidth = Math.max(0.1 * view.scale, 0.5);
+    for (const line of state.ratsnestLines) {
+      if (line.net !== state.selectedNet) strokeRat(line);
+    }
+    if (state.selectedNet) {
+      ctx.strokeStyle = HIGHLIGHT_COLOR;
+      ctx.lineWidth = Math.max(0.15 * view.scale, 1);
+      for (const line of state.ratsnestLines) {
+        if (line.net === state.selectedNet) strokeRat(line);
+      }
     }
     ctx.restore();
   }
@@ -501,6 +520,20 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
     }
   }
 
+  // ---- selection halo (component: pads + courtyard) ----
+  const sel = state.selection;
+  if (sel && sel.kind === 'component') {
+    const comp = board.components.find((c) => c.refdes === sel.refdes);
+    if (comp) {
+      for (const pad of comp.footprint.pads) {
+        strokePolygon(ctx, view, padOutline(comp, pad), SELECTION_COLOR, 0.1);
+      }
+      for (const ring of comp.footprint.courtyard) {
+        if (ring.length >= 3) strokePolygon(ctx, view, componentTransformPoints(comp, ring), SELECTION_COLOR, 0.12);
+      }
+    }
+  }
+
   // ---- label overlays (pad numbers + net names) ----
   const showPadLabels = vis[LABEL_PADS_KEY] !== false;
   const showNetLabels = vis[LABEL_NETS_KEY] !== false;
@@ -513,7 +546,7 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
         const [center] = componentTransformPoints(c, [pad.at]);
         const fontMm = labelFontMm(pad);
         const fontPx = Math.max(fontMm * view.scale, LABEL_MIN_PX);
-        ctx.font = `${fontPx}px var(--mono, monospace)`;
+        ctx.font = `${fontPx}px ${CANVAS_FONT}`;
         if (showPadLabels) {
           const s = worldToScreen(view, center);
           ctx.fillStyle = PAD_LABEL_COLOR;

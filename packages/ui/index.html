@@ -7,6 +7,13 @@
   </head>
   <body>
     <div id="app">
+      <header id="header" class="header">
+        <span class="wordmark">CW&amp;T</span>
+        <span class="header-app">Flamingo</span>
+        <span class="header-spacer"></span>
+        <a id="view3d-link" class="view3d-link" href="/3d" target="_blank" rel="noopener">3D view →</a>
+      </header>
+
       <div id="toolbar-left" class="panel toolbar-left">
         <div class="panel-title">
           Tools
@@ -30,8 +37,9 @@
           <button id="route-btn" class="route-btn" type="button">Lock &amp; Route</button>
           <div id="route-status" class="route-status"></div>
         </div>
-        <div class="panel-section">
-          <a id="view3d-link" class="view3d-link" href="/3d" target="_blank" rel="noopener">3D view ↗</a>
+        <div class="panel-section bom-section">
+          <div class="panel-title">BOM</div>
+          <div id="bom-list" class="bom-list"></div>
         </div>
       </div>
 
@@ -41,6 +49,10 @@
       </div>
 
       <div id="panel-right" class="panel panel-right">
+        <div class="panel-section">
+          <div class="panel-title">Selection</div>
+          <div id="props-panel" class="props-panel"></div>
+        </div>
         <div class="panel-section">
           <div class="panel-title">Layers</div>
           <div id="layer-list" class="layer-list"></div>

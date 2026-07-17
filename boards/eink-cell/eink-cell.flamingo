@@ -412,23 +412,19 @@
                 "y": 0.6500876000000244
               },
               {
-                "x": -0.00007619999992281024,
+                "x": -7.619999992281024e-05,
                 "y": 0.6500876000000244
               },
               {
-                "x": -0.00007619999992281024,
+                "x": -7.619999992281024e-05,
                 "y": 0.6500876000000244
               },
               {
-                "x": -0.00007619999992281024,
+                "x": -7.619999992281024e-05,
                 "y": 0.6499352000000624
               },
               {
-                "x": -0.00007619999992281024,
-                "y": 0.6499352000000624
-              },
-              {
-                "x": -0.3000501999999332,
+                "x": -7.619999992281024e-05,
                 "y": 0.6499352000000624
               },
               {
@@ -437,6 +433,10 @@
               },
               {
                 "x": -0.3000501999999332,
+                "y": 0.6499352000000624
+              },
+              {
+                "x": -0.3000501999999332,
                 "y": -0.650087599999909
               },
               {
@@ -444,19 +444,19 @@
                 "y": -0.650087599999909
               },
               {
-                "x": -0.00005079999998702789,
+                "x": -5.079999998702789e-05,
                 "y": -0.650087599999909
               },
               {
-                "x": -0.00005079999998702789,
+                "x": -5.079999998702789e-05,
                 "y": -0.650087599999909
               },
               {
-                "x": -0.00005079999998702789,
+                "x": -5.079999998702789e-05,
                 "y": -0.6499351999999472
               },
               {
-                "x": -0.00005079999998702789,
+                "x": -5.079999998702789e-05,
                 "y": -0.6499351999999472
               },
               {
@@ -652,19 +652,19 @@
                 "y": 0.6499352000000624
               },
               {
-                "x": 0.00005080000010249108,
+                "x": 5.080000010249108e-05,
                 "y": 0.6499352000000624
               },
               {
-                "x": 0.00005080000010249108,
+                "x": 5.080000010249108e-05,
                 "y": 0.6499352000000624
               },
               {
-                "x": 0.00005080000010249108,
+                "x": 5.080000010249108e-05,
                 "y": 0.6499098000000112
               },
               {
-                "x": 0.00005080000010249108,
+                "x": 5.080000010249108e-05,
                 "y": 0.6499098000000112
               },
               {
@@ -1162,7 +1162,7 @@
       "fields": {
         "value": "USB-C",
         "description": "",
-        "mfr": "韩国韩荣",
+        "mfr": "\u97e9\u56fd\u97e9\u8363",
         "package": "USB-C_SMD-TYPE-C-31-M-12_1",
         "basic": false
       }
@@ -1376,7 +1376,7 @@
               "x": -2.875154911656727,
               "y": 0
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -1725,7 +1725,7 @@
       "fields": {
         "value": "TP4056",
         "description": "",
-        "mfr": "TOPPOWER(南京拓微)",
+        "mfr": "TOPPOWER(\u5357\u4eac\u62d3\u5fae)",
         "package": "ESOP-8_L4.9-W3.9-P1.27-LS6.0-BL-EP",
         "basic": false
       }
@@ -1901,12 +1901,12 @@
         "x": 8.6,
         "y": 30.3
       },
-      "rotation": 90,
+      "rotation": 180,
       "side": "top",
       "fields": {
         "value": "1.2k PROG",
-        "description": "1.2KΩ (1201) ±1%",
-        "mfr": "UNI-ROYAL(厚声)",
+        "description": "1.2K\u03a9 (1201) \u00b11%",
+        "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
         "basic": true
       }
@@ -2034,7 +2034,7 @@
               "x": 1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -2051,7 +2051,7 @@
               "x": 1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -2068,7 +2068,7 @@
               "x": -1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           },
           {
@@ -2085,7 +2085,7 @@
               "x": -1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           }
         ],
@@ -2154,8 +2154,8 @@
       "side": "top",
       "fields": {
         "value": "22u VBUS",
-        "description": "22uF (226) ±20% 10V",
-        "mfr": "SAMSUNG(三星)",
+        "description": "22uF (226) \u00b120% 10V",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
         "basic": false
       }
@@ -2283,7 +2283,7 @@
               "x": 1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -2300,7 +2300,7 @@
               "x": 1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -2317,7 +2317,7 @@
               "x": -1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           },
           {
@@ -2334,7 +2334,7 @@
               "x": -1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           }
         ],
@@ -2403,8 +2403,8 @@
       "side": "top",
       "fields": {
         "value": "22u BAT",
-        "description": "22uF (226) ±20% 10V",
-        "mfr": "SAMSUNG(三星)",
+        "description": "22uF (226) \u00b120% 10V",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
         "basic": false
       }
@@ -2659,7 +2659,7 @@
       "fields": {
         "value": "SI2301",
         "description": "",
-        "mfr": "BORN(伯恩半导体)",
+        "mfr": "BORN(\u4f2f\u6069\u534a\u5bfc\u4f53)",
         "package": "SOT-23-3_L2.9-W1.3-P1.90-LS2.4-BR",
         "basic": false
       }
@@ -2839,8 +2839,8 @@
       "side": "top",
       "fields": {
         "value": "100k",
-        "description": "100KΩ (1003) ±1%",
-        "mfr": "UNI-ROYAL(厚声)",
+        "description": "100K\u03a9 (1003) \u00b11%",
+        "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
         "basic": true
       }
@@ -3021,7 +3021,7 @@
       "fields": {
         "value": "5.1k CC1",
         "description": "",
-        "mfr": "UNI-ROYAL(厚声)",
+        "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
         "basic": true
       }
@@ -3202,7 +3202,7 @@
       "fields": {
         "value": "5.1k CC2",
         "description": "",
-        "mfr": "UNI-ROYAL(厚声)",
+        "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
         "basic": true
       }
@@ -3219,7 +3219,7 @@
             "shape": "rect",
             "at": {
               "x": -0.7500112000000063,
-              "y": -0.00005079999998724816
+              "y": -5.079999998724816e-05
             },
             "rotation": 0,
             "size": {
@@ -3233,7 +3233,7 @@
             "shape": "rect",
             "at": {
               "x": 0.7501127999999808,
-              "y": -0.00005079999998724816
+              "y": -5.079999998724816e-05
             },
             "rotation": 0,
             "size": {
@@ -3677,8 +3677,8 @@
       "side": "top",
       "fields": {
         "value": "1k",
-        "description": "1KΩ (1001) ±1%",
-        "mfr": "UNI-ROYAL(厚声)",
+        "description": "1K\u03a9 (1001) \u00b11%",
+        "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
         "basic": true
       }
@@ -4033,7 +4033,7 @@
       "fields": {
         "value": "GP green",
         "description": "0603",
-        "mfr": "EVERLIGHT(亿光)",
+        "mfr": "EVERLIGHT(\u4ebf\u5149)",
         "package": "LED0603-RD",
         "basic": false
       }
@@ -4213,8 +4213,8 @@
       "side": "top",
       "fields": {
         "value": "1k",
-        "description": "1KΩ (1001) ±1%",
-        "mfr": "UNI-ROYAL(厚声)",
+        "description": "1K\u03a9 (1001) \u00b11%",
+        "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
         "basic": true
       }
@@ -5065,7 +5065,7 @@
       "fields": {
         "value": "WALTER 28-15",
         "description": "",
-        "mfr": "JXTCONN(聚兴泰)",
+        "mfr": "JXTCONN(\u805a\u5174\u6cf0)",
         "package": "HDR-TH_14P-P2.54-V-M",
         "basic": false
       }
@@ -5674,7 +5674,7 @@
       "fields": {
         "value": "WALTER 1-14",
         "description": "",
-        "mfr": "JXTCONN(聚兴泰)",
+        "mfr": "JXTCONN(\u805a\u5174\u6cf0)",
         "package": "HDR-TH_14P-P2.54-V-M",
         "basic": false
       }
@@ -5802,7 +5802,7 @@
               "x": 1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -5819,7 +5819,7 @@
               "x": 1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -5836,7 +5836,7 @@
               "x": -1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           },
           {
@@ -5853,7 +5853,7 @@
               "x": -1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           }
         ],
@@ -5922,8 +5922,8 @@
       "side": "top",
       "fields": {
         "value": "22u VSYS",
-        "description": "22uF (226) ±20% 10V",
-        "mfr": "SAMSUNG(三星)",
+        "description": "22uF (226) \u00b120% 10V",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
         "basic": false
       }
@@ -6051,7 +6051,7 @@
               "x": 1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -6068,7 +6068,7 @@
               "x": 1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -6085,7 +6085,7 @@
               "x": -1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           },
           {
@@ -6102,7 +6102,7 @@
               "x": -1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           }
         ],
@@ -6171,8 +6171,8 @@
       "side": "top",
       "fields": {
         "value": "22u VSYS",
-        "description": "22uF (226) ±20% 10V",
-        "mfr": "SAMSUNG(三星)",
+        "description": "22uF (226) \u00b120% 10V",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
         "basic": false
       }
@@ -6523,7 +6523,7 @@
       "fields": {
         "value": "BTN-L1",
         "description": "",
-        "mfr": "G-Switch(品赞)",
+        "mfr": "G-Switch(\u54c1\u8d5e)",
         "package": "SW-SMD_L4.7-W3.5-P3.35-EH",
         "basic": false
       }
@@ -6874,7 +6874,7 @@
       "fields": {
         "value": "BTN-L2",
         "description": "",
-        "mfr": "G-Switch(品赞)",
+        "mfr": "G-Switch(\u54c1\u8d5e)",
         "package": "SW-SMD_L4.7-W3.5-P3.35-EH",
         "basic": false
       }
@@ -7225,7 +7225,7 @@
       "fields": {
         "value": "BTN-R1",
         "description": "",
-        "mfr": "G-Switch(品赞)",
+        "mfr": "G-Switch(\u54c1\u8d5e)",
         "package": "SW-SMD_L4.7-W3.5-P3.35-EH",
         "basic": false
       }
@@ -7576,7 +7576,7 @@
       "fields": {
         "value": "BTN-R2",
         "description": "",
-        "mfr": "G-Switch(品赞)",
+        "mfr": "G-Switch(\u54c1\u8d5e)",
         "package": "SW-SMD_L4.7-W3.5-P3.35-EH",
         "basic": false
       }
@@ -7804,7 +7804,7 @@
               "x": -1.8199129318913887,
               "y": -0.02557780000000446
             },
-            "cw": false,
+            "cw": true,
             "width": 0.15001240000000002
           },
           {
@@ -8207,7 +8207,7 @@
       "fields": {
         "value": "DRV2605L",
         "description": "",
-        "mfr": "TI(德州仪器)",
+        "mfr": "TI(\u5fb7\u5dde\u4eea\u5668)",
         "package": "VSSOP-10_L3.0-W3.0-P0.50-LS4.9-BL",
         "basic": false
       }
@@ -8387,8 +8387,8 @@
       "side": "top",
       "fields": {
         "value": "4.7k SDA",
-        "description": "4.7KΩ (4701) ±1%",
-        "mfr": "UNI-ROYAL(厚声)",
+        "description": "4.7K\u03a9 (4701) \u00b11%",
+        "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
         "basic": true
       }
@@ -8568,8 +8568,8 @@
       "side": "top",
       "fields": {
         "value": "4.7k SCL",
-        "description": "4.7KΩ (4701) ±1%",
-        "mfr": "UNI-ROYAL(厚声)",
+        "description": "4.7K\u03a9 (4701) \u00b11%",
+        "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
         "basic": true
       }
@@ -8697,7 +8697,7 @@
               "x": 1.0801858010411707,
               "y": 0.3997960000000176
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -8714,7 +8714,7 @@
               "x": 1.080185800000001,
               "y": -0.40020240000003104
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -8731,7 +8731,7 @@
               "x": -1.0800842000000266,
               "y": -0.3997452010411998
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -8748,7 +8748,7 @@
               "x": -1.0800842041648202,
               "y": 0.4002786010408927
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           }
         ],
@@ -8818,7 +8818,7 @@
       "fields": {
         "value": "100n",
         "description": "",
-        "mfr": "YAGEO(国巨)",
+        "mfr": "YAGEO(\u56fd\u5de8)",
         "package": "C0603",
         "basic": false
       }
@@ -8946,7 +8946,7 @@
               "x": 1.0801858010411707,
               "y": 0.3997960000000176
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -8963,7 +8963,7 @@
               "x": 1.080185800000001,
               "y": -0.40020240000003104
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -8980,7 +8980,7 @@
               "x": -1.0800842000000266,
               "y": -0.3997452010411998
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -8997,7 +8997,7 @@
               "x": -1.0800842041648202,
               "y": 0.4002786010408927
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           }
         ],
@@ -9066,8 +9066,8 @@
       "side": "top",
       "fields": {
         "value": "1u",
-        "description": "1uF (105) ±10% 25V",
-        "mfr": "SAMSUNG(三星)",
+        "description": "1uF (105) \u00b110% 25V",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0603",
         "basic": false
       }
@@ -9354,7 +9354,7 @@
           {
             "kind": "line",
             "start": {
-              "x": 0.000025399999935871167,
+              "x": 2.5399999935871167e-05,
               "y": 6.096
             },
             "end": {
@@ -9570,7 +9570,7 @@
       "fields": {
         "value": "PIEZO",
         "description": "",
-        "mfr": "muRata(村田)",
+        "mfr": "muRata(\u6751\u7530)",
         "package": "BUZ-SMD_2P-L12.0-W12.0-L_PKLCS1212E4001-R1",
         "basic": false
       }
@@ -9750,8 +9750,8 @@
       "side": "top",
       "fields": {
         "value": "100R",
-        "description": "100Ω (1000) ±1%",
-        "mfr": "UNI-ROYAL(厚声)",
+        "description": "100\u03a9 (1000) \u00b11%",
+        "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
         "basic": true
       }
@@ -10721,7 +10721,7 @@
       "fields": {
         "value": "FPC24 EPD",
         "description": "",
-        "mfr": "XUNPU(讯普)",
+        "mfr": "XUNPU(\u8baf\u666e)",
         "package": "FPC-SMD_24P-P0.50_FPC-05FB-24PH20",
         "basic": false
       }
@@ -10853,8 +10853,8 @@
       "side": "top",
       "fields": {
         "value": "47uH",
-        "description": "47μH",
-        "mfr": "Sunlord(顺络)",
+        "description": "47\u03bcH",
+        "mfr": "Sunlord(\u987a\u7edc)",
         "package": "IND-SMD_L4.0-W4.0_SLS3DXX",
         "basic": false
       }
@@ -10972,7 +10972,7 @@
               "x": 0.8012684000000041,
               "y": -1.424450920239494
             },
-            "cw": true,
+            "cw": false,
             "width": 0.24892
           }
         ],
@@ -11060,7 +11060,7 @@
       "fields": {
         "value": "Si1308EDL",
         "description": "",
-        "mfr": "VISHAY(威世)",
+        "mfr": "VISHAY(\u5a01\u4e16)",
         "package": "SOT-323_L2.0-W1.3-P1.30-LS2.1-BR",
         "basic": false
       }
@@ -11441,7 +11441,7 @@
       "fields": {
         "value": "MBR0530",
         "description": "",
-        "mfr": "CBI(创基)",
+        "mfr": "CBI(\u521b\u57fa)",
         "package": "SOD-323_L1.7-W1.3-LS2.5-RD",
         "basic": false
       }
@@ -11822,7 +11822,7 @@
       "fields": {
         "value": "MBR0530",
         "description": "",
-        "mfr": "CBI(创基)",
+        "mfr": "CBI(\u521b\u57fa)",
         "package": "SOD-323_L1.7-W1.3-LS2.5-RD",
         "basic": false
       }
@@ -12203,7 +12203,7 @@
       "fields": {
         "value": "MBR0530",
         "description": "",
-        "mfr": "CBI(创基)",
+        "mfr": "CBI(\u521b\u57fa)",
         "package": "SOD-323_L1.7-W1.3-LS2.5-RD",
         "basic": false
       }
@@ -12383,8 +12383,8 @@
       "side": "top",
       "fields": {
         "value": "1M",
-        "description": "1MΩ (1004) ±1%",
-        "mfr": "UNI-ROYAL(厚声)",
+        "description": "1M\u03a9 (1004) \u00b11%",
+        "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
         "basic": true
       }
@@ -12565,7 +12565,7 @@
       "fields": {
         "value": "2.2R",
         "description": "",
-        "mfr": "LIZ(丽智电子)",
+        "mfr": "LIZ(\u4e3d\u667a\u7535\u5b50)",
         "package": "R0603",
         "basic": false
       }
@@ -12693,7 +12693,7 @@
               "x": 1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -12710,7 +12710,7 @@
               "x": 1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -12727,7 +12727,7 @@
               "x": -1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           },
           {
@@ -12744,7 +12744,7 @@
               "x": -1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           }
         ],
@@ -12814,7 +12814,7 @@
       "fields": {
         "value": "4u7 VSH2",
         "description": "",
-        "mfr": "SAMSUNG(三星)",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
         "basic": false
       }
@@ -12942,7 +12942,7 @@
               "x": 1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -12959,7 +12959,7 @@
               "x": 1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -12976,7 +12976,7 @@
               "x": -1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           },
           {
@@ -12993,7 +12993,7 @@
               "x": -1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           }
         ],
@@ -13063,7 +13063,7 @@
       "fields": {
         "value": "4u7 NEG",
         "description": "",
-        "mfr": "SAMSUNG(三星)",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
         "basic": false
       }
@@ -13191,7 +13191,7 @@
               "x": 1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -13208,7 +13208,7 @@
               "x": 1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -13225,7 +13225,7 @@
               "x": -1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           },
           {
@@ -13242,7 +13242,7 @@
               "x": -1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           }
         ],
@@ -13312,7 +13312,7 @@
       "fields": {
         "value": "4u7 PREVGH",
         "description": "",
-        "mfr": "SAMSUNG(三星)",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
         "basic": false
       }
@@ -13440,7 +13440,7 @@
               "x": 1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -13457,7 +13457,7 @@
               "x": 1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -13474,7 +13474,7 @@
               "x": -1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           },
           {
@@ -13491,7 +13491,7 @@
               "x": -1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           }
         ],
@@ -13561,7 +13561,7 @@
       "fields": {
         "value": "4u7 VSH1",
         "description": "",
-        "mfr": "SAMSUNG(三星)",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
         "basic": false
       }
@@ -13689,7 +13689,7 @@
               "x": 1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -13706,7 +13706,7 @@
               "x": 1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -13723,7 +13723,7 @@
               "x": -1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           },
           {
@@ -13740,7 +13740,7 @@
               "x": -1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           }
         ],
@@ -13810,7 +13810,7 @@
       "fields": {
         "value": "4u7 VGH",
         "description": "",
-        "mfr": "SAMSUNG(三星)",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
         "basic": false
       }
@@ -13938,7 +13938,7 @@
               "x": 1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -13955,7 +13955,7 @@
               "x": 1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -13972,7 +13972,7 @@
               "x": -1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           },
           {
@@ -13989,7 +13989,7 @@
               "x": -1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           }
         ],
@@ -14059,7 +14059,7 @@
       "fields": {
         "value": "4u7 VSL",
         "description": "",
-        "mfr": "SAMSUNG(三星)",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
         "basic": false
       }
@@ -14187,7 +14187,7 @@
               "x": 1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -14204,7 +14204,7 @@
               "x": 1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -14221,7 +14221,7 @@
               "x": -1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           },
           {
@@ -14238,7 +14238,7 @@
               "x": -1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           }
         ],
@@ -14308,7 +14308,7 @@
       "fields": {
         "value": "4u7 3V3",
         "description": "",
-        "mfr": "SAMSUNG(三星)",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
         "basic": false
       }
@@ -14436,7 +14436,7 @@
               "x": 1.0801858010411707,
               "y": 0.3997960000000176
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -14453,7 +14453,7 @@
               "x": 1.080185800000001,
               "y": -0.40020240000003104
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -14470,7 +14470,7 @@
               "x": -1.0800842000000266,
               "y": -0.3997452010411998
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -14487,7 +14487,7 @@
               "x": -1.0800842041648202,
               "y": 0.4002786010408927
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           }
         ],
@@ -14556,8 +14556,8 @@
       "side": "top",
       "fields": {
         "value": "1u VCI",
-        "description": "1uF (105) ±10% 25V",
-        "mfr": "SAMSUNG(三星)",
+        "description": "1uF (105) \u00b110% 25V",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0603",
         "basic": false
       }
@@ -14685,7 +14685,7 @@
               "x": 1.0801858010411707,
               "y": 0.3997960000000176
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -14702,7 +14702,7 @@
               "x": 1.080185800000001,
               "y": -0.40020240000003104
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -14719,7 +14719,7 @@
               "x": -1.0800842000000266,
               "y": -0.3997452010411998
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -14736,7 +14736,7 @@
               "x": -1.0800842041648202,
               "y": 0.4002786010408927
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           }
         ],
@@ -14805,8 +14805,8 @@
       "side": "top",
       "fields": {
         "value": "1u VDD",
-        "description": "1uF (105) ±10% 25V",
-        "mfr": "SAMSUNG(三星)",
+        "description": "1uF (105) \u00b110% 25V",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0603",
         "basic": false
       }
@@ -14934,7 +14934,7 @@
               "x": 1.0801858010411707,
               "y": 0.3997960000000176
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -14951,7 +14951,7 @@
               "x": 1.080185800000001,
               "y": -0.40020240000003104
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -14968,7 +14968,7 @@
               "x": -1.0800842000000266,
               "y": -0.3997452010411998
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -14985,7 +14985,7 @@
               "x": -1.0800842041648202,
               "y": 0.4002786010408927
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           }
         ],
@@ -15054,8 +15054,8 @@
       "side": "top",
       "fields": {
         "value": "1u VCOM",
-        "description": "1uF (105) ±10% 25V",
-        "mfr": "SAMSUNG(三星)",
+        "description": "1uF (105) \u00b110% 25V",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0603",
         "basic": false
       }
@@ -15278,7 +15278,7 @@
       "fields": {
         "value": "SS34",
         "description": "SS34",
-        "mfr": "MDD(辰达半导体)",
+        "mfr": "MDD(\u8fb0\u8fbe\u534a\u5bfc\u4f53)",
         "package": "SMA_L4.3-W2.6-LS5.2-RD",
         "basic": true
       }
@@ -15406,7 +15406,7 @@
               "x": 1.0801858010411707,
               "y": 0.3997960000000176
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -15423,7 +15423,7 @@
               "x": 1.080185800000001,
               "y": -0.40020240000003104
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -15440,7 +15440,7 @@
               "x": -1.0800842000000266,
               "y": -0.3997452010411998
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -15457,7 +15457,7 @@
               "x": -1.0800842041648202,
               "y": 0.4002786010408927
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           }
         ],
@@ -15526,8 +15526,8 @@
       "side": "top",
       "fields": {
         "value": "1u REG",
-        "description": "1uF (105) ±10% 25V",
-        "mfr": "SAMSUNG(三星)",
+        "description": "1uF (105) \u00b110% 25V",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0603",
         "basic": false
       }
@@ -15655,7 +15655,7 @@
               "x": 1.0801858010411707,
               "y": 0.3997960000000176
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -15672,7 +15672,7 @@
               "x": 1.080185800000001,
               "y": -0.40020240000003104
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -15689,7 +15689,7 @@
               "x": -1.0800842000000266,
               "y": -0.3997452010411998
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           },
           {
@@ -15706,7 +15706,7 @@
               "x": -1.0800842041648202,
               "y": 0.4002786010408927
             },
-            "cw": false,
+            "cw": true,
             "width": 0.254
           }
         ],
@@ -15776,7 +15776,7 @@
       "fields": {
         "value": "100n MIC",
         "description": "",
-        "mfr": "YAGEO(国巨)",
+        "mfr": "YAGEO(\u56fd\u5de8)",
         "package": "C0603",
         "basic": false
       }
@@ -15956,8 +15956,8 @@
       "side": "top",
       "fields": {
         "value": "100k SD",
-        "description": "100KΩ (1003) ±1%",
-        "mfr": "UNI-ROYAL(厚声)",
+        "description": "100K\u03a9 (1003) \u00b11%",
+        "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
         "basic": true
       }
@@ -16401,7 +16401,7 @@
       "fields": {
         "value": "FPC6 TOUCH",
         "description": "",
-        "mfr": "XUNPU(讯普)",
+        "mfr": "XUNPU(\u8baf\u666e)",
         "package": "FPC-SMD_6P-P0.50_FPC-05FB-6PH20",
         "basic": false
       }
@@ -16845,7 +16845,7 @@
       "fields": {
         "value": "FPC6 FRONTLIGHT",
         "description": "",
-        "mfr": "XUNPU(讯普)",
+        "mfr": "XUNPU(\u8baf\u666e)",
         "package": "FPC-SMD_6P-P0.50_FPC-05FB-6PH20",
         "basic": false
       }
@@ -16973,7 +16973,7 @@
               "x": 1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -16990,7 +16990,7 @@
               "x": 1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -17007,7 +17007,7 @@
               "x": -1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           },
           {
@@ -17024,7 +17024,7 @@
               "x": -1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           }
         ],
@@ -17094,7 +17094,7 @@
       "fields": {
         "value": "4u7 TP_RST",
         "description": "",
-        "mfr": "SAMSUNG(三星)",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
         "basic": false
       }
@@ -17472,7 +17472,7 @@
       "fields": {
         "value": "SGM3732 W",
         "description": "",
-        "mfr": "SGMICRO(圣邦微)",
+        "mfr": "SGMICRO(\u5723\u90a6\u5fae)",
         "package": "TSOT-23-6_L2.9-W1.6-P0.95-LS2.8-BR",
         "basic": false
       }
@@ -17600,7 +17600,7 @@
               "x": 1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -17617,7 +17617,7 @@
               "x": 1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -17634,7 +17634,7 @@
               "x": -1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           },
           {
@@ -17651,7 +17651,7 @@
               "x": -1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           }
         ],
@@ -17721,7 +17721,7 @@
       "fields": {
         "value": "4u7 VIN",
         "description": "",
-        "mfr": "SAMSUNG(三星)",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
         "basic": false
       }
@@ -17990,7 +17990,7 @@
       "fields": {
         "value": "10uH",
         "description": "",
-        "mfr": "SHOU HAN(首韩)",
+        "mfr": "SHOU HAN(\u9996\u97e9)",
         "package": "IND-SMD_L5.8-W5.2",
         "basic": false
       }
@@ -18213,7 +18213,7 @@
       "fields": {
         "value": "SS34",
         "description": "SS34",
-        "mfr": "MDD(辰达半导体)",
+        "mfr": "MDD(\u8fb0\u8fbe\u534a\u5bfc\u4f53)",
         "package": "SMA_L4.3-W2.6-LS5.2-RD",
         "basic": true
       }
@@ -18341,7 +18341,7 @@
               "x": 1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -18358,7 +18358,7 @@
               "x": 1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -18375,7 +18375,7 @@
               "x": -1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           },
           {
@@ -18392,7 +18392,7 @@
               "x": -1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           }
         ],
@@ -18461,8 +18461,8 @@
       "side": "top",
       "fields": {
         "value": "1u 50V",
-        "description": "1uF (105) ±10% 50V",
-        "mfr": "SAMSUNG(三星)",
+        "description": "1uF (105) \u00b110% 50V",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
         "basic": true
       }
@@ -19021,7 +19021,7 @@
       "fields": {
         "value": "SGM3732 C",
         "description": "",
-        "mfr": "SGMICRO(圣邦微)",
+        "mfr": "SGMICRO(\u5723\u90a6\u5fae)",
         "package": "TSOT-23-6_L2.9-W1.6-P0.95-LS2.8-BR",
         "basic": false
       }
@@ -19149,7 +19149,7 @@
               "x": 1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -19166,7 +19166,7 @@
               "x": 1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -19183,7 +19183,7 @@
               "x": -1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           },
           {
@@ -19200,7 +19200,7 @@
               "x": -1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           }
         ],
@@ -19270,7 +19270,7 @@
       "fields": {
         "value": "4u7 VIN",
         "description": "",
-        "mfr": "SAMSUNG(三星)",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
         "basic": false
       }
@@ -19539,7 +19539,7 @@
       "fields": {
         "value": "10uH",
         "description": "",
-        "mfr": "SHOU HAN(首韩)",
+        "mfr": "SHOU HAN(\u9996\u97e9)",
         "package": "IND-SMD_L5.8-W5.2",
         "basic": false
       }
@@ -19762,7 +19762,7 @@
       "fields": {
         "value": "SS34",
         "description": "SS34",
-        "mfr": "MDD(辰达半导体)",
+        "mfr": "MDD(\u8fb0\u8fbe\u534a\u5bfc\u4f53)",
         "package": "SMA_L4.3-W2.6-LS5.2-RD",
         "basic": true
       }
@@ -19890,7 +19890,7 @@
               "x": 1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -19907,7 +19907,7 @@
               "x": 1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": true,
+            "cw": false,
             "width": 0.1524
           },
           {
@@ -19924,7 +19924,7 @@
               "x": -1.8111977999999254,
               "y": -0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           },
           {
@@ -19941,7 +19941,7 @@
               "x": -1.8111977999999254,
               "y": 0.7512049999998799
             },
-            "cw": false,
+            "cw": true,
             "width": 0.1524
           }
         ],
@@ -20010,8 +20010,8 @@
       "side": "top",
       "fields": {
         "value": "1u 50V",
-        "description": "1uF (105) ±10% 50V",
-        "mfr": "SAMSUNG(三星)",
+        "description": "1uF (105) \u00b110% 50V",
+        "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
         "basic": true
       }
@@ -21486,7 +21486,7 @@
       "fields": {
         "value": "ICS-43434",
         "description": "",
-        "mfr": "TDK InvenSense(应美盛)",
+        "mfr": "TDK InvenSense(\u5e94\u7f8e\u76db)",
         "package": "MIC-SMD_6P-L3.5-W2.7-P0.90-BL",
         "basic": false
       }
@@ -21896,7 +21896,7 @@
       "fields": {
         "value": "9.1nH",
         "description": "",
-        "mfr": "muRata(村田)",
+        "mfr": "muRata(\u6751\u7530)",
         "package": "L0603",
         "basic": false
       }
@@ -22125,7 +22125,7 @@
       "fields": {
         "value": "3.9nH",
         "description": "",
-        "mfr": "muRata(村田)",
+        "mfr": "muRata(\u6751\u7530)",
         "package": "L0402",
         "basic": false
       }
@@ -22381,8 +22381,8 @@
       "side": "top",
       "fields": {
         "value": "u.FL GNSS",
-        "description": "3310472210，IPE-X IPX，",
-        "mfr": "HRS(广濑)",
+        "description": "3310472210\uff0cIPE-X IPX\uff0c",
+        "mfr": "HRS(\u5e7f\u6fd1)",
         "package": "ANT-SMD_UFL-R-SMT-1-10",
         "basic": false
       }
@@ -23086,7 +23086,7 @@
         "x": 33.5,
         "y": 86.5
       },
-      "text": "PWR VIA VIN — NEVER USB-C + VIN TOGETHER",
+      "text": "PWR VIA VIN \u2014 NEVER USB-C + VIN TOGETHER",
       "height": 1,
       "rotation": 90
     },
