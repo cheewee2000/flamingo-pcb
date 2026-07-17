@@ -9,7 +9,7 @@
  * highlight and the status bar update unconditionally on every state change.
  */
 
-import type { LayerId } from '@flamingo/engine';
+import type { ComponentInst, LayerId, MountingHole, Op } from '@flamingo/engine';
 import { copperLayersOf } from '@flamingo/engine';
 import {
   DIMS_KEY,
@@ -55,6 +55,8 @@ export interface PanelActions {
   focusComponent(refdes: string): void;
   /** Called after /api/open succeeds: refetch the board and refit the view. */
   boardOpened(): void;
+  /** Send a board-mutating op over the websocket (property edits). */
+  sendOp(op: Op): void;
 }
 
 // Swatch colors for the two label pseudo-layers, matching the overlay colors in
@@ -240,31 +242,88 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
   }
 
   // ---------------------------------------------------------------------------
-  // Properties: key/value rows for the current edit selection.
+  // Properties: rows for the current edit selection. Components and holes are
+  // EDITABLE — each input commits an op on change (blur/Enter); the board
+  // update that comes back over the websocket rebuilds the panel.
   // ---------------------------------------------------------------------------
+
+  function staticRow(k: string, v: string): HTMLElement {
+    const div = document.createElement('div');
+    div.className = 'props-row';
+    const kSpan = document.createElement('span');
+    kSpan.textContent = k;
+    const vSpan = document.createElement('span');
+    vSpan.textContent = v;
+    vSpan.title = v;
+    div.append(kSpan, vSpan);
+    return div;
+  }
+
+  function editRow(k: string, input: HTMLElement): HTMLElement {
+    const div = document.createElement('div');
+    div.className = 'props-row props-edit';
+    const kSpan = document.createElement('span');
+    kSpan.textContent = k;
+    div.append(kSpan, input);
+    return div;
+  }
+
+  function textRow(k: string, value: string, commit: (v: string) => void): HTMLElement {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = value;
+    input.addEventListener('change', () => commit(input.value));
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') input.blur();
+    });
+    return editRow(k, input);
+  }
+
+  function numberRow(k: string, value: number, commit: (v: number) => void, step = 0.1): HTMLElement {
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = String(step);
+    input.value = String(Math.round(value * 1000) / 1000);
+    input.addEventListener('change', () => {
+      const v = parseFloat(input.value);
+      if (Number.isFinite(v)) commit(v);
+    });
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') input.blur();
+    });
+    return editRow(k, input);
+  }
+
+  function selectRow(k: string, value: string, options: string[], commit: (v: string) => void): HTMLElement {
+    const sel = document.createElement('select');
+    for (const o of options) {
+      const opt = document.createElement('option');
+      opt.value = o;
+      opt.textContent = o;
+      opt.selected = o === value;
+      sel.appendChild(opt);
+    }
+    sel.addEventListener('change', () => commit(sel.value));
+    return editRow(k, sel);
+  }
+
+  function checkboxRow(k: string, checked: boolean, commit: (v: boolean) => void): HTMLElement {
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = checked;
+    input.addEventListener('change', () => commit(input.checked));
+    return editRow(k, input);
+  }
 
   function propsRows(state: AppState): Array<[string, string]> | null {
     const board = state.board;
     const sel = state.selection;
     if (!board || !sel) return null;
     switch (sel.kind) {
-      case 'component': {
-        const c = board.components.find((x) => x.refdes === sel.refdes);
-        if (!c) return null;
-        const rows: Array<[string, string]> = [['refdes', c.refdes]];
-        if (c.fields.value) rows.push(['value', c.fields.value]);
-        if (c.fields.package) rows.push(['package', c.fields.package]);
-        if (c.footprint.name && c.footprint.name !== c.fields.package) rows.push(['footprint', c.footprint.name]);
-        if (c.lcsc) rows.push(['lcsc', c.lcsc]);
-        if (c.fields.mfr) rows.push(['mfr', c.fields.mfr]);
-        rows.push(
-          ['side', c.side],
-          ['at', `${c.at.x.toFixed(2)}, ${c.at.y.toFixed(2)} mm`],
-          ['rotation', `${c.rotation}°`],
-          ['pads', String(c.footprint.pads.length)],
-        );
-        return rows;
-      }
+      case 'component':
+        return null; // editable form built by buildComponentProps
+      case 'hole':
+        return null; // editable form built by buildHoleProps
       case 'track': {
         const t = board.tracks.find((x) => x.id === sel.id);
         if (!t) return null;
@@ -296,19 +355,6 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
       }
       case 'keepout':
         return [['type', 'keepout'], ['id', sel.id]];
-      case 'hole': {
-        const h = board.holes.find((x) => x.id === sel.id);
-        if (!h) return null;
-        const isSlotHole = (h.slotLength ?? 0) > h.drill;
-        const rows: Array<[string, string]> = [
-          ['type', `${h.plated ? 'plated ' : ''}${isSlotHole ? 'slot' : 'hole'}`],
-          ['at', `${h.at.x.toFixed(2)}, ${h.at.y.toFixed(2)} mm`],
-        ];
-        if (isSlotHole) rows.push(['slot', `${h.slotLength} × ${h.drill} mm`]);
-        else rows.push(['drill', `${h.drill} mm`]);
-        if (h.plated) rows.push(['pad', `${h.padDiameter} mm`]);
-        return rows;
-      }
       case 'silk': {
         const s = board.silk.find((x) => x.id === sel.id);
         if (!s) return null;
@@ -352,6 +398,22 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
       els.propsPanel.append(head, list, hint);
       return;
     }
+    const sel = state.selection;
+    const board = state.board;
+    if (sel && board && sel.kind === 'component') {
+      const c = board.components.find((x) => x.refdes === sel.refdes);
+      if (c) {
+        buildComponentProps(c);
+        return;
+      }
+    }
+    if (sel && board && sel.kind === 'hole') {
+      const h = board.holes.find((x) => x.id === sel.id);
+      if (h) {
+        buildHoleProps(h);
+        return;
+      }
+    }
     const rows = propsRows(state);
     if (!rows) {
       const hint = document.createElement('div');
@@ -360,41 +422,60 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
       els.propsPanel.appendChild(hint);
       return;
     }
-    for (const [k, v] of rows) {
-      const div = document.createElement('div');
-      div.className = 'props-row';
-      const kSpan = document.createElement('span');
-      kSpan.textContent = k;
-      const vSpan = document.createElement('span');
-      vSpan.textContent = v;
-      vSpan.title = v;
-      div.append(kSpan, vSpan);
-      els.propsPanel.appendChild(div);
+    for (const [k, v] of rows) els.propsPanel.appendChild(staticRow(k, v));
+  }
+
+  function buildComponentProps(c: ComponentInst): void {
+    const refdes = c.refdes;
+    els.propsPanel.append(
+      staticRow('refdes', refdes),
+      textRow('value', c.fields.value ?? '', (v) => actions.sendOp({ op: 'setComponentFields', refdes, fields: { value: v } })),
+      numberRow('x mm', c.at.x, (v) => actions.sendOp({ op: 'moveComponent', refdes, at: { x: v, y: c.at.y } })),
+      numberRow('y mm', c.at.y, (v) => actions.sendOp({ op: 'moveComponent', refdes, at: { x: c.at.x, y: v } })),
+      numberRow('rot °', c.rotation, (v) => actions.sendOp({ op: 'moveComponent', refdes, rotation: v }), 45),
+      selectRow('side', c.side, ['top', 'bottom'], (v) => actions.sendOp({ op: 'moveComponent', refdes, side: v as 'top' | 'bottom' })),
+      textRow('role', c.fields.role ?? '', (v) => actions.sendOp({ op: 'setComponentFields', refdes, fields: { role: v } })),
+    );
+    if (c.fields.package) els.propsPanel.appendChild(staticRow('package', c.fields.package));
+    if (c.lcsc) els.propsPanel.appendChild(staticRow('lcsc', c.lcsc));
+    if (c.fields.mfr) els.propsPanel.appendChild(staticRow('mfr', c.fields.mfr));
+    els.propsPanel.appendChild(staticRow('pads', String(c.footprint.pads.length)));
+    if (c.fields.description && c.fields.description !== c.fields.value) {
+      const desc = document.createElement('div');
+      desc.className = 'props-desc';
+      desc.textContent = c.fields.description;
+      els.propsPanel.appendChild(desc);
     }
-    const sel = state.selection;
-    if (sel && sel.kind === 'component') {
-      const c = state.board?.components.find((x) => x.refdes === sel.refdes);
-      // Plain-English "what this part is for on this board" (fields.role),
-      // then the LCSC catalog text for what the part is (fields.description).
-      if (c?.fields.role) {
-        const role = document.createElement('div');
-        role.className = 'props-role';
-        role.textContent = c.fields.role;
-        els.propsPanel.appendChild(role);
-      }
-      if (c?.fields.description && c.fields.description !== c.fields.value) {
-        const desc = document.createElement('div');
-        desc.className = 'props-desc';
-        desc.textContent = c.fields.description;
-        els.propsPanel.appendChild(desc);
-      }
-      const center = document.createElement('button');
-      center.type = 'button';
-      center.className = 'props-center';
-      center.textContent = 'center in view →';
-      center.addEventListener('click', () => actions.focusComponent(sel.refdes));
-      els.propsPanel.appendChild(center);
+    const center = document.createElement('button');
+    center.type = 'button';
+    center.className = 'props-center';
+    center.textContent = 'center in view →';
+    center.addEventListener('click', () => actions.focusComponent(refdes));
+    els.propsPanel.appendChild(center);
+  }
+
+  function buildHoleProps(h: MountingHole): void {
+    const id = h.id;
+    const isSlotHole = (h.slotLength ?? 0) > h.drill;
+    const edit = (patch: Partial<Omit<MountingHole, 'id'>>): void => actions.sendOp({ op: 'editHole', id, hole: patch });
+    els.propsPanel.append(
+      staticRow('type', `${h.plated ? 'plated ' : ''}${isSlotHole ? 'slot' : 'hole'}`),
+      numberRow('x mm', h.at.x, (v) => edit({ at: { x: v, y: h.at.y } })),
+      numberRow('y mm', h.at.y, (v) => edit({ at: { x: h.at.x, y: v } })),
+      numberRow(isSlotHole ? 'width mm' : 'drill mm', h.drill, (v) => {
+        edit(h.plated ? { drill: v } : { drill: v, padDiameter: v });
+      }),
+      numberRow('slot len mm', h.slotLength ?? 0, (v) => edit({ slotLength: v }), 0.5),
+      numberRow('rot °', h.rotation ?? 0, (v) => edit({ rotation: v }), 45),
+      checkboxRow('plated', h.plated, (v) => edit({ plated: v })),
+    );
+    if (h.plated) {
+      els.propsPanel.appendChild(numberRow('pad Ø mm', h.padDiameter, (v) => edit({ padDiameter: v })));
     }
+    const hint = document.createElement('div');
+    hint.className = 'props-desc';
+    hint.textContent = 'slot len 0 = plain round hole';
+    els.propsPanel.appendChild(hint);
   }
 
   function updateSelection(state: AppState): void {

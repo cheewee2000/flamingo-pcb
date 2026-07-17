@@ -34,6 +34,8 @@ export type Op =
     }
   | { op: 'moveComponent'; refdes: string; at?: Point; rotation?: number; side?: 'top' | 'bottom' }
   | { op: 'moveComponents'; moves: Array<{ refdes: string; at: Point }> }
+  | { op: 'setComponentFields'; refdes: string; fields: Partial<ComponentInst['fields']> }
+  | { op: 'editHole'; id: string; hole: Partial<Omit<MountingHole, 'id'>> }
   | { op: 'removeComponent'; refdes: string }
   | { op: 'setOutline'; outline: PathSeg[] }
   | { op: 'addKeepout'; keepout: Omit<Keepout, 'id'> }
@@ -155,6 +157,27 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
       for (const move of op.moves) {
         const comp = board.components.find((c) => c.refdes === move.refdes)!;
         comp.at = move.at;
+      }
+      return ok(board, createdIds);
+    }
+
+    case 'setComponentFields': {
+      const comp = board.components.find((c) => c.refdes === op.refdes);
+      if (!comp) return err(`Unknown refdes "${op.refdes}"`);
+      comp.fields = { ...comp.fields, ...op.fields };
+      return ok(board, createdIds);
+    }
+
+    case 'editHole': {
+      const hole = board.holes.find((h) => h.id === op.id);
+      if (!hole) return err(`No hole with id "${op.id}"`);
+      const patch = op.hole;
+      if (patch.drill !== undefined && !(patch.drill > 0)) return err('drill must be > 0');
+      Object.assign(hole, patch);
+      // A slotLength at or below the drill means "plain round hole".
+      if (hole.slotLength !== undefined && hole.slotLength <= hole.drill) {
+        delete hole.slotLength;
+        delete hole.rotation;
       }
       return ok(board, createdIds);
     }

@@ -136,7 +136,7 @@ initPanels(
     saveBtn: document.getElementById('save-btn') as HTMLButtonElement,
   },
   toolManager,
-  { focusComponent, boardOpened },
+  { focusComponent, boardOpened, sendOp: (op) => wsApi.sendOp(op) },
 );
 
 const renderer = createRenderer(canvas, () => store.get(), (ctx2d, view, state) => {

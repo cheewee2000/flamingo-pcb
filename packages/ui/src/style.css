@@ -597,6 +597,31 @@ body {
 
 /* ---- Selection properties ---- */
 
+.props-edit input[type='text'],
+.props-edit input[type='number'],
+.props-edit select {
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 1px 4px;
+  width: 110px;
+  text-align: right;
+}
+.props-edit input[type='text'] {
+  text-align: left;
+}
+.props-edit input:focus,
+.props-edit select:focus {
+  outline: none;
+  border-color: var(--ink);
+}
+.props-edit input[type='checkbox'] {
+  accent-color: var(--ink);
+}
+
 .props-empty {
   color: var(--ink-faint);
   font-style: italic;
