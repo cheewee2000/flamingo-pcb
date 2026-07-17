@@ -83,6 +83,40 @@ describe('fillZone', () => {
     expect(inFill(fill, { x: 5, y: 3 })).toBe(true);
   });
 
+  it('excludes a clearance-buffered stadium around a slotted mounting hole', () => {
+    let b = baseBoard();
+    // Slot centered at (5,5), drill 1, slotLength 5 -> centerline (3,5)..(7,5).
+    // Exclusion radius = padDiameter/2 (0.5) + clearance (0.5) = 1.0mm.
+    b = apply(b, {
+      op: 'addHole',
+      hole: { at: { x: 5, y: 5 }, drill: 1, padDiameter: 1, plated: false, slotLength: 5 },
+    });
+    const fill = fillZone(b, zoneOf(b));
+    expect(fill.length).toBeGreaterThan(0);
+    // on the centerline -> excluded
+    expect(inFill(fill, { x: 5, y: 5 })).toBe(false);
+    // within the 1.0mm band -> excluded
+    expect(inFill(fill, { x: 5, y: 5.5 })).toBe(false);
+    // along the long axis, 0.5mm past the slot end (3,5) -> excluded (proves the
+    // obstacle is an elongated capsule, not a circle around the center)
+    expect(inFill(fill, { x: 2.5, y: 5 })).toBe(false);
+    // clear of the band, off the side -> filled
+    expect(inFill(fill, { x: 5, y: 6.5 })).toBe(true);
+    // clear of the band, past the end -> filled
+    expect(inFill(fill, { x: 8.5, y: 5 })).toBe(true);
+  });
+
+  it('does not subtract a round mounting hole (existing behavior preserved)', () => {
+    let b = baseBoard();
+    b = apply(b, {
+      op: 'addHole',
+      hole: { at: { x: 5, y: 5 }, drill: 3, padDiameter: 5, plated: true },
+    });
+    const fill = fillZone(b, zoneOf(b));
+    // A plain round mounting hole is not a pour obstacle -> copper fills over it.
+    expect(inFill(fill, { x: 5, y: 5 })).toBe(true);
+  });
+
   it('does not subtract a same-net track', () => {
     let b = baseBoard();
     b = apply(b, {

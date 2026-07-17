@@ -507,6 +507,51 @@ describe('runDRC — DRC_EPSILON boundary behavior', () => {
     expect(violationsOf(b, 'hole-to-hole')).toHaveLength(1);
   });
 
+  it('hole-to-hole: a slot is a capsule — a via near its edge violates even when far from its center', () => {
+    const b = base();
+    // Slot centerline runs (-4,0)..(4,0) (drill 2, slotLength 10 along +x).
+    b.holes.push({ id: 'S1', at: { x: 0, y: 0 }, drill: 2, padDiameter: 2, plated: false, slotLength: 10 });
+    b.nets.push({ name: 'N1', class: 'default', pins: [] });
+    // Via at (3,1.5): 3.35mm from the slot center but only 1.5mm from the
+    // centerline. Capsule gap = 1.5 - (2+0.3)/2 = 0.35 < 0.5 -> violates.
+    // A center-distance check (3.35 - 1.15 = 2.2) would miss this.
+    b.vias.push({ id: 'V1', at: { x: 3, y: 1.5 }, drill: 0.3, diameter: 0.6, net: 'N1' });
+
+    const violations = violationsOf(b, 'hole-to-hole');
+    expect(violations).toHaveLength(1);
+    expect(violations[0].items).toEqual(expect.arrayContaining(['S1', 'V1']));
+  });
+
+  it('hole-to-hole: a via clear of the slot capsule does NOT violate', () => {
+    const b = base();
+    b.holes.push({ id: 'S1', at: { x: 0, y: 0 }, drill: 2, padDiameter: 2, plated: false, slotLength: 10 });
+    b.nets.push({ name: 'N1', class: 'default', pins: [] });
+    // Via at (3,2.0): centerline gap = 2.0 - 1.15 = 0.85 > 0.5 -> clear.
+    b.vias.push({ id: 'V1', at: { x: 3, y: 2.0 }, drill: 0.3, diameter: 0.6, net: 'N1' });
+
+    expect(violationsOf(b, 'hole-to-hole')).toHaveLength(0);
+  });
+
+  it('hole-to-hole: slot rotation orients the capsule long axis', () => {
+    const b = base();
+    // Same slot rotated 90deg: centerline now runs (0,-4)..(0,4) along +y.
+    b.holes.push({
+      id: 'S1',
+      at: { x: 0, y: 0 },
+      drill: 2,
+      padDiameter: 2,
+      plated: false,
+      slotLength: 10,
+      rotation: 90,
+    });
+    b.nets.push({ name: 'N1', class: 'default', pins: [] });
+    // Via at (1.5,3): mirror of the violating case, now 1.5mm from the rotated
+    // centerline -> gap 0.35 -> violates.
+    b.vias.push({ id: 'V1', at: { x: 1.5, y: 3 }, drill: 0.3, diameter: 0.6, net: 'N1' });
+
+    expect(violationsOf(b, 'hole-to-hole')).toHaveLength(1);
+  });
+
   it('copper-to-edge: zone exactly at the 0.3mm minimum does NOT violate', () => {
     const b = base();
     b.outline = rectOutline(10, 10);

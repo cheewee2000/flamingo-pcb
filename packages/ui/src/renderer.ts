@@ -35,6 +35,9 @@ import {
   outlineToPolygon,
   copperLayersOf,
   padCopperLayers,
+  isSlot,
+  holeSlotCenterline,
+  capsulePolygon,
 } from '@flamingo/engine';
 import type { AppState, ViewTransform } from './state.js';
 import { RATSNEST_KEY, SILK_KEY } from './state.js';
@@ -374,7 +377,15 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
     fillCircle(ctx, view, v.at, v.drill / 2, HOLE_COLOR);
   }
   for (const h of board.holes) {
-    if (h.plated) {
+    if (isSlot(h)) {
+      const { start, end } = holeSlotCenterline(h);
+      if (h.plated) {
+        fillPolygon(ctx, view, capsulePolygon(start, end, h.padDiameter / 2), THROUGH_PAD_COLOR);
+        fillPolygon(ctx, view, capsulePolygon(start, end, h.drill / 2), HOLE_COLOR);
+      } else {
+        strokePolygon(ctx, view, capsulePolygon(start, end, h.drill / 2), EDGE_COLOR, 0.1);
+      }
+    } else if (h.plated) {
       fillCircle(ctx, view, h.at, h.padDiameter / 2, THROUGH_PAD_COLOR);
       fillCircle(ctx, view, h.at, h.drill / 2, HOLE_COLOR);
     } else {

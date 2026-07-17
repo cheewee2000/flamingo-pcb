@@ -288,6 +288,26 @@ describe('renderSVG - arc rendering (footprint silk, mirror)', () => {
   });
 });
 
+describe('renderSVG - slotted mounting hole', () => {
+  it('draws a plated slot as annulus + drill stadium polygons, not circles', () => {
+    const b = newBoard('slot', 2);
+    b.holes = [{ id: 'H1', at: { x: 5, y: 5 }, drill: 1, padDiameter: 2, plated: true, slotLength: 6 }];
+    const svg = renderSVG(b);
+    // Annulus stadium (through-pad color) and drill stadium (hole color) as polygons.
+    expect(svg).toMatch(/<polygon points="[^"]*" fill="#B8B85A"\/>/);
+    expect(svg).toMatch(/<polygon points="[^"]*" fill="#222"\/>/);
+    // No round hole circle for this slot (a round plated hole would emit circles).
+    expect(svg).not.toContain('<circle');
+  });
+
+  it('draws an unplated slot as a stroked stadium outline', () => {
+    const b = newBoard('slot', 2);
+    b.holes = [{ id: 'H1', at: { x: 5, y: 5 }, drill: 1, padDiameter: 1, plated: false, slotLength: 6 }];
+    const svg = renderSVG(b);
+    expect(svg).toMatch(/<polygon points="[^"]*" fill="none" stroke="#D0D2CD" stroke-width="0.1"\/>/);
+  });
+});
+
 describe('renderSVG - full fixture snapshot', () => {
   it('matches the recorded SVG for the fixture board', () => {
     const svg = renderSVG(fixtureBoard());

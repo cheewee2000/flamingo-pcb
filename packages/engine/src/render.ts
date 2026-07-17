@@ -15,6 +15,9 @@ import {
   boardBBox,
   componentTransformPoints,
   componentTransformRotation,
+  isSlot,
+  holeSlotCenterline,
+  capsulePolygon,
 } from './geometry.js';
 import { copperLayersOf, padCopperLayers } from './layers.js';
 import type { RatLine } from './connectivity.js';
@@ -219,10 +222,20 @@ export function renderSVG(b: Board, opts: RenderOpts = {}): string {
     parts.push(`<circle cx="${fmt(p.x)}" cy="${fmt(p.y)}" r="${fmt(v.drill / 2)}" fill="${HOLE_COLOR}"/>`);
   }
 
-  // ---- mounting holes ----
+  // ---- mounting holes (round holes flash circles; milled slots draw stadiums) ----
   for (const h of b.holes) {
     const p = svg(h.at);
-    if (h.plated) {
+    if (isSlot(h)) {
+      const { start, end } = holeSlotCenterline(h);
+      const annulus = polygonPoints(capsulePolygon(start, end, h.padDiameter / 2));
+      const drill = polygonPoints(capsulePolygon(start, end, h.drill / 2));
+      if (h.plated) {
+        parts.push(`<polygon points="${annulus}" fill="${THROUGH_PAD_COLOR}"/>`);
+        parts.push(`<polygon points="${drill}" fill="${HOLE_COLOR}"/>`);
+      } else {
+        parts.push(`<polygon points="${drill}" fill="none" stroke="${EDGE_COLOR}" stroke-width="0.1"/>`);
+      }
+    } else if (h.plated) {
       parts.push(
         `<circle cx="${fmt(p.x)}" cy="${fmt(p.y)}" r="${fmt(h.padDiameter / 2)}" fill="${THROUGH_PAD_COLOR}"/>`,
       );

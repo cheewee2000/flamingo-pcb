@@ -677,17 +677,39 @@ export function createMcpServer(ctx: McpContext): McpServer {
   server.registerTool(
     'add_mounting_hole',
     {
-      description: 'Add a mounting hole.',
+      description:
+        'Add a mounting hole. Provide slotLength (> drill) to mill a slot (G85) instead of a round hole -- e.g. a slot to pass a display flex cable through the board.',
       inputSchema: {
         x: z.number().describe('X position in mm'),
         y: z.number().describe('Y position in mm'),
-        drill: z.number().describe('Drill diameter in mm'),
+        drill: z.number().describe('Drill diameter in mm (the slot swept width)'),
         padDiameter: z.number().describe('Pad/annular ring diameter in mm (>= drill)'),
         plated: z.boolean().optional().describe('Plated (copper-lined) hole (default true)'),
+        slotLength: z
+          .number()
+          .optional()
+          .describe('Slot total length in mm along the rotated long axis; > drill makes a milled slot (G85)'),
+        rotation: z
+          .number()
+          .optional()
+          .describe('Slot long-axis orientation in degrees CCW (0 = along +x). Default 0.'),
       },
     },
-    ({ x, y, drill, padDiameter, plated }) => {
-      const hole: Omit<MountingHole, 'id'> = { at: { x, y }, drill, padDiameter, plated: plated ?? true };
+    ({ x, y, drill, padDiameter, plated, slotLength, rotation }) => {
+      if (padDiameter < drill) {
+        return errorResult(`padDiameter (${padDiameter}) must be >= drill (${drill})`);
+      }
+      if (slotLength !== undefined && slotLength <= drill) {
+        return errorResult(`slotLength (${slotLength}) must be > drill (${drill}) to make a slot`);
+      }
+      const hole: Omit<MountingHole, 'id'> = {
+        at: { x, y },
+        drill,
+        padDiameter,
+        plated: plated ?? true,
+        ...(slotLength !== undefined ? { slotLength } : {}),
+        ...(rotation !== undefined ? { rotation } : {}),
+      };
       const op: Op = { op: 'addHole', hole };
       return applyAndReport(ctx, op, (result) => `Added mounting hole ${result.createdIds[0]} at (${fmt(x)}, ${fmt(y)})`);
     },

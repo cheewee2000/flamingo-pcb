@@ -288,6 +288,33 @@ describe('MCP endpoint', () => {
     expect(doc.board.holes).toHaveLength(0);
   });
 
+  it('add_mounting_hole accepts slotLength + rotation and validates slotLength > drill', async () => {
+    const slot = await client.callTool({
+      name: 'add_mounting_hole',
+      arguments: { x: 2, y: 3, drill: 2, padDiameter: 2, plated: false, slotLength: 15, rotation: 90 },
+    });
+    expect(slot.isError).toBeFalsy();
+    expect(doc.board.holes).toHaveLength(1);
+    expect(doc.board.holes[0]!.slotLength).toBe(15);
+    expect(doc.board.holes[0]!.rotation).toBe(90);
+
+    // slotLength must exceed drill to be a slot.
+    const bad = await client.callTool({
+      name: 'add_mounting_hole',
+      arguments: { x: 0, y: 0, drill: 2, padDiameter: 2, slotLength: 2 },
+    });
+    expect(bad.isError).toBe(true);
+    expect(doc.board.holes).toHaveLength(1); // unchanged
+
+    // padDiameter must be >= drill.
+    const bad2 = await client.callTool({
+      name: 'add_mounting_hole',
+      arguments: { x: 0, y: 0, drill: 3, padDiameter: 2 },
+    });
+    expect(bad2.isError).toBe(true);
+    expect(doc.board.holes).toHaveLength(1); // unchanged
+  });
+
   it('add_track adds a straight track on a net, defaulting width from the net class', async () => {
     await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R1', x: 0, y: 0 } });
     await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R2', x: 5, y: 0 } });

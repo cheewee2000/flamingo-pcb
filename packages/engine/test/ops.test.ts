@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyOp } from '../src/index.js';
+import { applyOp, serializeBoard, parseBoard } from '../src/index.js';
 import type { Op } from '../src/index.js';
 import { newBoard } from '../src/index.js';
 import type {
@@ -302,6 +302,24 @@ describe('applyOp', () => {
         expect(result.board.holes).toHaveLength(1);
         expect(result.createdIds).toEqual([result.board.holes[0].id]);
       }
+    });
+
+    it('carries slotLength and rotation through the op and a serialize round-trip', () => {
+      const board = baseBoard();
+      const result = applyOp(board, {
+        op: 'addHole',
+        hole: { at: { x: 2, y: 3 }, drill: 2, padDiameter: 2, plated: false, slotLength: 15, rotation: 90 },
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const hole = result.board.holes[0];
+      expect(hole.slotLength).toBe(15);
+      expect(hole.rotation).toBe(90);
+      // The op log is serialized for persistence + undo/redo, so the slot
+      // fields must survive a serialize -> parse round-trip.
+      const round = parseBoard(serializeBoard(result.board));
+      expect(round.holes[0].slotLength).toBe(15);
+      expect(round.holes[0].rotation).toBe(90);
     });
   });
 
