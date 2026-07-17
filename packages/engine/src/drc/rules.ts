@@ -8,6 +8,17 @@
  * if these are ever suspected stale, re-check that page and update here).
  */
 
+/**
+ * Tolerance (mm) applied to every DRC threshold comparison: a measurement is
+ * only a violation when it falls short by more than this much. Absorbs
+ * float noise and tessellation quantization — e.g. a zone fill's inset band
+ * built from 16-segment disks has a chord error of ≈6µm at r=0.3mm, which
+ * can otherwise land geometry that is exactly at a rule minimum a few µm
+ * under it. 10µm is an order of magnitude below typical fab process
+ * tolerance, so it can't mask a real manufacturability problem.
+ */
+export const DRC_EPSILON = 0.01;
+
 export interface RuleSet {
   id: 'jlcpcb-2l' | 'jlcpcb-4l' | 'jlcpcb-6l';
   minTrackWidth: number;

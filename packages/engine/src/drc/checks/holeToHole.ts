@@ -6,6 +6,7 @@
  */
 import type { Board, Point } from '../../types.js';
 import { dist, padWorld } from '../../geometry.js';
+import { DRC_EPSILON } from '../rules.js';
 import type { RuleSet } from '../rules.js';
 import type { DrcViolation } from '../types.js';
 
@@ -35,7 +36,7 @@ export function check(b: Board, rules: RuleSet): DrcViolation[] {
       const a = drilled[i];
       const c = drilled[j];
       const gap = dist(a.at, c.at) - (a.d + c.d) / 2;
-      if (gap < rules.holeToHole) {
+      if (gap < rules.holeToHole - DRC_EPSILON) {
         violations.push({
           rule: 'hole-to-hole',
           message: `${a.ref} and ${c.ref} hole edge-to-edge spacing ${gap.toFixed(2)}mm is below minimum ${rules.holeToHole.toFixed(2)}mm`,

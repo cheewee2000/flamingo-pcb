@@ -4,13 +4,14 @@
  * minimum, so it is intentionally not checked here.
  */
 import type { Board } from '../../types.js';
+import { DRC_EPSILON } from '../rules.js';
 import type { RuleSet } from '../rules.js';
 import type { DrcViolation } from '../types.js';
 
 export function check(b: Board, rules: RuleSet): DrcViolation[] {
   const violations: DrcViolation[] = [];
   for (const t of b.tracks) {
-    if (t.width < rules.minTrackWidth) {
+    if (t.width < rules.minTrackWidth - DRC_EPSILON) {
       violations.push({
         rule: 'track-width',
         message: `Track ${t.id} (net "${t.net}") width ${t.width.toFixed(2)}mm is below minimum ${rules.minTrackWidth.toFixed(2)}mm`,

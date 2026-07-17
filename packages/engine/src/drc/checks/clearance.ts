@@ -9,6 +9,7 @@
  */
 import type { Board, Point } from '../../types.js';
 import { bboxOf, polyPolyDistance, polyGroupDistance } from '../../geometry.js';
+import { DRC_EPSILON } from '../rules.js';
 import type { RuleSet } from '../rules.js';
 import type { CopperItem, DrcViolation } from '../types.js';
 
@@ -91,7 +92,7 @@ export function check(b: Board, rules: RuleSet, items: CopperItem[]): DrcViolati
       }
 
       const d = itemDistance(a.it, c.it);
-      if (d < required) {
+      if (d < required - DRC_EPSILON) {
         violations.push({
           rule: 'clearance',
           message:

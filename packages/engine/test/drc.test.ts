@@ -383,6 +383,167 @@ describe('runDRC', () => {
 });
 
 // ---------------------------------------------------------------------------
+// DRC_EPSILON: geometry sitting exactly at a rule minimum must not violate
+// (float/tessellation noise tolerance); geometry meaningfully below the
+// minimum (minimum - 0.02, well outside the 0.01mm epsilon) still must.
+// ---------------------------------------------------------------------------
+
+describe('runDRC — DRC_EPSILON boundary behavior', () => {
+  it('clearance: pads exactly at the required 0.2mm clearance do NOT violate', () => {
+    const b = base();
+    b.components.push(makeComponent('R1', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })]));
+    // gap = 1.2 - (0.5 + 0.5) = 0.2, exactly the default net-class clearance.
+    b.components.push(makeComponent('R2', { x: 1.2, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })]));
+    b.nets.push({ name: 'N1', class: 'default', pins: ['R1.1'] });
+    b.nets.push({ name: 'N2', class: 'default', pins: ['R2.1'] });
+
+    expect(violationsOf(b, 'clearance')).toHaveLength(0);
+  });
+
+  it('clearance: pads at 0.18mm (0.2mm minimum - 0.02) DO violate', () => {
+    const b = base();
+    b.components.push(makeComponent('R1', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })]));
+    b.components.push(makeComponent('R2', { x: 1.18, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })]));
+    b.nets.push({ name: 'N1', class: 'default', pins: ['R1.1'] });
+    b.nets.push({ name: 'N2', class: 'default', pins: ['R2.1'] });
+
+    expect(violationsOf(b, 'clearance').length).toBeGreaterThan(0);
+  });
+
+  it('track-width: track exactly at the 0.127mm minimum does NOT violate', () => {
+    const b = base();
+    b.nets.push({ name: 'N1', class: 'default', pins: [] });
+    b.tracks.push({
+      id: 'T1',
+      layer: 'F.Cu',
+      width: 0.127,
+      net: 'N1',
+      seg: { type: 'line', start: { x: 0, y: 0 }, end: { x: 5, y: 0 } },
+    });
+
+    expect(violationsOf(b, 'track-width')).toHaveLength(0);
+  });
+
+  it('track-width: track at 0.107mm (minimum - 0.02) DOES violate', () => {
+    const b = base();
+    b.nets.push({ name: 'N1', class: 'default', pins: [] });
+    b.tracks.push({
+      id: 'T1',
+      layer: 'F.Cu',
+      width: 0.107,
+      net: 'N1',
+      seg: { type: 'line', start: { x: 0, y: 0 }, end: { x: 5, y: 0 } },
+    });
+
+    expect(violationsOf(b, 'track-width')).toHaveLength(1);
+  });
+
+  it('drill: via drill exactly at the 0.3mm minimum does NOT violate', () => {
+    const b = base();
+    b.nets.push({ name: 'N1', class: 'default', pins: [] });
+    b.vias.push({ id: 'V1', at: { x: 0, y: 0 }, drill: 0.3, diameter: 0.6, net: 'N1' });
+
+    expect(violationsOf(b, 'drill')).toHaveLength(0);
+  });
+
+  it('drill: via drill at 0.28mm (minimum - 0.02) DOES violate', () => {
+    const b = base();
+    b.nets.push({ name: 'N1', class: 'default', pins: [] });
+    b.vias.push({ id: 'V1', at: { x: 0, y: 0 }, drill: 0.28, diameter: 0.6, net: 'N1' });
+
+    expect(violationsOf(b, 'drill')).toHaveLength(1);
+  });
+
+  it('via-annular: ring exactly at the 0.13mm minimum does NOT violate', () => {
+    const b = base();
+    b.nets.push({ name: 'N1', class: 'default', pins: [] });
+    // annular = (0.56 - 0.3) / 2 = 0.13
+    b.vias.push({ id: 'V1', at: { x: 0, y: 0 }, drill: 0.3, diameter: 0.56, net: 'N1' });
+
+    expect(violationsOf(b, 'via-annular')).toHaveLength(0);
+  });
+
+  it('via-annular: ring at 0.11mm (minimum - 0.02) DOES violate', () => {
+    const b = base();
+    b.nets.push({ name: 'N1', class: 'default', pins: [] });
+    // annular = (0.52 - 0.3) / 2 = 0.11
+    b.vias.push({ id: 'V1', at: { x: 0, y: 0 }, drill: 0.3, diameter: 0.52, net: 'N1' });
+
+    expect(violationsOf(b, 'via-annular')).toHaveLength(1);
+  });
+
+  it('via-diameter: via exactly at the 0.5mm minimum does NOT violate', () => {
+    const b = base();
+    b.nets.push({ name: 'N1', class: 'default', pins: [] });
+    b.vias.push({ id: 'V1', at: { x: 0, y: 0 }, drill: 0.1, diameter: 0.5, net: 'N1' });
+
+    expect(violationsOf(b, 'via-diameter')).toHaveLength(0);
+  });
+
+  it('via-diameter: via at 0.48mm (minimum - 0.02) DOES violate', () => {
+    const b = base();
+    b.nets.push({ name: 'N1', class: 'default', pins: [] });
+    b.vias.push({ id: 'V1', at: { x: 0, y: 0 }, drill: 0.1, diameter: 0.48, net: 'N1' });
+
+    expect(violationsOf(b, 'via-diameter')).toHaveLength(1);
+  });
+
+  it('hole-to-hole: gap exactly at the 0.5mm minimum does NOT violate', () => {
+    const b = base();
+    b.nets.push({ name: 'N1', class: 'default', pins: [] });
+    // gap = dist - (0.3+0.3)/2 = 0.8 - 0.3 = 0.5
+    b.vias.push({ id: 'V1', at: { x: 0, y: 0 }, drill: 0.3, diameter: 0.6, net: 'N1' });
+    b.vias.push({ id: 'V2', at: { x: 0, y: 0.8 }, drill: 0.3, diameter: 0.6, net: 'N1' });
+
+    expect(violationsOf(b, 'hole-to-hole')).toHaveLength(0);
+  });
+
+  it('hole-to-hole: gap at 0.48mm (minimum - 0.02) DOES violate', () => {
+    const b = base();
+    b.nets.push({ name: 'N1', class: 'default', pins: [] });
+    b.vias.push({ id: 'V1', at: { x: 0, y: 0 }, drill: 0.3, diameter: 0.6, net: 'N1' });
+    b.vias.push({ id: 'V2', at: { x: 0, y: 0.78 }, drill: 0.3, diameter: 0.6, net: 'N1' });
+
+    expect(violationsOf(b, 'hole-to-hole')).toHaveLength(1);
+  });
+
+  it('copper-to-edge: zone exactly at the 0.3mm minimum does NOT violate', () => {
+    const b = base();
+    b.outline = rectOutline(10, 10);
+    b.nets.push({ name: 'N1', class: 'default', pins: [] });
+    // Zone's left edge sits at x=0.3, exactly 0.3mm from the outline's x=0 edge.
+    b.zones.push({
+      id: 'Z1',
+      layer: 'F.Cu',
+      net: 'N1',
+      polygon: rectPoly(0.3, 3, 1, 1),
+      clearance: 0.2,
+      minWidth: 0.2,
+      thermal: { gap: 0.3, spokeWidth: 0.3 },
+    });
+
+    expect(violationsOf(b, 'copper-to-edge')).toHaveLength(0);
+  });
+
+  it('copper-to-edge: zone at 0.28mm (minimum - 0.02) DOES violate', () => {
+    const b = base();
+    b.outline = rectOutline(10, 10);
+    b.nets.push({ name: 'N1', class: 'default', pins: [] });
+    b.zones.push({
+      id: 'Z1',
+      layer: 'F.Cu',
+      net: 'N1',
+      polygon: rectPoly(0.28, 3, 1, 1),
+      clearance: 0.2,
+      minWidth: 0.2,
+      thermal: { gap: 0.3, spokeWidth: 0.3 },
+    });
+
+    expect(violationsOf(b, 'copper-to-edge')).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Zone fill: winding-encoded hole rings are copper knockouts, not solid copper.
 // Regression guard for the false "clearance 0.00mm" violations that arose from
 // treating every fill ring as an independent solid polygon.
@@ -450,7 +611,19 @@ describe('runDRC — zone fill hole rings are copper knockouts', () => {
 
 // ---------------------------------------------------------------------------
 // Integration: the committed blinker-routed fixture, filled + DRC'd, must not
-// emit the bogus zone-vs-track clearance violations the hole-ring bug produced.
+// emit the bogus zone-vs-track clearance violations the hole-ring bug
+// produced, nor the copper-to-edge / pad-clearance false positives from
+// exact-at-minimum geometry landing a few µm under threshold on float and
+// tessellation noise (DRC_EPSILON).
+//
+// This fixture predates the epsilon fix: its GND pour polygons were filled
+// to exactly the 0.30mm copper-to-edge minimum via the differently-
+// tessellated inset band, and its J1 (USB-C) pads sit at exactly the
+// 0.20mm net-class clearance minimum — both a few µm under threshold before
+// the fix, both within DRC_EPSILON after it. Its silk-over-pad violations
+// are unrelated to this fix (real R4/R5 silk-over-pad overlaps that were
+// only fixed later on the live board, not in this frozen fixture) and are
+// expected to remain.
 // ---------------------------------------------------------------------------
 
 describe('runDRC — blinker-routed fixture (filled zones)', () => {
@@ -468,18 +641,20 @@ describe('runDRC — blinker-routed fixture (filled zones)', () => {
     expect(zoneClearance).toHaveLength(0);
   });
 
-  it('still surfaces the board\'s genuine (non-zone) violations', () => {
-    // The routed board is clean of zone-clearance faults but has legitimately
-    // reported issues elsewhere: tight USB-C connector pad-to-pad clearances,
-    // GND pours filled to exactly the copper-to-edge minimum, and silk over
-    // pads. Assert those real findings remain (guards against over-suppression).
+  it('reports ZERO copper-to-edge violations (GND pours filled to exactly the 0.30mm minimum now pass)', () => {
+    expect(violations.filter((v) => v.rule === 'copper-to-edge')).toHaveLength(0);
+  });
+
+  it('reports ZERO clearance violations at all (J1 USB-C pads sitting at exactly the 0.20mm minimum now pass)', () => {
+    expect(violations.filter((v) => v.rule === 'clearance')).toHaveLength(0);
+  });
+
+  it('still surfaces the board\'s genuine, unrelated violations (silk over pads)', () => {
     const byRule = new Map<string, number>();
     for (const v of violations) byRule.set(v.rule, (byRule.get(v.rule) ?? 0) + 1);
-    expect(byRule.get('clearance') ?? 0).toBeGreaterThan(0); // pad-vs-pad in J1
     expect(byRule.get('silk-over-pad') ?? 0).toBeGreaterThan(0);
-    // Every remaining clearance violation is pad-vs-pad, never zone-involving.
-    for (const v of violations.filter((x) => x.rule === 'clearance')) {
-      expect(board.zones.some((z) => v.items.includes(z.id))).toBe(false);
-    }
+    // Nothing else should remain: the epsilon fix resolves both the
+    // zone-fill and pad-clearance boundary noise in this fixture.
+    expect(new Set(violations.map((v) => v.rule))).toEqual(new Set(['silk-over-pad']));
   });
 });

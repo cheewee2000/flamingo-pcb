@@ -6,6 +6,7 @@
  */
 import type { Board, PathSeg, Point } from '../../types.js';
 import { outlineToPolygon, segSegDistance } from '../../geometry.js';
+import { DRC_EPSILON } from '../rules.js';
 import type { RuleSet } from '../rules.js';
 import type { CopperItem, DrcViolation } from '../types.js';
 
@@ -54,7 +55,7 @@ export function check(b: Board, rules: RuleSet, items: CopperItem[]): DrcViolati
         at = r.at;
       }
     }
-    if (d < rules.copperToEdge) {
+    if (d < rules.copperToEdge - DRC_EPSILON) {
       violations.push({
         rule: 'copper-to-edge',
         message: `${item.kind} ${item.ref} (net "${item.net}") on ${item.layer} is ${d.toFixed(2)}mm from the board edge, minimum is ${rules.copperToEdge.toFixed(2)}mm`,
