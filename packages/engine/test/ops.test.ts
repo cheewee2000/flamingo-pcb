@@ -359,6 +359,39 @@ describe('applyOp', () => {
     });
   });
 
+  describe('moveComponents', () => {
+    it('moves several components in one op and rejects unknown refdes atomically', () => {
+      const board = baseBoard();
+      const r2 = structuredClone(board.components.find((c) => c.refdes === 'R1')!);
+      r2.refdes = 'R2';
+      board.components.push(r2);
+
+      const moved = applyOp(board, {
+        op: 'moveComponents',
+        moves: [
+          { refdes: 'R1', at: { x: 10, y: 20 } },
+          { refdes: 'R2', at: { x: 30, y: 40 } },
+        ],
+      });
+      expect(moved.ok).toBe(true);
+      if (moved.ok) {
+        expect(moved.board.components.find((c) => c.refdes === 'R1')!.at).toEqual({ x: 10, y: 20 });
+        expect(moved.board.components.find((c) => c.refdes === 'R2')!.at).toEqual({ x: 30, y: 40 });
+      }
+
+      const bad = applyOp(board, {
+        op: 'moveComponents',
+        moves: [
+          { refdes: 'R1', at: { x: 1, y: 1 } },
+          { refdes: 'NOPE', at: { x: 2, y: 2 } },
+        ],
+      });
+      expect(bad.ok).toBe(false);
+      // Atomic: R1 must not have moved on the failed op's input board.
+      expect(board.components.find((c) => c.refdes === 'R1')!.at).not.toEqual({ x: 1, y: 1 });
+    });
+  });
+
   describe('addDimension', () => {
     it('adds a dimension with a generated id, and removeItem deletes it', () => {
       const board = baseBoard();

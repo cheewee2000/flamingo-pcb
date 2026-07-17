@@ -299,11 +299,13 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
       case 'hole': {
         const h = board.holes.find((x) => x.id === sel.id);
         if (!h) return null;
+        const isSlotHole = (h.slotLength ?? 0) > h.drill;
         const rows: Array<[string, string]> = [
-          ['type', h.plated ? 'plated hole' : 'hole'],
+          ['type', `${h.plated ? 'plated ' : ''}${isSlotHole ? 'slot' : 'hole'}`],
           ['at', `${h.at.x.toFixed(2)}, ${h.at.y.toFixed(2)} mm`],
-          ['drill', `${h.drill} mm`],
         ];
+        if (isSlotHole) rows.push(['slot', `${h.slotLength} × ${h.drill} mm`]);
+        else rows.push(['drill', `${h.drill} mm`]);
         if (h.plated) rows.push(['pad', `${h.padDiameter} mm`]);
         return rows;
       }
@@ -333,6 +335,23 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
 
   function buildProps(state: AppState): void {
     els.propsPanel.replaceChildren();
+    if (state.multiSelection.length > 1) {
+      const head = document.createElement('div');
+      head.className = 'props-row';
+      const kSpan = document.createElement('span');
+      kSpan.textContent = 'selected';
+      const vSpan = document.createElement('span');
+      vSpan.textContent = `${state.multiSelection.length} components`;
+      head.append(kSpan, vSpan);
+      const list = document.createElement('div');
+      list.className = 'props-desc';
+      list.textContent = state.multiSelection.join(' ');
+      const hint = document.createElement('div');
+      hint.className = 'props-desc';
+      hint.textContent = 'Drag any member to move the group. Del removes all.';
+      els.propsPanel.append(head, list, hint);
+      return;
+    }
     const rows = propsRows(state);
     if (!rows) {
       const hint = document.createElement('div');
@@ -383,8 +402,9 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
       row.classList.toggle('selected', state.selectedNet === name);
     }
     const selRefdes = state.selection?.kind === 'component' ? state.selection.refdes : null;
+    const multi = new Set(state.multiSelection);
     for (const [refdes, chip] of bomRowsByRefdes) {
-      chip.classList.toggle('selected', refdes === selRefdes);
+      chip.classList.toggle('selected', refdes === selRefdes || multi.has(refdes));
     }
   }
 
@@ -551,7 +571,9 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
         break;
       }
       case 'select': {
-        appendHint('Click to select. Drag a component to move it. R rotate, F flip, Del/Backspace remove.');
+        appendHint(
+          'Click to select. Drag a component to move it. Drag on empty space to window-select several; drag any member to move them together. R rotate, F flip, Del/Backspace remove.',
+        );
         break;
       }
       case 'ripup': {

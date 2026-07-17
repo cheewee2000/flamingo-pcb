@@ -78,6 +78,10 @@ export interface AppState {
   /** Edit target of the active tool (select's move/rotate/flip/delete target,
    * or whatever else got selected). Independent of `selectedNet`. */
   selection: EditTarget | null;
+  /** Refdes of every component in the current window (marquee) selection.
+   * Dragging any member moves the whole group; Delete removes them all.
+   * Cleared by plain clicks and tool switches. */
+  multiSelection: string[];
   /** Grid-snap toggle (toolbar checkbox, default on) -- Ctrl/Cmd bypasses it
    * momentarily per tool (see tools/overlay-utils.ts `snapPoint`). */
   snapEnabled: boolean;
@@ -116,6 +120,7 @@ function initialState(): AppState {
     hasFitOnce: false,
     activeTool: 'select',
     selection: null,
+    multiSelection: [],
     snapEnabled: true,
     snapMm: 0.5,
     toolOptions: {
