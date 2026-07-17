@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
 import polygonClipping from 'polygon-clipping';
-import { applyOp, newBoard, pointInPolygon } from '../src/index.js';
+import { applyOp, newBoard, parseBoard, pointInPolygon, boardBBox } from '../src/index.js';
 import type { Board, Op, PathSeg, Point, Zone } from '../src/index.js';
 import { fillZone, fillAllZones } from '../src/zonefill.js';
 
@@ -204,8 +205,9 @@ describe('fillZone', () => {
 
   it('recovers via the snap retry when the clipper throws once (SweepLine failure)', () => {
     // No board outline so the only polygonClipping.difference call is the one
-    // inside robustDifference (the outline-inset uses a separate difference we
-    // don't want to trip). A different-net track gives us obstacles.length > 0.
+    // inside robustClip's difference for the obstacles subtraction (the
+    // outline-inset uses a separate difference we don't want to trip). A
+    // different-net track gives us obstacles.length > 0.
     let b = baseBoard(false);
     b = apply(b, {
       op: 'addTrack',
@@ -238,7 +240,7 @@ describe('fillZone', () => {
 
   it('degrades to the unobstructed base when the clipper always throws (last resort)', () => {
     // Same fixture, but every difference attempt (direct + 10µm + 20µm snap)
-    // throws, so robustDifference falls through to `return base`.
+    // throws, so robustClip's difference falls through to `return base`.
     let b = baseBoard(false);
     b = apply(b, {
       op: 'addTrack',
@@ -279,6 +281,42 @@ describe('fillAllZones', () => {
     expect(b.zones[0].fill).toBeUndefined();
     expect(filled.zones[0].fill).toBeDefined();
     expect(filled.zones[0].fill!.length).toBeGreaterThan(0);
+  });
+});
+
+describe('fillAllZones on a real routed board (regression)', () => {
+  // boards/blinker/blinker.flamingo is freerouting output containing ~2µm
+  // segments that used to trip polygon-clipping's SweepLine on the
+  // unhardened union/intersection call sites in the outline-inset chain and
+  // the capsule-obstacle union in bufferPolygon (only the final obstacle
+  // difference was hardened before). Regression for that bug.
+  it('completes without throwing and fills every zone within the board bbox', () => {
+    const json = readFileSync(
+      new URL('./fixtures/blinker-routed.flamingo', import.meta.url),
+      'utf8',
+    );
+    const board = parseBoard(json);
+    expect(board.zones.length).toBeGreaterThan(0);
+
+    let filled: Board | undefined;
+    expect(() => {
+      filled = fillAllZones(board);
+    }).not.toThrow();
+
+    const bbox = boardBBox(board);
+    const tol = 0.01; // mm
+    for (const zone of filled!.zones) {
+      expect(zone.fill).toBeDefined();
+      expect(zone.fill!.length).toBeGreaterThan(0);
+      for (const ring of zone.fill!) {
+        for (const p of ring) {
+          expect(p.x).toBeGreaterThanOrEqual(bbox.minX - tol);
+          expect(p.x).toBeLessThanOrEqual(bbox.maxX + tol);
+          expect(p.y).toBeGreaterThanOrEqual(bbox.minY - tol);
+          expect(p.y).toBeLessThanOrEqual(bbox.maxY + tol);
+        }
+      }
+    }
   });
 });
 

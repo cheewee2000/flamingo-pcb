@@ -117,38 +117,71 @@ function snapMulti(m: MultiPolygon, grid: number): MultiPolygon {
   return m.map((poly) => poly.map((ring) => ring.map(([x, y]): Pair => [s(x), s(y)])));
 }
 
+type ClipOp = 'difference' | 'union' | 'intersection';
+
+function runClip(op: ClipOp, geoms: MultiPolygon[]): MultiPolygon {
+  const [first, ...rest] = geoms;
+  switch (op) {
+    case 'difference':
+      return polygonClipping.difference(first, ...rest);
+    case 'union':
+      return polygonClipping.union(first, ...rest);
+    case 'intersection':
+      return polygonClipping.intersection(first, ...rest);
+  }
+}
+
 /**
- * `polygonClipping.difference`, hardened against the SweepLine failures the
- * library throws on near-coincident, high-precision vertices — exactly what a
- * real autorouter emits (45-degree track corners at sub-micron precision). The
- * happy path is untouched (bit-for-bit identical to a direct call), so exact
- * inputs — every unit-test fixture — are unaffected. Only when the clipper
- * actually throws do we retry with all vertices snapped to a 10µm grid, which
- * is imperceptible for a copper pour yet removes the degeneracies. Escalates to
- * a coarser grid if 10µm still trips it.
+ * `polygonClipping.{difference,union,intersection}`, hardened against the
+ * SweepLine failures the library throws on near-coincident, high-precision
+ * vertices — exactly what a real autorouter emits (45-degree track corners at
+ * sub-micron precision, or the ~2µm segments freerouting output can produce).
+ * The happy path is untouched (bit-for-bit identical to a direct call), so
+ * exact inputs — every unit-test fixture — are unaffected. Only when the
+ * clipper actually throws do we retry with all vertices snapped to a 10µm
+ * grid, which is imperceptible for a copper pour yet removes the
+ * degeneracies. Escalates to a coarser 20µm grid if 10µm still trips it.
+ *
+ * If every attempt still throws, we degrade rather than propagate the
+ * exception (which would abort the whole fill and block fab export) -- each
+ * op has a documented, safe last resort:
+ *   - difference: return `geoms[0]` (the base) unobstructed. Safe because
+ *     this doesn't reach fabrication silently: export_fab's filled-board DRC
+ *     clearance check (runDRC over the fillAllZones output) catches an
+ *     unobstructed fill overlapping other-net copper as a clearance
+ *     violation and refuses the export, so the failure surfaces loudly
+ *     instead of producing a bad board.
+ *   - union: return the inputs concatenated as separate polygons of one
+ *     MultiPolygon, unclipped. Every call site here only uses a union result
+ *     as an obstacle (to subtract) or an outline band (to test), never as a
+ *     shape whose own area matters, so leaving overlaps un-merged is
+ *     geometrically valid for those consumers.
+ *   - intersection: return `geoms[0]` (the first operand), i.e. the larger,
+ *     unconstrained area. Conservative in the same direction as the
+ *     difference fallback -- downstream DRC still gates the result.
  */
-function robustDifference(base: MultiPolygon, obstacles: MultiPolygon[]): MultiPolygon {
+function robustClip(op: ClipOp, ...geoms: MultiPolygon[]): MultiPolygon {
   try {
-    return polygonClipping.difference(base, ...obstacles);
+    return runClip(op, geoms);
   } catch {
     for (const grid of [0.01, 0.02]) {
       try {
-        return polygonClipping.difference(
-          snapMulti(base, grid),
-          ...obstacles.map((o) => snapMulti(o, grid)),
+        return runClip(
+          op,
+          geoms.map((g) => snapMulti(g, grid)),
         );
       } catch {
         // try the next, coarser grid
       }
     }
-    // Last resort: pour the un-obstructed base rather than throwing away the
-    // whole fill (and blocking fab export) over a clipper hiccup. Safe because
-    // this doesn't reach fabrication silently: export_fab's filled-board DRC
-    // clearance check (runDRC over the fillAllZones output) catches an
-    // unobstructed fill overlapping other-net copper as a clearance violation
-    // and refuses the export, so the failure surfaces loudly instead of
-    // producing a bad board.
-    return base;
+    switch (op) {
+      case 'difference':
+        return geoms[0];
+      case 'union':
+        return geoms.flat();
+      case 'intersection':
+        return geoms[0];
+    }
   }
 }
 
@@ -156,7 +189,7 @@ function robustDifference(base: MultiPolygon, obstacles: MultiPolygon[]): MultiP
 export function bufferPolygon(pts: Point[], delta: number): MultiPolygon {
   if (delta <= 1e-12) return [[toRing(pts)]];
   const caps = edgeCapsules(pts, delta);
-  return polygonClipping.union([toRing(pts)], ...caps);
+  return robustClip('union', [[toRing(pts)]], ...caps.map((c): MultiPolygon => [c]));
 }
 
 // ---------------------------------------------------------------------------
@@ -184,9 +217,9 @@ export function fillZone(b: Board, zone: Zone): Point[][] {
   if (b.outline.length > 0) {
     const outlinePts = outlineToPolygon(b.outline);
     const caps = edgeCapsules(outlinePts, zone.clearance);
-    const band = polygonClipping.union(caps[0], ...caps.slice(1));
-    const inset = polygonClipping.difference([toRing(outlinePts)], band);
-    base = polygonClipping.intersection([zonePoly], inset);
+    const band = robustClip('union', ...caps.map((c): MultiPolygon => [c]));
+    const inset = robustClip('difference', [[toRing(outlinePts)]], band);
+    base = robustClip('intersection', [zonePoly], inset);
   }
   if (base.length === 0) return [];
 
@@ -227,7 +260,7 @@ export function fillZone(b: Board, zone: Zone): Point[][] {
   }
 
   const filled: MultiPolygon =
-    obstacles.length > 0 ? robustDifference(base, obstacles) : base;
+    obstacles.length > 0 ? robustClip('difference', base, ...obstacles) : base;
 
   // Emit rings, dropping islands whose net copper area < minWidth^2.
   const minArea = zone.minWidth * zone.minWidth;
