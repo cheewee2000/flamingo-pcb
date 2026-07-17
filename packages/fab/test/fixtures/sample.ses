@@ -1,0 +1,45 @@
+(session sample.ses
+  (base_design sample.dsn)
+  (placement
+    (resolution um 10)
+    (component R0603
+      (place R1 50000 50000 front 0)
+    )
+  )
+  (was_is
+  )
+  (routes
+    (resolution um 10)
+    (parser
+      (host_cad flamingo)
+    )
+    (library_out
+      (padstack V_300_600
+        (shape (circle F.Cu 6000))
+        (shape (circle B.Cu 6000))
+      )
+    )
+    (network_out
+      (net N1
+        (wire
+          (path F.Cu 2500
+            42500 50000
+            107500 50000
+          )
+          (type route)
+        )
+        (via V_300_600 75000 50000)
+      )
+      (net "MY NET"
+        (wire
+          (path B.Cu 2500
+            0 0
+            50000 0
+            50000 50000
+          )
+          (type route)
+        )
+      )
+    )
+  )
+)

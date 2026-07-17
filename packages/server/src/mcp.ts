@@ -26,8 +26,10 @@ import {
   parseBoard,
   ratsnest,
 } from '@flamingo/engine';
+import { exportDSN, importSES } from '@flamingo/fab';
 import type { PartInfo, SearchOpts } from '@flamingo/parts';
 import type { Doc } from './document.js';
+import type { RouteRunner } from './route.js';
 
 /**
  * Parts API injected into the MCP context so tests can supply a mock (no
@@ -43,6 +45,11 @@ export interface McpContext {
   doc: Doc;
   projectDir: string;
   partsApi: PartsApi;
+  /**
+   * Freerouting runner, injected so tests can mock the autorouter (no java /
+   * jar in the unit suite). Production wires up the real runner from route.ts.
+   */
+  route: RouteRunner;
 }
 
 // ---------------------------------------------------------------------------
@@ -714,6 +721,86 @@ export function createMcpServer(ctx: McpContext): McpServer {
       const board = ctx.doc.redo();
       if (board === null) return errorResult('Nothing to redo.');
       return textResult('Redid last undone operation.');
+    },
+  );
+
+  server.registerTool(
+    'unroute',
+    {
+      description:
+        'Remove routed tracks and vias. Give a net name to unroute just that net, or omit to unroute the whole board.',
+      inputSchema: {
+        net: z.string().optional().describe('Net to unroute (omit to unroute all nets)'),
+      },
+    },
+    ({ net }) => {
+      const op: Op = { op: 'unroute', net };
+      return applyAndReport(ctx, op, () =>
+        net ? `Unrouted net "${net}".` : 'Unrouted all nets.',
+      );
+    },
+  );
+
+  server.registerTool(
+    'autoroute',
+    {
+      description:
+        'Autoroute the board with Freerouting. Give a list of nets to route only those (existing routes on other nets are respected as obstacles), or omit to route the whole board. Requires a Java runtime; the freerouting.jar is downloaded on first use.',
+      inputSchema: {
+        nets: z
+          .array(z.string())
+          .optional()
+          .describe('Nets to route (omit to route every net on the board)'),
+        passes: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('Max autorouter passes (default 20)'),
+      },
+    },
+    async ({ nets, passes }) => {
+      const netList = nets && nets.length > 0 ? nets : undefined;
+
+      // 1. Unroute the nets we are about to (re)route so freerouting starts fresh.
+      if (netList) {
+        for (const n of netList) {
+          const r = ctx.doc.apply({ op: 'unroute', net: n });
+          if (!r.ok) return errorResult((r as OpError).error);
+        }
+      } else {
+        const r = ctx.doc.apply({ op: 'unroute' });
+        if (!r.ok) return errorResult((r as OpError).error);
+      }
+
+      // 2. Export DSN, 3. run freerouting, 4. import SES.
+      const board = ctx.doc.board;
+      const dsn = exportDSN(board, netList ? { nets: netList } : {});
+      let ses: string;
+      try {
+        ses = await ctx.route.run(dsn, passes !== undefined ? { passes } : undefined);
+      } catch (err) {
+        return errorResult(`autoroute failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      const { tracks, vias } = importSES(ses, board);
+
+      // 5. Apply the routed geometry.
+      const applyRes = ctx.doc.apply({ op: 'addTracks', tracks, vias });
+      if (!applyRes.ok) return errorResult((applyRes as OpError).error);
+
+      const routedCount = netList
+        ? netList.length
+        : ctx.doc.board.nets.filter((n) => n.pins.length >= 2).length;
+      const remaining = isFullyRouted(ctx.doc.board);
+      const remainingStr =
+        remaining.length === 0
+          ? 'All nets fully routed.'
+          : `Unrouted remaining: ${remaining
+              .map((u) => `${u.net} (${u.unconnected})`)
+              .join(', ')}`;
+      return textResult(
+        `Routed ${routedCount} net(s): ${tracks.length} tracks, ${vias.length} vias added. ${remainingStr}`,
+      );
     },
   );
 

@@ -12,6 +12,8 @@ import { fetchPart, searchParts } from '@flamingo/parts';
 import { Doc } from './document.js';
 import type { McpContext, PartsApi } from './mcp.js';
 import { createMcpServer } from './mcp.js';
+import type { RouteRunner } from './route.js';
+import { defaultRouteRunner } from './route.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 // packages/server/dist/http.js -> packages/ui/dist
@@ -349,6 +351,8 @@ export interface StartServerOptions {
   partsApi?: PartsApi;
   /** Directory to serve the built UI from at '/'. Defaults to packages/ui/dist -- tests should inject a temp dir so behavior doesn't depend on whether the real UI has been built. */
   uiDistDir?: string;
+  /** Freerouting runner for the autoroute MCP tool. Defaults to the real java/jar runner -- tests should inject a mock. */
+  routeRunner?: RouteRunner;
 }
 
 /**
@@ -364,6 +368,7 @@ export function startServer(
     doc,
     projectDir: opts.projectDir ?? process.cwd(),
     partsApi: opts.partsApi ?? { fetchPart, searchParts },
+    route: opts.routeRunner ?? defaultRouteRunner,
   };
   const uiDistDir = opts.uiDistDir ?? UI_DIST;
   const server = http.createServer(makeRequestListener(ctx, uiDistDir));

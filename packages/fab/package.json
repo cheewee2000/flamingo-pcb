@@ -10,6 +10,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@flamingo/engine": "*",
     "archiver": "^8.0.0"
   }
 }

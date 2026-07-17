@@ -11,6 +11,7 @@ import { Doc } from '../src/document.js';
 import { startServer } from '../src/http.js';
 import type { StartedServer } from '../src/http.js';
 import type { PartsApi } from '../src/mcp.js';
+import type { RouteRunner } from '../src/route.js';
 
 const FIXTURE_FOOTPRINT: Footprint = {
   name: 'R0603',
@@ -40,6 +41,24 @@ const mockPartsApi: PartsApi = {
   searchParts: async () => [FIXTURE_INFO],
 };
 
+// Mock router: returns an SES that routes net N1 with a single F.Cu wire
+// spanning R1.2 (0.75,0) -> R2.1 (4.25,0) — the anchors of the two pads when
+// R1 is at (0,0) and R2 at (5,0). Resolution um 1 => µm coordinates.
+const MOCK_SES = `(session mock.ses
+  (routes
+    (resolution um 1)
+    (network_out
+      (net N1
+        (wire (path F.Cu 250 750 0 4250 0) (type route))
+      )
+    )
+  )
+)
+`;
+const mockRouteRunner: RouteRunner = {
+  run: async () => MOCK_SES,
+};
+
 const TOOL_NAMES = [
   'new_board',
   'open_board',
@@ -64,6 +83,8 @@ const TOOL_NAMES = [
   'get_ratsnest',
   'undo',
   'redo',
+  'unroute',
+  'autoroute',
 ];
 
 function textOf(result: { content: Array<{ type: string; text?: string }> }): string {
@@ -80,7 +101,11 @@ describe('MCP endpoint', () => {
   beforeEach(async () => {
     projectDir = await mkdtemp(join(tmpdir(), 'flamingo-mcp-test-'));
     doc = new Doc(newBoard('mcptest', 2));
-    started = await startServer(doc, 0, { partsApi: mockPartsApi, projectDir });
+    started = await startServer(doc, 0, {
+      partsApi: mockPartsApi,
+      projectDir,
+      routeRunner: mockRouteRunner,
+    });
     base = `http://localhost:${started.port}`;
 
     client = new Client({ name: 'test-client', version: '0.0.0' });
@@ -94,11 +119,11 @@ describe('MCP endpoint', () => {
     await rm(projectDir, { recursive: true, force: true });
   });
 
-  it('tools/list returns all 23 core tools', async () => {
+  it('tools/list returns all 25 core tools', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([...TOOL_NAMES].sort());
-    expect(tools).toHaveLength(23);
+    expect(tools).toHaveLength(25);
   });
 
   it('place_component (mocked part) then get_board_state reflects it', async () => {
@@ -294,6 +319,48 @@ describe('MCP endpoint', () => {
     const result = await client.callTool({ name: 'open_board', arguments: { path: boardPath } });
     expect(result.isError).toBeFalsy();
     expect(doc.board.name).toBe('other');
+  });
+
+  it('autoroute (mocked router) adds tracks and reports full routing', async () => {
+    await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R1', x: 0, y: 0 } });
+    await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R2', x: 5, y: 0 } });
+    await client.callTool({ name: 'connect_pins', arguments: { net: 'N1', pins: ['R1.2', 'R2.1'] } });
+
+    // Before: unrouted.
+    expect(doc.board.tracks).toHaveLength(0);
+
+    const result = await client.callTool({ name: 'autoroute', arguments: {} });
+    expect(result.isError).toBeFalsy();
+    const text = textOf(result as any);
+    expect(text).toContain('1 tracks');
+    expect(text).toContain('All nets fully routed.');
+
+    expect(doc.board.tracks).toHaveLength(1);
+    expect(doc.board.tracks[0]?.net).toBe('N1');
+    expect(doc.board.tracks[0]?.layer).toBe('F.Cu');
+  });
+
+  it('autoroute unroutes the target net first (fresh route)', async () => {
+    await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R1', x: 0, y: 0 } });
+    await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R2', x: 5, y: 0 } });
+    await client.callTool({ name: 'connect_pins', arguments: { net: 'N1', pins: ['R1.2', 'R2.1'] } });
+
+    // Route once, then route again — should not accumulate duplicate tracks.
+    await client.callTool({ name: 'autoroute', arguments: { nets: ['N1'] } });
+    await client.callTool({ name: 'autoroute', arguments: { nets: ['N1'] } });
+    expect(doc.board.tracks).toHaveLength(1);
+  });
+
+  it('unroute removes routed tracks/vias for a net', async () => {
+    await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R1', x: 0, y: 0 } });
+    await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R2', x: 5, y: 0 } });
+    await client.callTool({ name: 'connect_pins', arguments: { net: 'N1', pins: ['R1.2', 'R2.1'] } });
+    await client.callTool({ name: 'autoroute', arguments: {} });
+    expect(doc.board.tracks.length).toBeGreaterThan(0);
+
+    const result = await client.callTool({ name: 'unroute', arguments: { net: 'N1' } });
+    expect(result.isError).toBeFalsy();
+    expect(doc.board.tracks).toHaveLength(0);
   });
 
   it('save_board persists the current board to disk', async () => {
