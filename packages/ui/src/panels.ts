@@ -337,6 +337,21 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
     }
     const sel = state.selection;
     if (sel && sel.kind === 'component') {
+      const c = state.board?.components.find((x) => x.refdes === sel.refdes);
+      // Plain-English "what this part is for on this board" (fields.role),
+      // then the LCSC catalog text for what the part is (fields.description).
+      if (c?.fields.role) {
+        const role = document.createElement('div');
+        role.className = 'props-role';
+        role.textContent = c.fields.role;
+        els.propsPanel.appendChild(role);
+      }
+      if (c?.fields.description && c.fields.description !== c.fields.value) {
+        const desc = document.createElement('div');
+        desc.className = 'props-desc';
+        desc.textContent = c.fields.description;
+        els.propsPanel.appendChild(desc);
+      }
       const center = document.createElement('button');
       center.type = 'button';
       center.className = 'props-center';

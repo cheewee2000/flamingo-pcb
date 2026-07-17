@@ -77,6 +77,11 @@ export interface ComponentInst {
   fields: {
     value?: string;
     description?: string;
+    /** Plain-English note on what this part is for on THIS board (e.g.
+     * "Decouples the 3V3 rail at U2"), as opposed to `description`, which
+     * is the LCSC catalog text for what the part is. Shown in the UI's
+     * selection properties panel. */
+    role?: string;
     mfr?: string;
     package?: string;
     basic?: boolean;

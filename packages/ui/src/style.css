@@ -471,6 +471,22 @@ body {
   font-size: 11px;
 }
 
+.props-role {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--rule-soft);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.props-desc {
+  margin-top: 4px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
 .props-center {
   margin-top: 6px;
   padding: 0;

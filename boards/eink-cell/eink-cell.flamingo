@@ -1164,7 +1164,8 @@
         "description": "",
         "mfr": "\u97e9\u56fd\u97e9\u8363",
         "package": "USB-C_SMD-TYPE-C-31-M-12_1",
-        "basic": false
+        "basic": false,
+        "role": "USB-C port. Charges the battery and powers the board from 5V. Power only, no data."
       }
     },
     {
@@ -1727,7 +1728,8 @@
         "description": "",
         "mfr": "TOPPOWER(\u5357\u4eac\u62d3\u5fae)",
         "package": "ESOP-8_L4.9-W3.9-P1.27-LS6.0-BL-EP",
-        "basic": false
+        "basic": false,
+        "role": "Li-ion battery charger. Charges the cell from USB at the current set by R1."
       }
     },
     {
@@ -1908,7 +1910,8 @@
         "description": "1.2K\u03a9 (1201) \u00b11%",
         "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
-        "basic": true
+        "basic": true,
+        "role": "Sets the battery charge current (1.2k on PROG, roughly 1A)."
       }
     },
     {
@@ -2157,7 +2160,8 @@
         "description": "22uF (226) \u00b120% 10V",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
-        "basic": false
+        "basic": false,
+        "role": "Input filter cap on the USB 5V rail at the charger."
       }
     },
     {
@@ -2406,7 +2410,8 @@
         "description": "22uF (226) \u00b120% 10V",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
-        "basic": false
+        "basic": false,
+        "role": "Filter cap on the battery rail at the charger."
       }
     },
     {
@@ -2661,7 +2666,8 @@
         "description": "",
         "mfr": "BORN(\u4f2f\u6069\u534a\u5bfc\u4f53)",
         "package": "SOT-23-3_L2.9-W1.3-P1.90-LS2.4-BR",
-        "basic": false
+        "basic": false,
+        "role": "Power-path switch. Lets the battery feed VSYS and hands over to USB when it is plugged in."
       }
     },
     {
@@ -2842,7 +2848,8 @@
         "description": "100K\u03a9 (1003) \u00b11%",
         "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
-        "basic": true
+        "basic": true,
+        "role": "Gate pulldown for power-path switch Q1 (battery feeds VSYS when USB is absent)."
       }
     },
     {
@@ -3023,7 +3030,8 @@
         "description": "",
         "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
-        "basic": true
+        "basic": true,
+        "role": "USB-C CC1 pulldown. Advertises this board as a 5V power sink."
       }
     },
     {
@@ -3204,7 +3212,8 @@
         "description": "",
         "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
-        "basic": true
+        "basic": true,
+        "role": "USB-C CC2 pulldown. Advertises this board as a 5V power sink."
       }
     },
     {
@@ -3499,7 +3508,8 @@
         "description": "0603",
         "mfr": "KENTO",
         "package": "LED-SMD_L1.6-W0.8-R-RD",
-        "basic": true
+        "basic": true,
+        "role": "Charge indicator. Lit while the battery is charging."
       }
     },
     {
@@ -3680,7 +3690,8 @@
         "description": "1K\u03a9 (1001) \u00b11%",
         "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
-        "basic": true
+        "basic": true,
+        "role": "Current limit for the charge LED."
       }
     },
     {
@@ -4035,7 +4046,8 @@
         "description": "0603",
         "mfr": "EVERLIGHT(\u4ebf\u5149)",
         "package": "LED0603-RD",
-        "basic": false
+        "basic": false,
+        "role": "General-purpose LED, driven by a Walter GPIO."
       }
     },
     {
@@ -4216,7 +4228,8 @@
         "description": "1K\u03a9 (1001) \u00b11%",
         "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
-        "basic": true
+        "basic": true,
+        "role": "Current limit for the general-purpose LED."
       }
     },
     {
@@ -4458,7 +4471,8 @@
         "description": "",
         "mfr": "JST",
         "package": "CONN-TH_BM02B-SRSS-TB-LF-SN",
-        "basic": false
+        "basic": false,
+        "role": "JST-SH connector for the Li-ion battery."
       }
     },
     {
@@ -5067,7 +5081,8 @@
         "description": "",
         "mfr": "JXTCONN(\u805a\u5174\u6cf0)",
         "package": "HDR-TH_14P-P2.54-V-M",
-        "basic": false
+        "basic": false,
+        "role": "Walter modem header, pins 15-28: power, I2C, I2S mic, right buttons, haptics, cool frontlight control."
       }
     },
     {
@@ -5676,7 +5691,8 @@
         "description": "",
         "mfr": "JXTCONN(\u805a\u5174\u6cf0)",
         "package": "HDR-TH_14P-P2.54-V-M",
-        "basic": false
+        "basic": false,
+        "role": "Walter modem header, pins 1-14: e-paper SPI, left buttons, warm frontlight control, GP LED."
       }
     },
     {
@@ -5925,7 +5941,8 @@
         "description": "22uF (226) \u00b120% 10V",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
-        "basic": false
+        "basic": false,
+        "role": "Bulk cap on the system rail (VSYS)."
       }
     },
     {
@@ -6174,7 +6191,8 @@
         "description": "22uF (226) \u00b120% 10V",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
-        "basic": false
+        "basic": false,
+        "role": "Bulk cap on the system rail (VSYS)."
       }
     },
     {
@@ -6525,7 +6543,8 @@
         "description": "",
         "mfr": "G-Switch(\u54c1\u8d5e)",
         "package": "SW-SMD_L4.7-W3.5-P3.35-EH",
-        "basic": false
+        "basic": false,
+        "role": "Left button 1. Grounds BTN1 when pressed."
       }
     },
     {
@@ -6876,7 +6895,8 @@
         "description": "",
         "mfr": "G-Switch(\u54c1\u8d5e)",
         "package": "SW-SMD_L4.7-W3.5-P3.35-EH",
-        "basic": false
+        "basic": false,
+        "role": "Left button 2. Grounds BTN2 when pressed."
       }
     },
     {
@@ -7227,7 +7247,8 @@
         "description": "",
         "mfr": "G-Switch(\u54c1\u8d5e)",
         "package": "SW-SMD_L4.7-W3.5-P3.35-EH",
-        "basic": false
+        "basic": false,
+        "role": "Right button 1. Grounds BTN3 when pressed."
       }
     },
     {
@@ -7578,7 +7599,8 @@
         "description": "",
         "mfr": "G-Switch(\u54c1\u8d5e)",
         "package": "SW-SMD_L4.7-W3.5-P3.35-EH",
-        "basic": false
+        "basic": false,
+        "role": "Right button 2. Grounds BTN4 when pressed."
       }
     },
     {
@@ -8209,7 +8231,8 @@
         "description": "",
         "mfr": "TI(\u5fb7\u5dde\u4eea\u5668)",
         "package": "VSSOP-10_L3.0-W3.0-P0.50-LS4.9-BL",
-        "basic": false
+        "basic": false,
+        "role": "Haptic driver. Drives the LRA vibration motor, controlled over I2C."
       }
     },
     {
@@ -8390,7 +8413,8 @@
         "description": "4.7K\u03a9 (4701) \u00b11%",
         "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
-        "basic": true
+        "basic": true,
+        "role": "I2C pull-up on SDA."
       }
     },
     {
@@ -8571,7 +8595,8 @@
         "description": "4.7K\u03a9 (4701) \u00b11%",
         "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
-        "basic": true
+        "basic": true,
+        "role": "I2C pull-up on SCL."
       }
     },
     {
@@ -8820,7 +8845,8 @@
         "description": "",
         "mfr": "YAGEO(\u56fd\u5de8)",
         "package": "C0603",
-        "basic": false
+        "basic": false,
+        "role": "Decoupling for the haptic driver."
       }
     },
     {
@@ -9069,7 +9095,8 @@
         "description": "1uF (105) \u00b110% 25V",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0603",
-        "basic": false
+        "basic": false,
+        "role": "Bulk decoupling for the haptic driver."
       }
     },
     {
@@ -9311,7 +9338,8 @@
         "description": "",
         "mfr": "JST",
         "package": "CONN-TH_BM02B-SRSS-TB-LF-SN",
-        "basic": false
+        "basic": false,
+        "role": "JST-SH connector for the LRA vibration motor."
       }
     },
     {
@@ -9572,7 +9600,8 @@
         "description": "",
         "mfr": "muRata(\u6751\u7530)",
         "package": "BUZ-SMD_2P-L12.0-W12.0-L_PKLCS1212E4001-R1",
-        "basic": false
+        "basic": false,
+        "role": "Piezo buzzer, driven from the Walter PIEZO pin through R9."
       }
     },
     {
@@ -9753,7 +9782,8 @@
         "description": "100\u03a9 (1000) \u00b11%",
         "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
-        "basic": true
+        "basic": true,
+        "role": "Series drive resistor for the piezo buzzer."
       }
     },
     {
@@ -10723,7 +10753,8 @@
         "description": "",
         "mfr": "XUNPU(\u8baf\u666e)",
         "package": "FPC-SMD_24P-P0.50_FPC-05FB-24PH20",
-        "basic": false
+        "basic": false,
+        "role": "24-pin FPC connector for the e-paper display."
       }
     },
     {
@@ -10856,7 +10887,8 @@
         "description": "47\u03bcH",
         "mfr": "Sunlord(\u987a\u7edc)",
         "package": "IND-SMD_L4.0-W4.0_SLS3DXX",
-        "basic": false
+        "basic": false,
+        "role": "Boost inductor for the e-paper power supply."
       }
     },
     {
@@ -11062,7 +11094,8 @@
         "description": "",
         "mfr": "VISHAY(\u5a01\u4e16)",
         "package": "SOT-323_L2.0-W1.3-P1.30-LS2.1-BR",
-        "basic": false
+        "basic": false,
+        "role": "Boost switch FET for the e-paper supply, gated by the display driver (GDR)."
       }
     },
     {
@@ -11443,7 +11476,8 @@
         "description": "",
         "mfr": "CBI(\u521b\u57fa)",
         "package": "SOD-323_L1.7-W1.3-LS2.5-RD",
-        "basic": false
+        "basic": false,
+        "role": "Boost rectifier for the positive e-paper rail (PREVGH)."
       }
     },
     {
@@ -11824,7 +11858,8 @@
         "description": "",
         "mfr": "CBI(\u521b\u57fa)",
         "package": "SOD-323_L1.7-W1.3-LS2.5-RD",
-        "basic": false
+        "basic": false,
+        "role": "Charge-pump diode generating the negative e-paper rail (PREVGL)."
       }
     },
     {
@@ -12205,7 +12240,8 @@
         "description": "",
         "mfr": "CBI(\u521b\u57fa)",
         "package": "SOD-323_L1.7-W1.3-LS2.5-RD",
-        "basic": false
+        "basic": false,
+        "role": "Charge-pump diode clamping the flying node to ground."
       }
     },
     {
@@ -12386,7 +12422,8 @@
         "description": "1M\u03a9 (1004) \u00b11%",
         "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
-        "basic": true
+        "basic": true,
+        "role": "Gate bleed resistor for boost FET Q2."
       }
     },
     {
@@ -12567,7 +12604,8 @@
         "description": "",
         "mfr": "LIZ(\u4e3d\u667a\u7535\u5b50)",
         "package": "R0603",
-        "basic": false
+        "basic": false,
+        "role": "Current-sense resistor for the e-paper boost converter."
       }
     },
     {
@@ -12816,7 +12854,8 @@
         "description": "",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
-        "basic": false
+        "basic": false,
+        "role": "Reservoir cap on the VSH2 e-paper rail."
       }
     },
     {
@@ -13065,7 +13104,8 @@
         "description": "",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
-        "basic": false
+        "basic": false,
+        "role": "Flying cap for the negative-rail charge pump."
       }
     },
     {
@@ -13314,7 +13354,8 @@
         "description": "",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
-        "basic": false
+        "basic": false,
+        "role": "Reservoir cap on the PREVGH e-paper rail."
       }
     },
     {
@@ -13563,7 +13604,8 @@
         "description": "",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
-        "basic": false
+        "basic": false,
+        "role": "Reservoir cap on the VSH1 e-paper rail."
       }
     },
     {
@@ -13812,7 +13854,8 @@
         "description": "",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
-        "basic": false
+        "basic": false,
+        "role": "Reservoir cap on the VSL e-paper rail."
       }
     },
     {
@@ -14061,7 +14104,8 @@
         "description": "",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
-        "basic": false
+        "basic": false,
+        "role": "Reservoir cap on the PREVGL e-paper rail."
       }
     },
     {
@@ -14310,7 +14354,8 @@
         "description": "",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
-        "basic": false
+        "basic": false,
+        "role": "Decoupling for the display logic supply."
       }
     },
     {
@@ -14559,7 +14604,8 @@
         "description": "1uF (105) \u00b110% 25V",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0603",
-        "basic": false
+        "basic": false,
+        "role": "VCI decoupling at the display connector."
       }
     },
     {
@@ -14808,7 +14854,8 @@
         "description": "1uF (105) \u00b110% 25V",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0603",
-        "basic": false
+        "basic": false,
+        "role": "Decoupling for the display internal VDD."
       }
     },
     {
@@ -15057,7 +15104,8 @@
         "description": "1uF (105) \u00b110% 25V",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0603",
-        "basic": false
+        "basic": false,
+        "role": "VCOM storage cap for the display."
       }
     },
     {
@@ -15280,7 +15328,8 @@
         "description": "SS34",
         "mfr": "MDD(\u8fb0\u8fbe\u534a\u5bfc\u4f53)",
         "package": "SMA_L4.3-W2.6-LS5.2-RD",
-        "basic": true
+        "basic": true,
+        "role": "Feeds VSYS from USB. ORs with the battery path through Q1."
       }
     },
     {
@@ -15529,7 +15578,8 @@
         "description": "1uF (105) \u00b110% 25V",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0603",
-        "basic": false
+        "basic": false,
+        "role": "Output cap for the haptic driver internal regulator."
       }
     },
     {
@@ -15778,7 +15828,8 @@
         "description": "",
         "mfr": "YAGEO(\u56fd\u5de8)",
         "package": "C0603",
-        "basic": false
+        "basic": false,
+        "role": "Decoupling for the microphone."
       }
     },
     {
@@ -15959,7 +16010,8 @@
         "description": "100K\u03a9 (1003) \u00b11%",
         "mfr": "UNI-ROYAL(\u539a\u58f0)",
         "package": "R0603",
-        "basic": true
+        "basic": true,
+        "role": "Pulldown on the mic I2S data line."
       }
     },
     {
@@ -16403,7 +16455,8 @@
         "description": "",
         "mfr": "XUNPU(\u8baf\u666e)",
         "package": "FPC-SMD_6P-P0.50_FPC-05FB-6PH20",
-        "basic": false
+        "basic": false,
+        "role": "6-pin FPC connector for the touch panel (I2C + interrupt)."
       }
     },
     {
@@ -16847,7 +16900,8 @@
         "description": "",
         "mfr": "XUNPU(\u8baf\u666e)",
         "package": "FPC-SMD_6P-P0.50_FPC-05FB-6PH20",
-        "basic": false
+        "basic": false,
+        "role": "6-pin FPC connector for the frontlight LEDs (warm + cool channels)."
       }
     },
     {
@@ -17096,7 +17150,8 @@
         "description": "",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
-        "basic": false
+        "basic": false,
+        "role": "Power-on reset delay cap for the touch controller."
       }
     },
     {
@@ -17474,7 +17529,8 @@
         "description": "",
         "mfr": "SGMICRO(\u5723\u90a6\u5fae)",
         "package": "TSOT-23-6_L2.9-W1.6-P0.95-LS2.8-BR",
-        "basic": false
+        "basic": false,
+        "role": "Boost LED driver for the warm frontlight channel, dimmed via FL_CTRL_W."
       }
     },
     {
@@ -17723,7 +17779,8 @@
         "description": "",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
-        "basic": false
+        "basic": false,
+        "role": "Input cap for the warm frontlight boost."
       }
     },
     {
@@ -17992,7 +18049,8 @@
         "description": "",
         "mfr": "SHOU HAN(\u9996\u97e9)",
         "package": "IND-SMD_L5.8-W5.2",
-        "basic": false
+        "basic": false,
+        "role": "Boost inductor for the warm frontlight driver."
       }
     },
     {
@@ -18215,7 +18273,8 @@
         "description": "SS34",
         "mfr": "MDD(\u8fb0\u8fbe\u534a\u5bfc\u4f53)",
         "package": "SMA_L4.3-W2.6-LS5.2-RD",
-        "basic": true
+        "basic": true,
+        "role": "Boost rectifier for the warm frontlight rail."
       }
     },
     {
@@ -18464,7 +18523,8 @@
         "description": "1uF (105) \u00b110% 50V",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
-        "basic": true
+        "basic": true,
+        "role": "Output cap for the warm frontlight rail."
       }
     },
     {
@@ -18645,7 +18705,8 @@
         "description": "",
         "mfr": "BOURNS",
         "package": "R0603",
-        "basic": false
+        "basic": false,
+        "role": "Sets the warm frontlight LED current (about 13mA)."
       }
     },
     {
@@ -19023,7 +19084,8 @@
         "description": "",
         "mfr": "SGMICRO(\u5723\u90a6\u5fae)",
         "package": "TSOT-23-6_L2.9-W1.6-P0.95-LS2.8-BR",
-        "basic": false
+        "basic": false,
+        "role": "Boost LED driver for the cool frontlight channel, dimmed via FL_CTRL_C."
       }
     },
     {
@@ -19272,7 +19334,8 @@
         "description": "",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
-        "basic": false
+        "basic": false,
+        "role": "Input cap for the cool frontlight boost."
       }
     },
     {
@@ -19541,7 +19604,8 @@
         "description": "",
         "mfr": "SHOU HAN(\u9996\u97e9)",
         "package": "IND-SMD_L5.8-W5.2",
-        "basic": false
+        "basic": false,
+        "role": "Boost inductor for the cool frontlight driver."
       }
     },
     {
@@ -19764,7 +19828,8 @@
         "description": "SS34",
         "mfr": "MDD(\u8fb0\u8fbe\u534a\u5bfc\u4f53)",
         "package": "SMA_L4.3-W2.6-LS5.2-RD",
-        "basic": true
+        "basic": true,
+        "role": "Boost rectifier for the cool frontlight rail."
       }
     },
     {
@@ -20013,7 +20078,8 @@
         "description": "1uF (105) \u00b110% 50V",
         "mfr": "SAMSUNG(\u4e09\u661f)",
         "package": "C0805",
-        "basic": true
+        "basic": true,
+        "role": "Output cap for the cool frontlight rail."
       }
     },
     {
@@ -20194,7 +20260,8 @@
         "description": "",
         "mfr": "BOURNS",
         "package": "R0603",
-        "basic": false
+        "basic": false,
+        "role": "Sets the cool frontlight LED current (about 13mA)."
       }
     },
     {
@@ -21488,7 +21555,8 @@
         "description": "",
         "mfr": "TDK InvenSense(\u5e94\u7f8e\u76db)",
         "package": "MIC-SMD_6P-L3.5-W2.7-P0.90-BL",
-        "basic": false
+        "basic": false,
+        "role": "Digital I2S microphone."
       }
     },
     {
@@ -21669,7 +21737,8 @@
         "description": "",
         "mfr": "Ignion",
         "package": "ANT-SMD_L12.0-W3.0",
-        "basic": false
+        "basic": false,
+        "role": "GNSS patch antenna."
       }
     },
     {
@@ -21898,7 +21967,8 @@
         "description": "",
         "mfr": "muRata(\u6751\u7530)",
         "package": "L0603",
-        "basic": false
+        "basic": false,
+        "role": "GNSS antenna matching, series 9.1nH."
       }
     },
     {
@@ -22127,7 +22197,8 @@
         "description": "",
         "mfr": "muRata(\u6751\u7530)",
         "package": "L0402",
-        "basic": false
+        "basic": false,
+        "role": "GNSS antenna matching, shunt 3.9nH."
       }
     },
     {
@@ -22384,7 +22455,8 @@
         "description": "3310472210\uff0cIPE-X IPX\uff0c",
         "mfr": "HRS(\u5e7f\u6fd1)",
         "package": "ANT-SMD_UFL-R-SMT-1-10",
-        "basic": false
+        "basic": false,
+        "role": "u.FL jack. Cables the GNSS antenna feed to the Walter module."
       }
     }
   ],
