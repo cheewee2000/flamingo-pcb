@@ -82,9 +82,9 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-/** Serve packages/ui/dist at '/' if it exists, else a placeholder page. Returns true if handled. */
-async function serveStatic(pathname: string, res: ServerResponse): Promise<boolean> {
-  const uiDistExists = await pathExists(UI_DIST);
+/** Serve uiDistDir at '/' if it exists, else a placeholder page. Returns true if handled. */
+async function serveStatic(pathname: string, res: ServerResponse, uiDistDir: string): Promise<boolean> {
+  const uiDistExists = await pathExists(uiDistDir);
   if (!uiDistExists) {
     if (pathname === '/') {
       sendHTML(res, 200, PLACEHOLDER_HTML);
@@ -94,8 +94,8 @@ async function serveStatic(pathname: string, res: ServerResponse): Promise<boole
   }
 
   const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
-  const filePath = normalize(join(UI_DIST, rel));
-  if (!filePath.startsWith(normalize(UI_DIST))) {
+  const filePath = normalize(join(uiDistDir, rel));
+  if (!filePath.startsWith(normalize(uiDistDir))) {
     sendJSON(res, 403, { ok: false, error: 'forbidden' });
     return true;
   }
@@ -108,7 +108,7 @@ async function serveStatic(pathname: string, res: ServerResponse): Promise<boole
   } catch {
     // SPA fallback to index.html for client-side routes.
     try {
-      const data = await readFile(join(UI_DIST, 'index.html'));
+      const data = await readFile(join(uiDistDir, 'index.html'));
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       res.end(data);
       return true;
@@ -238,7 +238,10 @@ async function handleMcp(
   }
 }
 
-function makeRequestListener(ctx: McpContext): (req: IncomingMessage, res: ServerResponse) => void {
+function makeRequestListener(
+  ctx: McpContext,
+  uiDistDir: string,
+): (req: IncomingMessage, res: ServerResponse) => void {
   const doc = ctx.doc;
   return (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
@@ -266,7 +269,7 @@ function makeRequestListener(ctx: McpContext): (req: IncomingMessage, res: Serve
         }
         req.resume(); // static/unknown routes never read the body
         if (method === 'GET' || method === 'HEAD') {
-          const served = await serveStatic(pathname, res);
+          const served = await serveStatic(pathname, res, uiDistDir);
           if (served) return;
         }
         sendNotFound(res);
@@ -344,6 +347,8 @@ export interface StartServerOptions {
   projectDir?: string;
   /** Parts lookup implementation for MCP's parts_search/parts_get/place_component tools. Defaults to the real @flamingo/parts network client -- tests should inject a mock. */
   partsApi?: PartsApi;
+  /** Directory to serve the built UI from at '/'. Defaults to packages/ui/dist -- tests should inject a temp dir so behavior doesn't depend on whether the real UI has been built. */
+  uiDistDir?: string;
 }
 
 /**
@@ -360,7 +365,8 @@ export function startServer(
     projectDir: opts.projectDir ?? process.cwd(),
     partsApi: opts.partsApi ?? { fetchPart, searchParts },
   };
-  const server = http.createServer(makeRequestListener(ctx));
+  const uiDistDir = opts.uiDistDir ?? UI_DIST;
+  const server = http.createServer(makeRequestListener(ctx, uiDistDir));
   const wss = attachWebSocket(doc, server);
 
   return new Promise((resolve, reject) => {

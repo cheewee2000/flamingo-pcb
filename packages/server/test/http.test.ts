@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { newBoard } from '@flamingo/engine';
@@ -11,10 +11,14 @@ describe('HTTP API', () => {
   let doc: Doc;
   let started: StartedServer;
   let base: string;
+  // A uiDistDir that is guaranteed not to exist, so these tests never depend
+  // on whether packages/ui/dist happens to be built in this environment.
+  let missingUiDistDir: string;
 
   beforeEach(async () => {
     doc = new Doc(newBoard('httptest', 2));
-    started = await startServer(doc, 0); // ephemeral port
+    missingUiDistDir = join(tmpdir(), `flamingo-http-no-ui-dist-${process.pid}-${Math.random().toString(36).slice(2)}`);
+    started = await startServer(doc, 0, { uiDistDir: missingUiDistDir }); // ephemeral port
     base = `http://localhost:${started.port}`;
   });
 
@@ -166,16 +170,65 @@ describe('HTTP API', () => {
     expect(body.ok).toBe(false);
   });
 
-  it('returns 404 for an unknown non-api route (no ui/dist built)', async () => {
+  it('returns 404 for an unknown non-api route (uiDistDir does not exist)', async () => {
     const res = await fetch(`${base}/some/random/path`);
     expect(res.status).toBe(404);
   });
 
-  it('GET / serves the placeholder page when packages/ui/dist does not exist', async () => {
+  it('GET / serves the placeholder page when uiDistDir does not exist', async () => {
     const res = await fetch(`${base}/`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/html');
     const text = await res.text();
     expect(text).toContain('Flamingo — UI not built yet');
+  });
+
+  describe('static file serving from uiDistDir', () => {
+    let dir: string;
+    let staticServer: StartedServer;
+    let staticBase: string;
+
+    beforeEach(async () => {
+      dir = await mkdtemp(join(tmpdir(), 'flamingo-http-ui-dist-'));
+      await writeFile(
+        join(dir, 'index.html'),
+        '<!doctype html><html><body><p>hello from temp ui dist</p></body></html>',
+      );
+      await mkdir(join(dir, 'assets'));
+      await writeFile(join(dir, 'assets', 'app.js'), 'console.log("hi");');
+
+      const staticDoc = new Doc(newBoard('httptest-static', 2));
+      staticServer = await startServer(staticDoc, 0, { uiDistDir: dir });
+      staticBase = `http://localhost:${staticServer.port}`;
+    });
+
+    afterEach(async () => {
+      await staticServer.close();
+      await rm(dir, { recursive: true, force: true });
+    });
+
+    it('GET / serves index.html from uiDistDir when it exists', async () => {
+      const res = await fetch(`${staticBase}/`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toContain('text/html');
+      const text = await res.text();
+      expect(text).toContain('hello from temp ui dist');
+    });
+
+    it('GET /assets/app.js serves a static asset with the correct content type', async () => {
+      const res = await fetch(`${staticBase}/assets/app.js`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toContain('text/javascript');
+      const text = await res.text();
+      expect(text).toContain('console.log("hi");');
+    });
+
+    it('GET /some/client-route falls back to index.html (SPA routing)', async () => {
+      const res = await fetch(`${staticBase}/some/client-route`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toContain('text/html');
+      const text = await res.text();
+      expect(text).toContain('hello from temp ui dist');
+    });
   });
 });
