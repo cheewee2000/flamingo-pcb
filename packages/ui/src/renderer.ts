@@ -40,8 +40,11 @@ import {
   holeSlotCenterline,
   capsulePolygon,
   labelFontMm,
+  padLabelLayout,
+  netIslands,
   padNetMap,
 } from '@flamingo/engine';
+import type { NetIsland } from '@flamingo/engine';
 import type { AppState, ViewTransform } from './state.js';
 import { DIMS_KEY, LABEL_NETS_KEY, LABEL_PADS_KEY, RATSNEST_KEY, SILK_KEY, ZONES_KEY } from './state.js';
 import { screenToWorld, worldToScreen } from './view.js';
@@ -71,6 +74,24 @@ const THROUGH_PAD_COLOR = '#B8B85A';
 const HOLE_COLOR = '#222';
 const RATSNEST_COLOR = '#ffffff66';
 const HIGHLIGHT_COLOR = '#00FFFF';
+
+// Distinct tints for a selected net's connectivity islands (cycled). First
+// entry intentionally differs from HIGHLIGHT_COLOR so "islands are shown"
+// reads differently from the ordinary single-island highlight.
+const ISLAND_COLORS = ['#FF5A8C', '#4ADE80', '#FACC15', '#A78BFA', '#FB923C', '#22D3EE'];
+
+// Islands are O(net size) to compute -- cache per (board, net) identity so the
+// per-frame render only pays on board edits or selection changes.
+let islandCache: { board: unknown; net: string; islands: NetIsland[] } | null = null;
+
+/** Islands of `net`, cached against board+net identity. */
+export function islandsFor(board: Board, net: string): NetIsland[] {
+  if (!islandCache || islandCache.board !== board || islandCache.net !== net) {
+    const netObj = board.nets.find((n) => n.name === net);
+    islandCache = { board, net, islands: netObj ? netIslands(board, netObj) : [] };
+  }
+  return islandCache.islands;
+}
 const DRC_COLOR = '#FF0000';
 const KEEPOUT_COLOR = '#FF6600';
 const HOVER_COLOR = '#ffffffcc';
@@ -593,22 +614,39 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
     }
   }
 
-  // ---- selection halo (whole net) ----
+  // ---- selection halo (whole net), tinted per connectivity island ----
+  // A fully-connected net strokes uniformly in HIGHLIGHT_COLOR; a net split
+  // into islands gets one color per island so the disconnected pieces are
+  // visually obvious (the ratsnest shows the gaps, this shows the groups).
   if (state.selectedNet) {
     const net = state.selectedNet;
+    const islands = islandsFor(board, net);
+    const colorOf = (i: number): string =>
+      islands.length > 1 ? ISLAND_COLORS[i % ISLAND_COLORS.length] : HIGHLIGHT_COLOR;
+    const trackColor = new Map<string, string>();
+    const viaColor = new Map<string, string>();
+    const pinColor = new Map<string, string>();
+    islands.forEach((g, i) => {
+      const color = colorOf(i);
+      for (const id of g.trackIds) trackColor.set(id, color);
+      for (const id of g.viaIds) viaColor.set(id, color);
+      for (const ref of g.pins) pinColor.set(ref, color);
+    });
     for (const t of board.tracks) {
       if (t.net !== net) continue;
-      strokeTrack(ctx, view, t, HIGHLIGHT_COLOR, 0.1);
+      strokeTrack(ctx, view, t, trackColor.get(t.id) ?? HIGHLIGHT_COLOR, 0.1);
     }
     for (const v of board.vias) {
       if (v.net !== net) continue;
-      strokeCircle(ctx, view, v.at, v.diameter / 2 + 0.1, HIGHLIGHT_COLOR, 0.1);
+      strokeCircle(ctx, view, v.at, v.diameter / 2 + 0.1, viaColor.get(v.id) ?? HIGHLIGHT_COLOR, 0.1);
     }
     const netObj = board.nets.find((n) => n.name === net);
     if (netObj) {
       for (const ref of netObj.pins) {
         const found = resolvePin(board, ref);
-        if (found) strokePolygon(ctx, view, padOutline(found.comp, found.pad), HIGHLIGHT_COLOR, 0.1);
+        if (found) {
+          strokePolygon(ctx, view, padOutline(found.comp, found.pad), pinColor.get(ref) ?? HIGHLIGHT_COLOR, 0.1);
+        }
       }
     }
   }
@@ -661,20 +699,47 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
       for (const pad of c.footprint.pads) {
         const [center] = componentTransformPoints(c, [pad.at]);
         const fontMm = labelFontMm(pad);
-        const fontPx = Math.max(fontMm * view.scale, LABEL_MIN_PX);
-        ctx.font = `${fontPx}px ${CANVAS_FONT}`;
         if (showPadLabels) {
+          const layout = padLabelLayout(pad, c.rotation);
+          const padFontPx = Math.max(layout.fontMm * view.scale, LABEL_MIN_PX);
+          ctx.font = `${padFontPx}px ${CANVAS_FONT}`;
           const s = worldToScreen(view, center);
           ctx.fillStyle = PAD_LABEL_COLOR;
-          ctx.fillText(pad.number, s.x, s.y);
+          if (layout.vertical) {
+            ctx.save();
+            ctx.translate(s.x, s.y);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText(pad.number, 0, 0);
+            ctx.restore();
+          } else {
+            ctx.fillText(pad.number, s.x, s.y);
+          }
         }
+        const fontPx = Math.max(fontMm * view.scale, LABEL_MIN_PX);
+        ctx.font = `${fontPx}px ${CANVAS_FONT}`;
         if (netByPin) {
           const netName = netByPin.get(`${c.refdes}.${pad.number}`);
           if (netName) {
-            const offset = Math.min(pad.size.w, pad.size.h) / 2 + fontMm;
-            const s = worldToScreen(view, { x: center.x, y: center.y - offset });
+            const layout = padLabelLayout(pad, c.rotation);
             ctx.fillStyle = NET_LABEL_COLOR;
-            ctx.fillText(netName, s.x, s.y);
+            if (layout.vertical) {
+              // Fine-pitch pad: hang the net name below the pad, reading
+              // upward, sized like the pad number so columns don't collide.
+              const netFontPx = Math.max(layout.fontMm * view.scale, LABEL_MIN_PX);
+              const s = worldToScreen(view, { x: center.x, y: center.y - (layout.worldH / 2 + 0.15) });
+              ctx.save();
+              ctx.font = `${netFontPx}px ${CANVAS_FONT}`;
+              ctx.textAlign = 'right';
+              ctx.translate(s.x, s.y);
+              ctx.rotate(-Math.PI / 2);
+              ctx.fillText(netName, 0, 0);
+              ctx.restore();
+              ctx.textAlign = 'center';
+            } else {
+              const offset = Math.min(pad.size.w, pad.size.h) / 2 + fontMm;
+              const s = worldToScreen(view, { x: center.x, y: center.y - offset });
+              ctx.fillText(netName, s.x, s.y);
+            }
           }
         }
       }

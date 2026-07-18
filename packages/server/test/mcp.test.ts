@@ -88,6 +88,7 @@ const TOOL_NAMES = [
   'undo',
   'redo',
   'unroute',
+  'widen_tracks',
   'autoroute',
   'export_fab',
   'export_step',
@@ -126,11 +127,11 @@ describe('MCP endpoint', () => {
     await rm(projectDir, { recursive: true, force: true });
   });
 
-  it('tools/list returns all 32 core tools', async () => {
+  it('tools/list returns all 33 core tools', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([...TOOL_NAMES].sort());
-    expect(tools).toHaveLength(32);
+    expect(tools).toHaveLength(33);
   });
 
   it('place_component (mocked part) then get_board_state reflects it', async () => {

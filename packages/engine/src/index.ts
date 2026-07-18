@@ -57,8 +57,12 @@ export type { Op, OpResult, OpError } from './ops.js';
 export { applyOp } from './ops.js';
 
 // Re-export connectivity
-export type { RatLine } from './connectivity.js';
-export { padAnchor, connectedGroups, ratsnest, isFullyRouted } from './connectivity.js';
+export type { RatLine, NetIsland } from './connectivity.js';
+export { padAnchor, connectedGroups, netIslands, ratsnest, isFullyRouted } from './connectivity.js';
+
+// Re-export track widening
+export type { WidenResult } from './widen.js';
+export { widenTracks } from './widen.js';
 
 // Re-export renderer
 export type { RenderOpts, SplitLayers } from './render.js';
@@ -69,6 +73,7 @@ export {
   LABEL_NETS_LAYER,
   splitLabelLayers,
   labelFontMm,
+  padLabelLayout,
   padNetMap,
   LABEL_FONT_MIN_MM,
   LABEL_FONT_MAX_MM,

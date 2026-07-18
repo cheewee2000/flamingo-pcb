@@ -9,7 +9,7 @@
  * highlight and the status bar update unconditionally on every state change.
  */
 
-import type { Board, ComponentInst, Keepout, LayerId, MountingHole, Op, Zone } from '@flamingo/engine';
+import type { Board, ComponentInst, Keepout, LayerId, MountingHole, Op, SilkText, Zone } from '@flamingo/engine';
 import { copperLayersOf } from '@flamingo/engine';
 import {
   DIMS_KEY,
@@ -25,6 +25,7 @@ import {
   type ToolOptions,
 } from './state.js';
 import type { ToolManager } from './tools/manager.js';
+import { islandsFor } from './renderer.js';
 
 export interface PanelEls {
   layerList: HTMLElement;
@@ -51,6 +52,8 @@ export interface PanelEls {
   projectName: HTMLElement;
   openBtn: HTMLButtonElement;
   saveBtn: HTMLButtonElement;
+  searchInput: HTMLInputElement;
+  searchResults: HTMLElement;
 }
 
 /** Actions the panels trigger that need canvas/view access (owned by main.ts). */
@@ -399,16 +402,8 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
         return null; // editable form built by buildZoneProps
       case 'keepout':
         return null; // editable form built by buildKeepoutProps
-      case 'silk': {
-        const s = board.silk.find((x) => x.id === sel.id);
-        if (!s) return null;
-        return [
-          ['type', 'silk text'],
-          ['text', s.text],
-          ['layer', s.layer],
-          ['at', `${s.at.x.toFixed(2)}, ${s.at.y.toFixed(2)} mm`],
-        ];
-      }
+      case 'silk':
+        return null; // editable form built by buildSilkProps
       case 'dimension': {
         const dim = board.dimensions.find((x) => x.id === sel.id);
         if (!dim) return null;
@@ -472,6 +467,13 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
         return;
       }
     }
+    if (sel && board && sel.kind === 'silk') {
+      const s = board.silk.find((x) => x.id === sel.id);
+      if (s) {
+        buildSilkProps(s);
+        return;
+      }
+    }
     const rows = propsRows(state);
     if (!rows) {
       const hint = document.createElement('div');
@@ -510,6 +512,25 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
     center.textContent = 'center in view →';
     center.addEventListener('click', () => actions.focusComponent(refdes));
     els.propsPanel.appendChild(center);
+  }
+
+  function buildSilkProps(s: SilkText): void {
+    const id = s.id;
+    const edit = (patch: Partial<Omit<SilkText, 'id'>>): void =>
+      actions.sendOp({ op: 'editSilkText', id, text: patch });
+    els.propsPanel.append(
+      staticRow('type', 'silk text'),
+      textRow('text', s.text, (v) => {
+        if (v.trim() !== '') edit({ text: v });
+      }),
+      numberRow('height mm', s.height, (v) => {
+        if (v > 0) edit({ height: v });
+      }, 0.1),
+      numberRow('rot °', s.rotation, (v) => edit({ rotation: v }), 45),
+      selectRow('layer', s.layer, ['F.Silk', 'B.Silk'], (v) => edit({ layer: v as SilkText['layer'] })),
+      numberRow('x mm', s.at.x, (v) => edit({ at: { x: v, y: s.at.y } })),
+      numberRow('y mm', s.at.y, (v) => edit({ at: { x: s.at.x, y: v } })),
+    );
   }
 
   function buildKeepoutProps(k: Keepout): void {
@@ -640,7 +661,11 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
 
   function updateSelection(state: AppState): void {
     for (const [name, row] of netRows) {
-      row.classList.toggle('selected', state.selectedNet === name);
+      const selected = state.selectedNet === name;
+      row.classList.toggle('selected', selected);
+      // Island count badge on the selected net (matches the renderer's tinting).
+      const count = selected && state.board ? islandsFor(state.board, name).length : 0;
+      row.textContent = count > 1 ? `${name} — ${count} islands` : name;
     }
     const selRefdes = state.selection?.kind === 'component' ? state.selection.refdes : null;
     const multi = new Set(state.multiSelection);
@@ -875,6 +900,128 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
   }
 
   // ---------------------------------------------------------------------------
+  // Search: components (refdes, value, description, mfr, role, LCSC id,
+  // footprint name) and nets by name. Selecting a component result selects it
+  // and centers the view (same path as the BOM chips); selecting a net result
+  // highlights the net (which also tints its islands).
+  // ---------------------------------------------------------------------------
+
+  interface SearchHit {
+    kind: 'component' | 'net';
+    key: string;
+    label: string;
+    detail: string;
+  }
+
+  function computeSearchHits(board: Board, rawQuery: string): SearchHit[] {
+    const query = rawQuery.trim().toLowerCase();
+    if (!query) return [];
+    const hits: { hit: SearchHit; rank: number }[] = [];
+    for (const c of board.components) {
+      const haystacks = [
+        c.refdes,
+        c.fields.value ?? '',
+        c.fields.description ?? '',
+        c.fields.mfr ?? '',
+        c.fields.role ?? '',
+        c.lcsc,
+        c.footprint.name,
+      ];
+      const idx = haystacks.findIndex((h) => h.toLowerCase().includes(query));
+      if (idx === -1) continue;
+      const starts = haystacks[idx].toLowerCase().startsWith(query);
+      hits.push({
+        rank: (starts ? 0 : 10) + idx,
+        hit: {
+          kind: 'component',
+          key: c.refdes,
+          label: c.refdes,
+          detail: [c.fields.value, c.fields.mfr, c.lcsc].filter(Boolean).join(' · '),
+        },
+      });
+    }
+    for (const n of board.nets) {
+      if (!n.name.toLowerCase().includes(query)) continue;
+      hits.push({
+        rank: n.name.toLowerCase().startsWith(query) ? 1 : 11,
+        hit: { kind: 'net', key: n.name, label: n.name, detail: `net · ${n.pins.length} pins` },
+      });
+    }
+    hits.sort((a, b) => a.rank - b.rank || a.hit.label.localeCompare(b.hit.label));
+    return hits.slice(0, 20).map((h) => h.hit);
+  }
+
+  function wireSearch(): void {
+    let hits: SearchHit[] = [];
+    let active = -1;
+
+    function close(): void {
+      els.searchResults.hidden = true;
+      els.searchResults.replaceChildren();
+      hits = [];
+      active = -1;
+    }
+
+    function choose(hit: SearchHit): void {
+      if (hit.kind === 'component') {
+        store.set({ selection: { kind: 'component', refdes: hit.key }, multiSelection: [] });
+        actions.focusComponent(hit.key);
+      } else {
+        store.set({ selectedNet: hit.key });
+      }
+      close();
+      els.searchInput.blur();
+    }
+
+    function render(): void {
+      els.searchResults.replaceChildren();
+      els.searchResults.hidden = hits.length === 0;
+      hits.forEach((hit, i) => {
+        const row = document.createElement('div');
+        row.className = 'search-result-item' + (i === active ? ' active' : '');
+        const label = document.createElement('span');
+        label.className = 'search-result-label';
+        label.textContent = hit.label;
+        const detail = document.createElement('span');
+        detail.className = 'search-result-detail';
+        detail.textContent = hit.detail;
+        row.append(label, detail);
+        // mousedown, not click: fires before the input's blur closes the list.
+        row.addEventListener('mousedown', (ev) => {
+          ev.preventDefault();
+          choose(hit);
+        });
+        els.searchResults.appendChild(row);
+      });
+    }
+
+    els.searchInput.addEventListener('input', () => {
+      const board = store.get().board;
+      hits = board ? computeSearchHits(board, els.searchInput.value) : [];
+      active = hits.length > 0 ? 0 : -1;
+      render();
+    });
+    els.searchInput.addEventListener('keydown', (ev) => {
+      if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+        ev.preventDefault();
+        if (hits.length === 0) return;
+        active = (active + (ev.key === 'ArrowDown' ? 1 : hits.length - 1)) % hits.length;
+        render();
+      } else if (ev.key === 'Enter') {
+        if (active >= 0 && active < hits.length) choose(hits[active]);
+      } else if (ev.key === 'Escape') {
+        close();
+        els.searchInput.blur();
+        ev.stopPropagation(); // don't also reset the active tool
+      }
+    });
+    els.searchInput.addEventListener('blur', () => {
+      // Delay so a result mousedown wins the race.
+      setTimeout(close, 100);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // Project controls: Save (explicit flush; the server also autosaves after
   // every op) and Open (modal listing every .flamingo the server can see).
   // ---------------------------------------------------------------------------
@@ -898,6 +1045,15 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
       })();
     });
     els.openBtn.addEventListener('click', showProjectsModal);
+    // Cmd/Ctrl+S saves the board file, not the browser's "save page as" dialog.
+    // Registered here (not main.ts's shortcut map) so it works even while an
+    // input has focus, and always preventDefaults the browser behavior.
+    window.addEventListener('keydown', (ev) => {
+      if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 's') {
+        ev.preventDefault();
+        els.saveBtn.click();
+      }
+    });
   }
 
   /**
@@ -1294,6 +1450,7 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
   wireToolbarControls();
   wireProjectControls();
   wireProjectRename();
+  wireSearch();
   wireRouteControls();
   wireRipAllControls();
   wireExportFabControls();

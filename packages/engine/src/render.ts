@@ -134,6 +134,46 @@ export function labelFontMm(pad: Pad): number {
   return Math.max(LABEL_FONT_MIN_MM, Math.min(LABEL_FONT_MAX_MM, scaled));
 }
 
+/** Approximate glyph advance as a fraction of font size for the monospace label font. */
+const LABEL_GLYPH_ASPECT = 0.62;
+/** Hard floor: below this the text is unreadable, so stop shrinking and accept it. */
+const LABEL_FONT_FLOOR_MM = 0.22;
+
+/**
+ * Layout for one pad-number label so neighbors don't overlap on fine-pitch
+ * parts: run the text along the pad's LONG axis (in world space — the
+ * component's rotation is folded in), and shrink the font until the text
+ * fits inside the pad. `vertical` means "draw rotated 90°, reading upward".
+ * Shared by the SVG renderer and the UI canvas renderer so screenshots and
+ * the live view agree.
+ */
+export function padLabelLayout(
+  pad: Pad,
+  componentRotation: number,
+): { vertical: boolean; fontMm: number; worldW: number; worldH: number } {
+  // Pad dims in world space: a 90°/270° component rotation swaps w/h.
+  const swap = Math.round(((componentRotation % 180) + 180) % 180) === 90;
+  const worldW = swap ? pad.size.h : pad.size.w;
+  const worldH = swap ? pad.size.w : pad.size.h;
+
+  const chars = Math.max(1, String(pad.number).length);
+  let fontMm = labelFontMm(pad);
+  const textLen = (f: number): number => f * LABEL_GLYPH_ASPECT * chars;
+
+  // Prefer horizontal; go vertical when the pad is taller than wide and the
+  // text doesn't fit horizontally but fits (or fits better) vertically.
+  let vertical = false;
+  if (textLen(fontMm) > worldW && worldH > worldW) vertical = true;
+
+  const along = vertical ? worldH : worldW;
+  const cross = vertical ? worldW : worldH;
+  // Shrink to fit: text run within the long axis, glyph height within the short axis.
+  fontMm = Math.min(fontMm, along / (LABEL_GLYPH_ASPECT * chars), cross * 1.1);
+  fontMm = Math.max(fontMm, LABEL_FONT_FLOOR_MM);
+
+  return { vertical, fontMm, worldW, worldH };
+}
+
 /** Map of "REFDES.PAD" -> net name, for net-label lookups. */
 export function padNetMap(b: Board): Map<string, string> {
   const m = new Map<string, string>();
@@ -468,20 +508,32 @@ export function renderSVG(b: Board, opts: RenderOpts = {}): string {
         const center = padWorld(c, pad).at;
         const font = labelFontMm(pad);
         if (opts.showPadLabels) {
+          const { vertical, fontMm } = padLabelLayout(pad, c.rotation);
           const p = svg(center);
+          const rot = vertical ? ` transform="rotate(-90 ${fmt(p.x)} ${fmt(p.y)})"` : '';
           parts.push(
-            `<text x="${fmt(p.x)}" y="${fmt(p.y)}" font-family="monospace" font-size="${fmt(font)}" text-anchor="middle" dominant-baseline="central" fill="${PAD_LABEL_COLOR}">${escapeXml(pad.number)}</text>`,
+            `<text x="${fmt(p.x)}" y="${fmt(p.y)}" font-family="monospace" font-size="${fmt(fontMm)}" text-anchor="middle" dominant-baseline="central" fill="${PAD_LABEL_COLOR}"${rot}>${escapeXml(pad.number)}</text>`,
           );
         }
         if (netByPin) {
           const netName = netByPin.get(`${c.refdes}.${pad.number}`);
           if (netName) {
-            // Offset below the pad (world y-up: -y) so it clears the pad number.
-            const offset = Math.min(pad.size.w, pad.size.h) / 2 + font;
-            const p = svg({ x: center.x, y: center.y - offset });
-            parts.push(
-              `<text x="${fmt(p.x)}" y="${fmt(p.y)}" font-family="monospace" font-size="${fmt(font)}" text-anchor="middle" dominant-baseline="central" fill="${NET_LABEL_COLOR}">${escapeXml(netName)}</text>`,
-            );
+            const layout = padLabelLayout(pad, c.rotation);
+            if (layout.vertical) {
+              // Fine-pitch pad: hang the net name below the pad, reading
+              // upward, sized like the pad number so columns don't collide.
+              const p = svg({ x: center.x, y: center.y - (layout.worldH / 2 + 0.15) });
+              parts.push(
+                `<text x="${fmt(p.x)}" y="${fmt(p.y)}" font-family="monospace" font-size="${fmt(layout.fontMm)}" text-anchor="end" dominant-baseline="central" fill="${NET_LABEL_COLOR}" transform="rotate(-90 ${fmt(p.x)} ${fmt(p.y)})">${escapeXml(netName)}</text>`,
+              );
+            } else {
+              // Offset below the pad (world y-up: -y) so it clears the pad number.
+              const offset = Math.min(pad.size.w, pad.size.h) / 2 + font;
+              const p = svg({ x: center.x, y: center.y - offset });
+              parts.push(
+                `<text x="${fmt(p.x)}" y="${fmt(p.y)}" font-family="monospace" font-size="${fmt(font)}" text-anchor="middle" dominant-baseline="central" fill="${NET_LABEL_COLOR}">${escapeXml(netName)}</text>`,
+              );
+            }
           }
         }
       }
