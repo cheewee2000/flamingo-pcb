@@ -63,6 +63,59 @@ describe('extractModel3d', () => {
     expect(extractModel3d(part(['PAD~ELLIPSE~4000~3000~1~1~1']))).toBeNull();
   });
 
+  it('prefers the projection-outline center over a stale c_origin', () => {
+    // Real C0805 cap data (C29277): head/pads centered at 4000,3000; the
+    // projection polyline is centered there too, but c_origin is stale at
+    // 3994.437 (-1.413mm) — the shift that misplaced caps in the 3D view.
+    const staleCap =
+      'SVGNODE~' +
+      JSON.stringify({
+        gId: 'g1_outline',
+        nodeName: 'g',
+        nodeType: 1,
+        layerid: '19',
+        attrs: {
+          c_width: '7.874',
+          c_height: '5.1181',
+          c_rotation: '0,0,0',
+          z: '0',
+          c_origin: '3994.437,3000',
+          uuid: 'b87ab0c5465a48b3a1c9a6dac8d30bc5',
+          c_etype: 'outline3D',
+          id: 'g1_outline',
+          title: 'C0805_L2.0-W1.3-H1.3',
+          layerid: '19',
+        },
+        childNodes: [
+          {
+            gId: 'g1_outline_line0',
+            nodeName: 'polyline',
+            nodeType: 1,
+            attrs: {
+              fill: 'none',
+              id: 'g1_outline_line0',
+              c_shapetype: 'line',
+              points: '3996.063 2997.4409 4003.937 2997.4409 4003.937 3002.559 3996.063 3002.559',
+            },
+          },
+        ],
+      });
+    const bare = {
+      packageDetail: { dataStr: { head: { x: 4000, y: 3000 }, shape: [staleCap] } },
+    };
+    const m = extractModel3d(bare);
+    // Outline bbox center is (4000, 2999.99995) -> ~(0, 0) mm, NOT c_origin's -1.413mm.
+    expect(m!.originMm.x).toBeCloseTo(0, 4);
+    expect(m!.originMm.y).toBeCloseTo(0, 4);
+  });
+
+  it('falls back to c_origin when the SVGNODE has no projection outline', () => {
+    // The main fixture has childNodes: [] — its expectations above already pin
+    // the c_origin fallback; this just states the intent explicitly.
+    const m = extractModel3d(part([SVGNODE]));
+    expect(m!.originMm.y).toBeCloseTo(-1.09999778, 4);
+  });
+
   it('rejects an SVGNODE whose uuid is not 32 hex chars', () => {
     const bad = SVGNODE.replace('617b05f9bba7410b96c001093d8189e4', 'not-a-uuid');
     expect(extractModel3d(part([bad]))).toBeNull();
