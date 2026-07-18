@@ -20,6 +20,7 @@ import {
   capsulePolygon,
 } from './geometry.js';
 import { copperLayersOf, padCopperLayers } from './layers.js';
+import { componentLabelPlacement } from './labels.js';
 import type { RatLine } from './connectivity.js';
 
 export interface RenderOpts {
@@ -380,10 +381,12 @@ export function renderSVG(b: Board, opts: RenderOpts = {}): string {
       for (const item of c.footprint.silk) {
         parts.push(...renderSilkItem(item, c, mirror, color));
       }
-      // refdes label: always rendered, at the component's origin, 1mm font.
-      const at = svg(componentTransformPoints(c, [{ x: 0, y: 0 }])[0]);
+      // refdes label: always rendered, adjacent to the component body
+      // (below/right/left/above, pad-avoiding) per componentLabelPlacement.
+      const lp = componentLabelPlacement(b, c);
+      const at = svg(lp.at);
       parts.push(
-        `<text x="${fmt(at.x)}" y="${fmt(at.y)}" font-family="monospace" font-size="1.0000" text-anchor="middle" fill="${color}">${escapeXml(c.refdes)}</text>`,
+        `<text x="${fmt(at.x)}" y="${fmt(at.y)}" font-family="monospace" font-size="${fmt(lp.height)}" text-anchor="middle" dominant-baseline="central" fill="${color}">${escapeXml(c.refdes)}</text>`,
       );
     }
 

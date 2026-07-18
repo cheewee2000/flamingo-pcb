@@ -337,6 +337,42 @@ describe('runDRC', () => {
     expect(violationsOf(b, 'silk-over-pad')).toHaveLength(0);
   });
 
+  it('silk-over-pad: the refdes label (placed below the body) does NOT hit its own pads', () => {
+    const b = base();
+    // Lone part: label sits below the pad box with a gap -> clear.
+    b.components.push(makeComponent('R1', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })]));
+
+    expect(violationsOf(b, 'silk-over-pad')).toHaveLength(0);
+  });
+
+  it('silk-over-pad: the refdes label AVOIDS a neighbor pad below (moves aside, no violation)', () => {
+    const b = base();
+    b.components.push(makeComponent('R1', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })]));
+    // A neighbor pad sits where the default below-label would go; the
+    // board-aware placement moves the label to a clear candidate instead.
+    b.components.push(makeComponent('R2', { x: 0, y: -3 }, [smdPad('1', 'top', { x: 0, y: 1.7 })]));
+
+    expect(violationsOf(b, 'silk-over-pad')).toHaveLength(0);
+  });
+
+  it('silk-over-pad: with ALL label candidates blocked, the below-fallback violates honestly', () => {
+    const b = base();
+    b.components.push(makeComponent('R1', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })]));
+    // Pads parked on every candidate spot (below/right/left/above) around R1.
+    b.components.push(
+      makeComponent('U8', { x: 0, y: 0 }, [
+        smdPad('1', 'top', { x: 0, y: -1.3 }),
+        smdPad('2', 'top', { x: 0, y: 1.3 }),
+        smdPad('3', 'top', { x: 1.7, y: 0 }),
+        smdPad('4', 'top', { x: -1.7, y: 0 }),
+      ]),
+    );
+
+    const violations = violationsOf(b, 'silk-over-pad');
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations.some((v) => v.items.includes('R1') && v.items.includes('U8.1'))).toBe(true);
+  });
+
   it('unconnected-net: net with two unbridged pads violates', () => {
     const b = base();
     b.components.push(makeComponent('R1', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })]));

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createParser, GERBER, DRILL, UNIMPLEMENTED } from '@tracespace/parser';
-import { newBoard, parseBoard, fillZone, fillAllZones, pointInPolygon } from '@flamingo/engine';
+import { newBoard, parseBoard, fillZone, fillAllZones, pointInPolygon, componentLabelPlacement } from '@flamingo/engine';
 import type { Board, Point } from '@flamingo/engine';
 import { generateGerbers, buildDrills } from '../src/gerber.js';
 
@@ -272,6 +272,57 @@ describe('generateGerbers - board-level silk lines', () => {
     assertGerberParses(gbo);
     expect(gbo).toMatch(/%ADD\d+C,0\.2\*%/);
     expect(gto).not.toContain('D01*'); // nothing drawn on the top legend
+  });
+});
+
+/** All draw/move coordinates (integer 4.6-format) in a Gerber, in emit order. */
+function drawCoords(gerber: string): [number, number][] {
+  return [...gerber.matchAll(/X(-?\d+)Y(-?\d+)D0[12]\*/g)].map((m) => [Number(m[1]), Number(m[2])]);
+}
+
+describe('generateGerbers - silk text (legend)', () => {
+  it('mirrors B.Silk board text about its anchor, like bottom-component text', () => {
+    const at = { x: 10, y: 5 };
+    const mk = (layer: 'F.Silk' | 'B.Silk'): Board => {
+      const b = newBoard('st', 2);
+      b.silk.push({ id: 'S1', layer, at, text: 'F2', height: 1, rotation: 0 });
+      return b;
+    };
+    const gto = generateGerbers(mk('F.Silk')).files.get('st.GTO')!;
+    const gbo = generateGerbers(mk('B.Silk')).files.get('st.GBO')!;
+    assertGerberParses(gbo);
+    const top = drawCoords(gto);
+    const bot = drawCoords(gbo);
+    expect(top.length).toBeGreaterThan(0);
+    expect(bot.length).toBe(top.length);
+    // Bottom text is the x-mirror of top text about the anchor: x -> 2*ax - x.
+    const ax = Math.round(at.x * 1e6);
+    for (let i = 0; i < top.length; i++) {
+      expect(bot[i][0]).toBe(2 * ax - top[i][0]);
+      expect(bot[i][1]).toBe(top[i][1]);
+    }
+    // Asymmetric glyphs ('F', '2') really are mirrored, not identical.
+    expect(bot.map(String)).not.toEqual(top.map(String));
+  });
+
+  it('strokes the refdes label at the shared componentLabelPlacement anchor (below the body)', () => {
+    const b = oneTrackOnePad(); // R1 at (5,5): pad box x 4.5..5.5, y 4.7..5.3
+    const lp = componentLabelPlacement(b, b.components[0]);
+    expect(lp.position).toBe('below');
+    const gto = generateGerbers(b).files.get('t1.GTO')!;
+    assertGerberParses(gto);
+    const pts = drawCoords(gto);
+    expect(pts.length).toBeGreaterThan(0);
+    // Glyph ink spans exactly [at.y - h/2, at.y + h/2] vertically ('R','1' are
+    // full cap-height glyphs) and stays within the label's advance width.
+    const ys = pts.map((p) => p[1]);
+    const xs = pts.map((p) => p[0]);
+    expect(Math.min(...ys)).toBe(Math.round((lp.at.y - lp.height / 2) * 1e6));
+    expect(Math.max(...ys)).toBe(Math.round((lp.at.y + lp.height / 2) * 1e6));
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(Math.round((lp.at.x - lp.width / 2) * 1e6));
+    expect(Math.max(...xs)).toBeLessThanOrEqual(Math.round((lp.at.x + lp.width / 2) * 1e6));
+    // And the whole label sits BELOW the component body (pad bottom y=4.7).
+    expect(Math.max(...ys)).toBeLessThan(Math.round(4.7 * 1e6));
   });
 });
 

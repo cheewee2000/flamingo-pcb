@@ -52,6 +52,18 @@ export {
 } from './geometry.js';
 export type { PolyGroup } from './geometry.js';
 
+// Re-export component silk label placement (single source of truth for the
+// refdes label anchor used by the SVG/canvas renderers, gerber legend, DRC)
+export {
+  componentBodyBBox,
+  componentLabelPlacement,
+  componentLabelRect,
+  COMPONENT_LABEL_HEIGHT_MM,
+  COMPONENT_LABEL_GAP_MM,
+  COMPONENT_LABEL_CHAR_ADVANCE,
+} from './labels.js';
+export type { ComponentLabelPlacement, ComponentLabelPosition } from './labels.js';
+
 // Re-export ops
 export type { Op, OpResult, OpError } from './ops.js';
 export { applyOp } from './ops.js';

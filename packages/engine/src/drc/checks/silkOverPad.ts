@@ -12,9 +12,13 @@
  *  - text (both footprint SilkItem 'text' and board-level SilkText) is
  *    approximated by its bounding rect: w = 0.6 * height * text.length,
  *    h = height, centered at `at` and rotated by `rotation`.
+ *  - each component's auto-generated refdes label is checked at the shared
+ *    placement from labels.ts (componentLabelRect), the same box the
+ *    renderers and Gerber legend use.
  */
 import type { Board, ComponentInst, Point, SilkItem, SilkLine, SilkText } from '../../types.js';
 import { add, componentTransformPoints, polyIntersects, rotate } from '../../geometry.js';
+import { componentLabelRect } from '../../labels.js';
 import { circlePolygon } from '../util.js';
 import type { RuleSet } from '../rules.js';
 import type { CopperItem, DrcViolation } from '../types.js';
@@ -51,12 +55,16 @@ function textRectLocal(at: Point, rotationDeg: number, text: string, height: num
   return corners.map((p) => add(rotate(p, rotationDeg), at));
 }
 
-function footprintSilkShapes(c: ComponentInst): SilkShape[] {
+function footprintSilkShapes(b: Board, c: ComponentInst): SilkShape[] {
   const side = c.side;
   const shapes: SilkShape[] = [];
   for (const item of c.footprint.silk) {
     shapes.push(...footprintSilkItemShape(c, item, side));
   }
+  // Auto-generated refdes label: its world-space box comes from the shared
+  // board-aware placement helper (labels.ts), so DRC checks the label exactly
+  // where the renderers and the Gerber legend draw it.
+  shapes.push({ poly: componentLabelRect(b, c), side, ref: c.refdes });
   return shapes;
 }
 
@@ -90,7 +98,7 @@ function boardSilkLineShape(line: SilkLine): SilkShape {
 
 function buildSilkShapes(b: Board): SilkShape[] {
   const shapes: SilkShape[] = [];
-  for (const c of b.components) shapes.push(...footprintSilkShapes(c));
+  for (const c of b.components) shapes.push(...footprintSilkShapes(b, c));
   for (const st of b.silk) shapes.push(boardSilkTextShape(st));
   for (const line of b.silkLines) shapes.push(boardSilkLineShape(line));
   return shapes;
