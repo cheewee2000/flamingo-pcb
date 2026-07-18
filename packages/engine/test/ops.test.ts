@@ -427,6 +427,36 @@ describe('applyOp', () => {
     });
   });
 
+  describe('editZone', () => {
+    it('patches polygon and rules, drops stale fill, rejects degenerate polygons and unknown ids', () => {
+      const board = baseBoard();
+      board.zones.push({
+        id: 'Z1',
+        layer: 'F.Cu',
+        net: 'GND',
+        polygon: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 5 }, { x: 0, y: 5 }],
+        clearance: 0.3,
+        minWidth: 0.2,
+        thermal: { gap: 0.3, spokeWidth: 0.4 },
+        fill: [[{ x: 1, y: 1 }, { x: 2, y: 1 }, { x: 2, y: 2 }]],
+      });
+      const edited = applyOp(board, {
+        op: 'editZone',
+        id: 'Z1',
+        zone: { polygon: [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 8 }, { x: 0, y: 8 }], clearance: 0.5 },
+      });
+      expect(edited.ok).toBe(true);
+      if (edited.ok) {
+        const z = edited.board.zones.find((x) => x.id === 'Z1')!;
+        expect(z.polygon[2]).toEqual({ x: 20, y: 8 });
+        expect(z.clearance).toBe(0.5);
+        expect(z.fill).toBeUndefined();
+      }
+      expect(applyOp(board, { op: 'editZone', id: 'Z1', zone: { polygon: [{ x: 0, y: 0 }] } }).ok).toBe(false);
+      expect(applyOp(board, { op: 'editZone', id: 'NOPE', zone: {} }).ok).toBe(false);
+    });
+  });
+
   describe('moveComponents', () => {
     it('moves several components in one op and rejects unknown refdes atomically', () => {
       const board = baseBoard();

@@ -37,6 +37,7 @@ export type Op =
   | { op: 'setComponentFields'; refdes: string; fields: Partial<ComponentInst['fields']> }
   | { op: 'editHole'; id: string; hole: Partial<Omit<MountingHole, 'id'>> }
   | { op: 'editKeepout'; id: string; keepout: Partial<Omit<Keepout, 'id'>> }
+  | { op: 'editZone'; id: string; zone: Partial<Omit<Zone, 'id' | 'fill'>> }
   | { op: 'removeComponent'; refdes: string }
   | { op: 'setOutline'; outline: PathSeg[] }
   | { op: 'addKeepout'; keepout: Omit<Keepout, 'id'> }
@@ -190,6 +191,18 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
         return err('keepout polygon needs at least 3 points');
       }
       Object.assign(keepout, op.keepout);
+      return ok(board, createdIds);
+    }
+
+    case 'editZone': {
+      const zone = board.zones.find((z) => z.id === op.id);
+      if (!zone) return err(`No zone with id "${op.id}"`);
+      if (op.zone.polygon !== undefined && op.zone.polygon.length < 3) {
+        return err('zone polygon needs at least 3 points');
+      }
+      Object.assign(zone, op.zone);
+      // Geometry or rule changes invalidate any cached fill.
+      delete zone.fill;
       return ok(board, createdIds);
     }
 
