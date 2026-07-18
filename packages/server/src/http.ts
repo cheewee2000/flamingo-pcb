@@ -1,15 +1,18 @@
 import http from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ZipArchive } from 'archiver';
 import { WebSocket, WebSocketServer } from 'ws';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { Board, Op, RenderOpts } from '@flamingo/engine';
 import { fillAllZones, parseBoard, ratsnest, renderSVG, runDRC, splitLabelLayers } from '@flamingo/engine';
 import { exportFab } from '@flamingo/fab';
-import { fetchPart, searchParts } from '@flamingo/parts';
+import type { Model3d } from '@flamingo/parts';
+import { extractModel3d, fetchPart, readCache, searchParts } from '@flamingo/parts';
 import { runAutoroute } from './autoroute.js';
 import { Doc } from './document.js';
 import type { McpContext, PartsApi } from './mcp.js';
@@ -171,6 +174,61 @@ async function findBoardFiles(roots: string[]): Promise<ProjectEntry[]> {
 
   for (const root of roots) await walk(root, 0);
   return [...found.values()].sort((a, b) => b.mtimeMs - a.mtimeMs);
+}
+
+/** Cache dir for downloaded OBJ 3D models: `~/.flamingo/models/`. */
+function modelsCacheDir(): string {
+  return join(homedir(), '.flamingo', 'models');
+}
+
+const MODEL_UUID_RE = /^[0-9a-f]{32}$/;
+
+/**
+ * Resolve a component's 3D model from its LCSC id via the parts cache. On a
+ * cache miss, fetchPart populates `~/.flamingo/parts/<lcsc>.json` (fetching the
+ * raw EasyEDA response), which we then re-read to extract the SVGNODE model.
+ * Returns null (never throws) when the part can't be resolved or has no model.
+ */
+async function loadModel3d(lcsc: string): Promise<Model3d | null> {
+  let raw = await readCache(lcsc);
+  if (raw === null) {
+    try {
+      await fetchPart(lcsc);
+    } catch {
+      return null; // part not found / network error
+    }
+    raw = await readCache(lcsc);
+  }
+  if (raw === null) return null;
+  try {
+    return extractModel3d(raw);
+  } catch {
+    return null;
+  }
+}
+
+/** Zip the four fab files in `dir` into `res` (attachment already headered). Resolves once fully flushed. */
+function streamFabZip(dir: string, res: ServerResponse): Promise<void> {
+  return new Promise((resolveP, reject) => {
+    const archive = new ZipArchive({ zlib: { level: 9 } });
+    let done = false;
+    const finish = (): void => {
+      if (!done) {
+        done = true;
+        resolveP();
+      }
+    };
+    archive.on('error', reject);
+    // 'finish' fires once the response is fully flushed; 'close' covers a client
+    // that aborts mid-download. Either way the temp dir is safe to remove.
+    res.on('finish', finish);
+    res.on('close', finish);
+    archive.pipe(res);
+    for (const name of ['gerbers.zip', 'bom.csv', 'cpl.csv', 'board.render.svg']) {
+      archive.file(join(dir, name), { name });
+    }
+    void archive.finalize();
+  });
 }
 
 async function handleApi(
@@ -377,6 +435,108 @@ async function handleApi(
       res.end(step);
     } catch (err) {
       sendJSON(res, 500, { ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  if (method === 'GET' && pathname === '/api/models') {
+    // Per-component 3D model refs for the live board, keyed by refdes. Parts
+    // that can't be resolved or have no 3D model are omitted. Model JSON is
+    // resolved once per distinct LCSC id.
+    const byLcsc = new Map<string, Model3d | null>();
+    const models: Record<string, {
+      uuid: string;
+      objUrl: string;
+      originMm: Model3d['originMm'];
+      zMm: number;
+      rotationDeg: Model3d['rotationDeg'];
+    }> = {};
+    for (const c of doc.board.components) {
+      if (!c.lcsc) continue;
+      let m = byLcsc.get(c.lcsc);
+      if (m === undefined) {
+        m = await loadModel3d(c.lcsc);
+        byLcsc.set(c.lcsc, m);
+      }
+      if (!m) continue;
+      models[c.refdes] = {
+        uuid: m.uuid,
+        objUrl: `/api/model/${m.uuid}.obj`,
+        originMm: m.originMm,
+        zMm: m.zMm,
+        rotationDeg: m.rotationDeg,
+      };
+    }
+    sendJSON(res, 200, { models });
+    return true;
+  }
+
+  if (method === 'GET' && pathname.startsWith('/api/model/') && pathname.endsWith('.obj')) {
+    const uuid = pathname.slice('/api/model/'.length, -'.obj'.length);
+    if (!MODEL_UUID_RE.test(uuid)) {
+      sendJSON(res, 400, { ok: false, error: 'model uuid must be 32 hex chars' });
+      return true;
+    }
+    const filePath = join(modelsCacheDir(), `${uuid}.obj`);
+    let data: Buffer | null = null;
+    try {
+      data = await readFile(filePath);
+    } catch {
+      data = null; // cache miss: download below
+    }
+    if (data === null) {
+      try {
+        const resp = await fetch(`https://modules.easyeda.com/3dmodel/${uuid}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        data = Buffer.from(await resp.arrayBuffer());
+        await mkdir(modelsCacheDir(), { recursive: true });
+        await writeFile(filePath, data);
+      } catch (err) {
+        sendJSON(res, 502, { ok: false, error: `could not fetch model: ${err instanceof Error ? err.message : String(err)}` });
+        return true;
+      }
+    }
+    res.writeHead(200, {
+      'content-type': 'text/plain; charset=utf-8',
+      'cache-control': 'public, max-age=31536000, immutable',
+    });
+    res.end(data);
+    return true;
+  }
+
+  if (method === 'GET' && pathname === '/api/export.fab') {
+    // DRC-gated fab download (mirrors POST /api/export's gate). ?waive=1 bypasses
+    // the gate like the export_fab MCP tool's waiveDrc; violations are still
+    // computed but not fatal. Streams a single zip of the fab fileset.
+    const waive = url.searchParams.get('waive') === '1';
+    const filled = fillAllZones(doc.board);
+    const violations = runDRC(filled);
+    if (violations.length > 0 && !waive) {
+      sendJSON(res, 400, {
+        ok: false,
+        error: 'DRC violations present; export refused',
+        violations,
+      });
+      return true;
+    }
+    let tmpDir: string | null = null;
+    try {
+      tmpDir = await mkdtemp(join(tmpdir(), 'flamingo-fab-'));
+      await exportFab(doc.board, tmpDir);
+      const fileName = `${doc.board.name.replace(/[^\w.-]+/g, '_') || 'board'}-fab.zip`;
+      res.writeHead(200, {
+        'content-type': 'application/zip',
+        'content-disposition': `attachment; filename="${fileName}"`,
+      });
+      await streamFabZip(tmpDir, res);
+    } catch (err) {
+      if (!res.headersSent) {
+        sendJSON(res, 500, { ok: false, error: err instanceof Error ? err.message : String(err) });
+      } else {
+        res.end();
+      }
+    } finally {
+      if (tmpDir) await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
     }
     return true;
   }
