@@ -14,7 +14,6 @@
         <span class="header-spacer"></span>
         <button id="open-btn" class="header-action" type="button">Open</button>
         <button id="save-btn" class="header-action" type="button">Save</button>
-        <a id="view3d-link" class="view3d-link" href="/3d" target="_blank" rel="noopener">3D view →</a>
       </header>
 
       <div id="toolbar-left" class="panel toolbar-left">
@@ -39,6 +38,9 @@
         <div class="panel-section route-section">
           <button id="route-btn" class="route-btn" type="button">Lock &amp; Route</button>
           <div id="route-status" class="route-status"></div>
+          <button id="ripall-btn" class="ripall-btn" type="button">Rip up all</button>
+          <button id="exportfab-btn" class="exportfab-btn" type="button">Export fab</button>
+          <div id="exportfab-status" class="route-status"></div>
         </div>
         <div class="panel-section bom-section">
           <div class="panel-title">BOM</div>
@@ -47,7 +49,17 @@
       </div>
 
       <div id="viewport" class="viewport">
+        <div id="view-tabs" class="view-tabs">
+          <button id="view-tab-2d" class="view-tab active" type="button" data-view="2d">2D</button>
+          <button id="view-tab-3d" class="view-tab" type="button" data-view="3d">3D</button>
+        </div>
         <canvas id="board-canvas"></canvas>
+        <canvas id="viewer3d-canvas" class="viewer3d-canvas" hidden></canvas>
+        <div id="viewer3d-hud" class="viewer3d-hud" hidden>
+          <label><input type="checkbox" id="v3d-components" checked /> components</label>
+          <label><input type="checkbox" id="v3d-silk" checked /> silk</label>
+          <span class="viewer3d-hint">drag orbit · wheel zoom · shift-drag pan</span>
+        </div>
         <div id="side-badge" class="side-badge" hidden>BOTTOM</div>
       </div>
 

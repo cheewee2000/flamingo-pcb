@@ -9,7 +9,7 @@
  * highlight and the status bar update unconditionally on every state change.
  */
 
-import type { ComponentInst, Keepout, LayerId, MountingHole, Op } from '@flamingo/engine';
+import type { Board, ComponentInst, Keepout, LayerId, MountingHole, Op, Zone } from '@flamingo/engine';
 import { copperLayersOf } from '@flamingo/engine';
 import {
   DIMS_KEY,
@@ -43,6 +43,9 @@ export interface PanelEls {
   redoBtn: HTMLButtonElement;
   routeBtn: HTMLButtonElement;
   routeStatus: HTMLElement;
+  ripAllBtn: HTMLButtonElement;
+  exportFabBtn: HTMLButtonElement;
+  exportFabStatus: HTMLElement;
   bomList: HTMLElement;
   propsPanel: HTMLElement;
   projectName: HTMLElement;
@@ -98,6 +101,9 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
   const netRows = new Map<string, HTMLElement>();
   const bomRowsByRefdes = new Map<string, HTMLElement>();
   let measureReadoutEl: HTMLElement | null = null;
+  // True while the header project-name is being inline-edited, so board
+  // updates don't clobber the open input with the (still-old) name.
+  let renamingName = false;
 
   function buildLayerList(state: AppState): void {
     els.layerList.replaceChildren();
@@ -389,15 +395,8 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
           ['size', `${v.diameter} / ${v.drill} mm`],
         ];
       }
-      case 'zone': {
-        const z = board.zones.find((x) => x.id === sel.id);
-        if (!z) return null;
-        return [
-          ['type', 'zone'],
-          ['net', z.net],
-          ['layer', z.layer],
-        ];
-      }
+      case 'zone':
+        return null; // editable form built by buildZoneProps
       case 'keepout':
         return null; // editable form built by buildKeepoutProps
       case 'silk': {
@@ -463,6 +462,13 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
       const k = board.keepouts.find((x) => x.id === sel.id);
       if (k) {
         buildKeepoutProps(k);
+        return;
+      }
+    }
+    if (sel && board && sel.kind === 'zone') {
+      const z = board.zones.find((x) => x.id === sel.id);
+      if (z) {
+        buildZoneProps(z, board);
         return;
       }
     }
@@ -551,6 +557,59 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
       const hint = document.createElement('div');
       hint.className = 'props-desc';
       hint.textContent = 'polygon keepout — bounds editing applies to rectangles only';
+      els.propsPanel.appendChild(hint);
+    }
+  }
+
+  function buildZoneProps(z: Zone, board: Board): void {
+    const id = z.id;
+    const edit = (patch: Partial<Omit<Zone, 'id' | 'fill'>>): void => actions.sendOp({ op: 'editZone', id, zone: patch });
+    const xs = z.polygon.map((p) => p.x);
+    const ys = z.polygon.map((p) => p.y);
+    els.propsPanel.append(
+      staticRow('type', 'zone'),
+      textRow('net', z.net, (v) => edit({ net: v })),
+      selectRow('layer', z.layer, copperLayersOf(board), (v) => edit({ layer: v as LayerId })),
+      numberRow('clearance', z.clearance, (v) => edit({ clearance: v }), 0.05),
+      numberRow('min width', z.minWidth, (v) => edit({ minWidth: v }), 0.05),
+      numberRow('thermal gap', z.thermal.gap, (v) => edit({ thermal: { ...z.thermal, gap: v } }), 0.05),
+      numberRow('thermal spoke', z.thermal.spokeWidth, (v) => edit({ thermal: { ...z.thermal, spokeWidth: v } }), 0.05),
+    );
+    // Axis-aligned rectangles (the common case, e.g. a full-board pour) get
+    // editable bounds; anything else shows its extent read-only — mirrors the
+    // keepout polygon treatment above.
+    const isRect = z.polygon.length === 4 && new Set(xs).size === 2 && new Set(ys).size === 2;
+    if (isRect) {
+      const x0 = Math.min(...xs);
+      const x1 = Math.max(...xs);
+      const y0 = Math.min(...ys);
+      const y1 = Math.max(...ys);
+      const rect = (nx0: number, nx1: number, ny0: number, ny1: number): void => {
+        if (nx1 <= nx0 || ny1 <= ny0) return;
+        edit({
+          polygon: [
+            { x: nx0, y: ny0 },
+            { x: nx1, y: ny0 },
+            { x: nx1, y: ny1 },
+            { x: nx0, y: ny1 },
+          ],
+        });
+      };
+      els.propsPanel.append(
+        numberRow('x min', x0, (v) => rect(v, x1, y0, y1)),
+        numberRow('x max', x1, (v) => rect(x0, v, y0, y1)),
+        numberRow('y min', y0, (v) => rect(x0, x1, v, y1)),
+        numberRow('y max', y1, (v) => rect(x0, x1, y0, v)),
+        staticRow('size', `${(x1 - x0).toFixed(2)} × ${(y1 - y0).toFixed(2)} mm`),
+      );
+    } else {
+      els.propsPanel.append(
+        staticRow('points', String(z.polygon.length)),
+        staticRow('extent', `${(Math.max(...xs) - Math.min(...xs)).toFixed(1)} × ${(Math.max(...ys) - Math.min(...ys)).toFixed(1)} mm`),
+      );
+      const hint = document.createElement('div');
+      hint.className = 'props-desc';
+      hint.textContent = 'polygon zone — bounds editing applies to rectangles only';
       els.propsPanel.appendChild(hint);
     }
   }
@@ -814,6 +873,51 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
     els.openBtn.addEventListener('click', showProjectsModal);
   }
 
+  /**
+   * Click the header project name to rename the board inline: the span swaps
+   * to a text input (no browser prompt). Enter or blur commits, Escape
+   * cancels. Commit trims and ignores an empty or unchanged name, otherwise
+   * sends `setBoardMeta`; the board update that streams back refreshes the
+   * name everywhere it's shown.
+   */
+  function wireProjectRename(): void {
+    els.projectName.addEventListener('click', () => {
+      if (renamingName) return;
+      const board = store.get().board;
+      if (!board) return;
+      renamingName = true;
+      const current = board.name;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'project-name-input';
+      input.value = current;
+      els.projectName.replaceChildren(input);
+      input.focus();
+      input.select();
+      let done = false;
+      const finish = (commit: boolean): void => {
+        if (done) return;
+        done = true;
+        renamingName = false;
+        const next = input.value.trim();
+        const changed = commit && next !== '' && next !== current;
+        if (changed) actions.sendOp({ op: 'setBoardMeta', name: next });
+        // Show the intended name immediately; the ws board update confirms it.
+        els.projectName.textContent = changed ? next : store.get().board?.name ?? current;
+      };
+      input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          finish(true);
+        } else if (ev.key === 'Escape') {
+          ev.stopPropagation(); // don't also fire any global Escape handler
+          finish(false);
+        }
+      });
+      input.addEventListener('blur', () => finish(true));
+    });
+  }
+
   function showProjectsModal(): void {
     const scrim = document.createElement('div');
     scrim.className = 'modal-scrim';
@@ -1007,11 +1111,137 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Rip up all: a destructive one-click-arm/second-click-confirm. First click
+  // arms the button (label + danger styling), a second click within 3s sends an
+  // `unroute` op with no net — the engine clears every track and via, and the
+  // updated board streams back over /ws. Undoable like any other op.
+  // ---------------------------------------------------------------------------
+
+  function wireRipAllControls(): void {
+    const btn = els.ripAllBtn;
+    let armed = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    function reset(): void {
+      armed = false;
+      btn.classList.remove('confirm');
+      btn.textContent = 'Rip up all';
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+    }
+
+    btn.addEventListener('click', () => {
+      if (!armed) {
+        armed = true;
+        btn.classList.add('confirm');
+        btn.textContent = 'Really rip up all?';
+        timer = setTimeout(reset, 3000);
+        return;
+      }
+      reset();
+      actions.sendOp({ op: 'unroute' });
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Export fab: GET /api/export.fab, download the zip on success. DRC gates the
+  // export server-side (400 with a violations list); we show the count + first
+  // few messages in-page (no browser dialogs) and arm a two-step "Export
+  // anyway" that retries with ?waive=1 — same confirm shape as Rip up all.
+  // ---------------------------------------------------------------------------
+
+  function wireExportFabControls(): void {
+    const btn = els.exportFabBtn;
+    const status = els.exportFabStatus;
+    let busy = false;
+    let armed = false; // armed = the last attempt was DRC-gated; next click waives.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    function disarm(): void {
+      armed = false;
+      btn.classList.remove('confirm');
+      btn.textContent = 'Export fab';
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+    }
+
+    function setStatus(text: string, kind: 'ok' | 'err' | 'busy'): void {
+      status.replaceChildren();
+      const el = document.createElement('div');
+      el.className = kind === 'busy' ? 'route-busy' : `route-result ${kind}`;
+      el.textContent = text;
+      status.appendChild(el);
+    }
+
+    async function download(res: Response): Promise<void> {
+      const blob = await res.blob();
+      const disp = res.headers.get('content-disposition') ?? '';
+      const m = /filename="?([^"]+)"?/.exec(disp);
+      const name = m ? m[1] : 'flamingo-fab.zip';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }
+
+    async function run(waive: boolean): Promise<void> {
+      if (busy) return;
+      busy = true;
+      btn.disabled = true;
+      setStatus('Exporting…', 'busy');
+      try {
+        const res = await fetch(`/api/export.fab${waive ? '?waive=1' : ''}`);
+        if (res.ok) {
+          await download(res);
+          setStatus(waive ? 'Exported (DRC waived).' : 'Exported gerbers.zip + BOM + CPL.', 'ok');
+          disarm();
+        } else if (res.status === 400) {
+          const body = (await res.json()) as { violations?: Array<{ message?: string } | string> };
+          const v = body.violations ?? [];
+          const first = v
+            .slice(0, 3)
+            .map((x) => (typeof x === 'string' ? x : (x.message ?? JSON.stringify(x))))
+            .join(' · ');
+          setStatus(`DRC blocks export: ${v.length} violation(s). ${first}`, 'err');
+          armed = true;
+          btn.classList.add('confirm');
+          btn.textContent = 'Export anyway';
+          if (timer !== undefined) clearTimeout(timer);
+          timer = setTimeout(disarm, 6000);
+        } else {
+          const body = await res.json().catch(() => ({}) as { error?: string });
+          setStatus(`Export failed: ${body.error ?? res.statusText}`, 'err');
+          disarm();
+        }
+      } catch (err) {
+        setStatus(`Export failed: ${err instanceof Error ? err.message : String(err)}`, 'err');
+        disarm();
+      } finally {
+        busy = false;
+        btn.disabled = false;
+      }
+    }
+
+    btn.addEventListener('click', () => {
+      if (busy) return;
+      void run(armed);
+    });
+  }
+
   function onStateChange(state: AppState): void {
     const boardChanged = state.board !== lastBoard;
     if (boardChanged) {
       lastBoard = state.board;
-      els.projectName.textContent = state.board ? state.board.name : '';
+      if (!renamingName) els.projectName.textContent = state.board ? state.board.name : '';
       buildLayerList(state);
       buildNetList(state);
       buildBoardInfo(state);
@@ -1036,7 +1266,10 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
   buildToolButtons();
   wireToolbarControls();
   wireProjectControls();
+  wireProjectRename();
   wireRouteControls();
+  wireRipAllControls();
+  wireExportFabControls();
   store.subscribe(onStateChange);
   onStateChange(store.get());
 }
