@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { newBoard } from '@flamingo/engine';
+import { fillAllZones, newBoard } from '@flamingo/engine';
 import type { Board, ComponentInst, Footprint } from '@flamingo/engine';
 import { DEFAULT_WIDTH_PX, MAX_WIDTH_PX, pngDimensions, renderPNG, resolveWidthPx } from '../src/screenshot.js';
 
@@ -65,6 +65,29 @@ function cleanBoard(): Board {
     { type: 'line', start: { x: 20, y: 0 }, end: { x: 20, y: 20 } },
     { type: 'line', start: { x: 20, y: 20 }, end: { x: 0, y: 20 } },
     { type: 'line', start: { x: 0, y: 20 }, end: { x: 0, y: 0 } },
+  ];
+  return b;
+}
+
+/** cleanBoard + one F.Cu GND zone covering most of the outline. */
+function zoneBoard(): Board {
+  const b = cleanBoard();
+  b.nets = [{ name: 'GND', class: 'default', pins: [] }];
+  b.zones = [
+    {
+      id: 'z1',
+      layer: 'F.Cu',
+      net: 'GND',
+      polygon: [
+        { x: 2, y: 2 },
+        { x: 18, y: 2 },
+        { x: 18, y: 18 },
+        { x: 2, y: 18 },
+      ],
+      clearance: 0.3,
+      minWidth: 0.25,
+      thermal: { gap: 0.3, spokeWidth: 0.4 },
+    },
   ];
   return b;
 }
@@ -158,6 +181,18 @@ describe('renderPNG', () => {
       layers: ['F.Cu', 'B.Cu', 'F.Silk', 'B.Silk', 'Edge'],
     });
     expect(withLabels.equals(noLabels)).toBe(false);
+  });
+
+  it('fills copper zones before rendering (same bytes as a pre-filled board)', () => {
+    const board = zoneBoard();
+    // Guard: the fixture's zone must actually produce a non-empty fill,
+    // otherwise both renders would be trivially equal.
+    const preFilled = fillAllZones(board);
+    expect(preFilled.zones[0]!.fill!.length).toBeGreaterThan(0);
+
+    const auto = renderPNG(board, { showRatsnest: false, showDrc: false });
+    const explicit = renderPNG(preFilled, { showRatsnest: false, showDrc: false });
+    expect(auto.equals(explicit)).toBe(true);
   });
 
   it('label pseudo-layers can be requested explicitly via the layers list', () => {

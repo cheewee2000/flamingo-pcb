@@ -67,8 +67,8 @@ export interface AppState {
   layerVisibility: Record<LayerKey, boolean>;
   /** WebSocket connection status for the status bar. */
   connected: boolean;
-  /** Always empty for now -- DRC markers land in a later task; the field
-   * exists so renderer.ts/panels.ts already know how to draw/report them. */
+  /** Violation locations from the last "Run DRC" (panels.ts); drawn as red
+   * rings by renderer.ts. Persist until the next run. */
   drcMarkers: Point[];
   /** Cursor position in world mm, for the status bar readout. Null when the
    * pointer is outside the canvas. */

@@ -11,7 +11,7 @@
 
 import { Resvg } from '@resvg/resvg-js';
 import type { Board } from '@flamingo/engine';
-import { ratsnest, renderSVG, runDRC, splitLabelLayers } from '@flamingo/engine';
+import { fillAllZones, ratsnest, renderSVG, runDRC, splitLabelLayers } from '@flamingo/engine';
 
 export interface ScreenshotOpts {
   /**
@@ -44,6 +44,10 @@ export function resolveWidthPx(widthPx?: number): number {
  * unrouted nets and rule violations by default.
  */
 export function renderPNG(b: Board, opts: ScreenshotOpts = {}): Buffer {
+  // The live board never carries zone fills (only the export path fills a
+  // copy), so pour the zones here — screenshots should show real copper, and
+  // ratsnest/DRC below then also see the filled board.
+  if (b.zones.some((z) => !z.fill)) b = fillAllZones(b);
   const widthPx = resolveWidthPx(opts.widthPx);
   const showRatsnest = opts.showRatsnest !== false;
   const showDrc = opts.showDrc !== false;

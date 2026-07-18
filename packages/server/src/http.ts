@@ -293,6 +293,15 @@ async function handleApi(
     return true;
   }
 
+  if (method === 'GET' && pathname === '/api/drc') {
+    // Run on the *filled* board, matching the export gate: the raw zone
+    // outline polygon overlaps every non-pour-net pad, so an unfilled check
+    // would drown real findings in zone-clearance noise.
+    const board = doc.board.zones.length > 0 ? fillAllZones(doc.board) : doc.board;
+    sendJSON(res, 200, { ok: true, violations: runDRC(board) });
+    return true;
+  }
+
   if (method === 'GET' && pathname === '/api/render.svg') {
     const opts: RenderOpts = {};
     const layersParam = url.searchParams.get('layers');
@@ -305,7 +314,8 @@ async function handleApi(
     opts.showNetLabels = split.showNetLabels;
     const highlightNet = url.searchParams.get('highlightNet');
     if (highlightNet) opts.highlightNet = highlightNet;
-    const svg = renderSVG(doc.board, opts);
+    const boardToRender = doc.board.zones.length > 0 ? fillAllZones(doc.board) : doc.board;
+    const svg = renderSVG(boardToRender, opts);
     res.writeHead(200, { 'content-type': 'image/svg+xml' });
     res.end(svg);
     return true;

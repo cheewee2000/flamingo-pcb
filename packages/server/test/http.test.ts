@@ -447,6 +447,116 @@ describe('HTTP API', () => {
     });
   });
 
+  describe('zone fill in renders + GET /api/drc', () => {
+    function zoneFootprint(): Footprint {
+      return {
+        name: 'test-fp',
+        lcsc: 'C0',
+        pads: [
+          { number: '1', shape: 'rect', at: { x: -1, y: 0 }, rotation: 0, size: { w: 1, h: 1 }, layer: 'top' },
+          { number: '2', shape: 'rect', at: { x: 1, y: 0 }, rotation: 0, size: { w: 1, h: 1 }, layer: 'top' },
+        ],
+        silk: [],
+        courtyard: [],
+      };
+    }
+
+    function zoneComponent(refdes: string, x: number, y: number): ComponentInst {
+      return { refdes, lcsc: 'C0', footprint: zoneFootprint(), at: { x, y }, rotation: 0, side: 'top', fields: {} };
+    }
+
+    /** 20x20 outline with an F.Cu GND zone over most of it. */
+    function zoneBoard(): Board {
+      const b = newBoard('zonetest', 2);
+      b.outline = [
+        { type: 'line', start: { x: 0, y: 0 }, end: { x: 20, y: 0 } },
+        { type: 'line', start: { x: 20, y: 0 }, end: { x: 20, y: 20 } },
+        { type: 'line', start: { x: 20, y: 20 }, end: { x: 0, y: 20 } },
+        { type: 'line', start: { x: 0, y: 20 }, end: { x: 0, y: 0 } },
+      ];
+      b.nets = [{ name: 'GND', class: 'default', pins: [] }];
+      b.zones = [
+        {
+          id: 'z1',
+          layer: 'F.Cu',
+          net: 'GND',
+          polygon: [
+            { x: 2, y: 2 },
+            { x: 18, y: 2 },
+            { x: 18, y: 18 },
+            { x: 2, y: 18 },
+          ],
+          clearance: 0.3,
+          minWidth: 0.25,
+          thermal: { gap: 0.3, spokeWidth: 0.4 },
+        },
+      ];
+      return b;
+    }
+
+    async function withBoard(board: Board, fn: (base: string) => Promise<void>): Promise<void> {
+      const srv = await startServer(new Doc(board), 0, { uiDistDir: missingUiDistDir });
+      try {
+        await fn(`http://localhost:${srv.port}`);
+      } finally {
+        await srv.close();
+      }
+    }
+
+    it('GET /api/render.svg renders zones filled (evenodd fill path, not the bare polygon)', async () => {
+      await withBoard(zoneBoard(), async (base) => {
+        const res = await fetch(`${base}/api/render.svg`);
+        expect(res.status).toBe(200);
+        const svg = await res.text();
+        expect(svg).toContain('fill-rule="evenodd"');
+      });
+    });
+
+    it('GET /api/drc returns {ok:true, violations:[]} for a clean board', async () => {
+      await withBoard(zoneBoard(), async (base) => {
+        const res = await fetch(`${base}/api/drc`);
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.ok).toBe(true);
+        expect(body.violations).toEqual([]);
+      });
+    });
+
+    it('GET /api/drc reports real violations with rule/message/at', async () => {
+      const b = zoneBoard();
+      // Two overlapping pads on different nets.
+      b.components = [zoneComponent('R1', 10, 10), zoneComponent('R2', 10.1, 10)];
+      b.nets.push({ name: 'NET1', class: 'default', pins: ['R1.1'] }, { name: 'NET2', class: 'default', pins: ['R2.1'] });
+      await withBoard(b, async (base) => {
+        const res = await fetch(`${base}/api/drc`);
+        const body = await res.json();
+        expect(body.ok).toBe(true);
+        expect(body.violations.length).toBeGreaterThan(0);
+        const v = body.violations[0];
+        expect(typeof v.rule).toBe('string');
+        expect(typeof v.message).toBe('string');
+        expect(typeof v.at.x).toBe('number');
+        expect(typeof v.at.y).toBe('number');
+      });
+    });
+
+    it('GET /api/drc runs on the FILLED board (no zone-vs-pad noise for a legal pad inside a zone)', async () => {
+      const b = zoneBoard();
+      // One pad on a non-zone net sitting inside the zone outline: the raw
+      // (unfilled) zone polygon overlaps it, but the filled pour keeps
+      // clearance, so a filled-board DRC must report nothing. (Single-pin net
+      // so the connectivity check has nothing to flag.)
+      b.components = [zoneComponent('R1', 10, 10)];
+      b.nets.push({ name: 'NET1', class: 'default', pins: ['R1.1'] });
+      await withBoard(b, async (base) => {
+        const res = await fetch(`${base}/api/drc`);
+        const body = await res.json();
+        expect(body.ok).toBe(true);
+        expect(body.violations).toEqual([]);
+      });
+    });
+  });
+
   it('returns 404 with {ok:false,error} for an unknown /api route', async () => {
     const res = await fetch(`${base}/api/nope`);
     expect(res.status).toBe(404);
