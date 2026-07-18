@@ -280,9 +280,20 @@ function padLocalOutline(pad: Pad): Point[] {
   return shape.map((pt) => add(rotate(pt, pad.rotation), pad.at));
 }
 
-/** World-space pad outline polygon (rect/oval/circle/polygon tessellated). */
+/** World-space pad outline polygon (rect/oval/circle/polygon tessellated).
+ * Winding is normalized to CCW: the bottom-side mirror reverses ring
+ * orientation, which the polygon-clipping consumers (zone fill obstacles)
+ * choke on — robustClip's difference fallback then silently returns the
+ * uncarved pour. */
 export function padOutline(c: ComponentInst, pad: Pad): Point[] {
-  return componentTransformPoints(c, padLocalOutline(pad));
+  const pts = componentTransformPoints(c, padLocalOutline(pad));
+  let area = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    area += a.x * b.y - b.x * a.y;
+  }
+  return area < 0 ? pts.reverse() : pts;
 }
 
 // ---------------------------------------------------------------------------
