@@ -50,6 +50,8 @@ export interface ToolOptions {
   zoneNet: string;
   holeDrillMm: number;
   holePlated: boolean;
+  /** Fallback net for the via tool when the cursor isn't over any copper. */
+  viaNet: string;
 }
 
 export interface AppState {
@@ -129,6 +131,7 @@ function initialState(): AppState {
       zoneNet: '',
       holeDrillMm: 2.2,
       holePlated: false,
+      viaNet: '',
     },
     measureMm: null,
   };

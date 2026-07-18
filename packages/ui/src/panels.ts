@@ -698,6 +698,7 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
     const patch: Partial<ToolOptions> = {};
     if (!layers.includes(cur.zoneLayer)) patch.zoneLayer = layers[0];
     if (!nets.includes(cur.zoneNet)) patch.zoneNet = nets[0] ?? '';
+    if (!nets.includes(cur.viaNet)) patch.viaNet = nets.includes('GND') ? 'GND' : nets[0] ?? '';
     if (Object.keys(patch).length > 0) {
       store.set({ toolOptions: { ...cur, ...patch } });
     }
@@ -796,6 +797,32 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
         platedLabel.append(platedInput, ' plated');
 
         row.append(drillLabel, platedLabel);
+        els.toolOptions.appendChild(row);
+        break;
+      }
+      case 'via': {
+        if (!board) break;
+        const row = document.createElement('div');
+        row.className = 'tool-options-row';
+
+        const netLabel = document.createElement('label');
+        netLabel.textContent = 'net';
+        const netSel = document.createElement('select');
+        for (const n of board.nets.map((x) => x.name)) {
+          const o = document.createElement('option');
+          o.value = n;
+          o.textContent = n;
+          o.selected = n === opts.viaNet;
+          netSel.appendChild(o);
+        }
+        netSel.addEventListener('change', () => setToolOptions({ viaNet: netSel.value }));
+        netLabel.appendChild(netSel);
+
+        const hint = document.createElement('div');
+        hint.className = 'tool-hint';
+        hint.textContent = 'Click copper to drop a via on its net; over bare board the dropdown net is used. Size comes from the net class.';
+
+        row.append(netLabel, hint);
         els.toolOptions.appendChild(row);
         break;
       }
