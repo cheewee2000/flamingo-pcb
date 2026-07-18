@@ -11,9 +11,11 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@flamingo/engine": "*"
+    "@flamingo/engine": "*",
+    "three": "^0.160.0"
   },
   "devDependencies": {
+    "@types/three": "^0.160.0",
     "typescript": "^5",
     "vite": "^7",
     "vitest": "^3"

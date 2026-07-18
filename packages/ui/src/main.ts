@@ -18,6 +18,7 @@ import { createToolManager } from './tools/manager.js';
 import { snapPoint } from './tools/overlay-utils.js';
 import type { PointerEvt, ToolCtx } from './tools/tool.js';
 import { VERSION } from './version.js';
+import { createViewer3D } from './viewer3d/viewer.js';
 
 // Stamp the build version into the status bar (see index.html #status-version).
 const versionEl = document.getElementById('status-version');
@@ -129,6 +130,9 @@ initPanels(
     redoBtn: document.getElementById('redo-btn') as HTMLButtonElement,
     routeBtn: document.getElementById('route-btn') as HTMLButtonElement,
     routeStatus: document.getElementById('route-status')!,
+    ripAllBtn: document.getElementById('ripall-btn') as HTMLButtonElement,
+    exportFabBtn: document.getElementById('exportfab-btn') as HTMLButtonElement,
+    exportFabStatus: document.getElementById('exportfab-status')!,
     bomList: document.getElementById('bom-list')!,
     propsPanel: document.getElementById('props-panel')!,
     projectName: document.getElementById('project-name')!,
@@ -153,6 +157,45 @@ const viewControls = attachViewControls(
   () => store.get().view,
   (v) => store.set({ view: v }),
 );
+
+// ---------------------------------------------------------------------------
+// 2D / 3D view tabs. The 3D tab shows a WebGL viewer in the same viewport; its
+// render loop only runs while the 3D tab is active. The board is fed to the
+// viewer on every change, but it only rebuilds its scene while visible.
+// ---------------------------------------------------------------------------
+
+const viewer3dCanvas = document.getElementById('viewer3d-canvas') as HTMLCanvasElement;
+const viewer3dHud = document.getElementById('viewer3d-hud') as HTMLElement;
+const viewer3d = createViewer3D(viewer3dCanvas, viewportEl);
+
+// Keep the viewer's board in sync (rebuilds itself only when the 3D tab is up).
+let lastBoard3d: Board | null = null;
+store.subscribe((state) => {
+  if (state.board !== lastBoard3d) {
+    lastBoard3d = state.board;
+    viewer3d.setBoard(state.board);
+  }
+});
+
+function setView(view: '2d' | '3d'): void {
+  const is3d = view === '3d';
+  document.querySelectorAll('.view-tab').forEach((tab) => {
+    tab.classList.toggle('active', (tab as HTMLElement).dataset.view === view);
+  });
+  canvas.hidden = is3d;
+  viewer3dCanvas.hidden = !is3d;
+  viewer3dHud.hidden = !is3d;
+  viewer3d.setActive(is3d);
+}
+document.getElementById('view-tab-2d')?.addEventListener('click', () => setView('2d'));
+document.getElementById('view-tab-3d')?.addEventListener('click', () => setView('3d'));
+
+(document.getElementById('v3d-components') as HTMLInputElement)?.addEventListener('change', (e) => {
+  viewer3d.setShowComponents((e.target as HTMLInputElement).checked);
+});
+(document.getElementById('v3d-silk') as HTMLInputElement)?.addEventListener('change', (e) => {
+  viewer3d.setShowSilk((e.target as HTMLInputElement).checked);
+});
 
 // ---------------------------------------------------------------------------
 // Pointer routing: hover (always) + active tool's down/move/up/dblclick.
