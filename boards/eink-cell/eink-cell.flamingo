@@ -41339,7 +41339,7 @@
       "layer": "F.Silk",
       "at": {
         "x": 52.4,
-        "y": 33.6
+        "y": 32.9
       },
       "text": "FRONTLIGHT",
       "height": 0.7,
@@ -41397,7 +41397,7 @@
         "y": 4.5
       },
       "text": "CWT_SSE5GM9_2606",
-      "height": 1,
+      "height": 2,
       "rotation": 0
     }
   ],
