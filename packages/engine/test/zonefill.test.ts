@@ -237,6 +237,27 @@ describe('fillZone', () => {
     expect(areas.some((a) => a < 0)).toBe(true);
   });
 
+  it('quantizes clip inputs to the 10µm grid up front (off-grid coords fill identically to snapped ones)', () => {
+    // Autoroute output carries sub-micron vertices that send polygon-clipping's
+    // sweepline into multi-second churn (and often a thrown "infinite loop").
+    // The fill must therefore snap ALL clip inputs to the 10µm grid before the
+    // first attempt — so a board with off-grid coordinates fills exactly like
+    // the same board with pre-snapped coordinates.
+    const mkBoard = (y0: number, y1: number): Board =>
+      apply(baseBoard(false), {
+        op: 'addTrack',
+        track: {
+          layer: 'F.Cu',
+          width: 0.5,
+          net: 'SIG',
+          seg: { type: 'line', start: { x: 0, y: y0 }, end: { x: 10, y: y1 } },
+        },
+      });
+    const offGrid = fillZone(mkBoard(5.0000003, 4.9999997), zoneOf(mkBoard(0, 0)));
+    const onGrid = fillZone(mkBoard(5, 5), zoneOf(mkBoard(0, 0)));
+    expect(offGrid).toEqual(onGrid);
+  });
+
   it('recovers via the snap retry when the clipper throws once (SweepLine failure)', () => {
     // No board outline so the only polygonClipping.difference call is the one
     // inside robustClip's difference for the obstacles subtraction (the
