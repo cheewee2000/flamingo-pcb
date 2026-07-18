@@ -138,6 +138,8 @@ initPanels(
     projectName: document.getElementById('project-name')!,
     openBtn: document.getElementById('open-btn') as HTMLButtonElement,
     saveBtn: document.getElementById('save-btn') as HTMLButtonElement,
+    searchInput: document.getElementById('search-input') as HTMLInputElement,
+    searchResults: document.getElementById('search-results')!,
   },
   toolManager,
   { focusComponent, boardOpened, sendOp: (op) => wsApi.sendOp(op) },
@@ -280,6 +282,13 @@ window.addEventListener('keydown', (ev) => {
     return;
   }
   if (isTypingTarget(ev)) return;
+
+  if (ev.key === '/') {
+    // Focus the header search box (Escape or a pick returns focus to the canvas).
+    ev.preventDefault();
+    (document.getElementById('search-input') as HTMLInputElement | null)?.focus();
+    return;
+  }
 
   if (toolManager.active().onKey?.(ev, toolCtx)) return;
 

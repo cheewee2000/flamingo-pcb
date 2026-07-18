@@ -95,6 +95,18 @@ class UnionFind {
 }
 
 /**
+ * One connected island of a net: the pin refs it contains plus the track/via
+ * ids acting as its copper. Islands with an empty `pins` list are orphan
+ * copper (tracks/vias touching nothing) — `connectedGroups` drops them, but
+ * the UI shows them so stray copper is visible.
+ */
+export interface NetIsland {
+  pins: string[];
+  trackIds: string[];
+  viaIds: string[];
+}
+
+/**
  * Union-find over a net's pins (world pad anchors), tracks, and vias.
  * Returns groups of pin refs only (tracks/vias are glue, not group members).
  * A net with 0 or 1 pins is a single group (or empty), never unrouted.
@@ -103,9 +115,18 @@ export function connectedGroups(b: Board, net: Net): string[][] {
   if (net.pins.length <= 1) {
     return net.pins.length === 1 ? [[...net.pins]] : [];
   }
+  return netIslands(b, net)
+    .filter((g) => g.pins.length > 0)
+    .map((g) => g.pins);
+}
 
+/**
+ * Full island decomposition of a net: same union rules as `connectedGroups`,
+ * but every island also lists its member track/via ids, and orphan islands
+ * (copper with no pins) are included. Sorted largest-first by pin count.
+ */
+export function netIslands(b: Board, net: Net): NetIsland[] {
   const nodes: Node[] = [];
-  const pinNodeIdx: number[] = [];
   const cu = copperLayersOf(b);
 
   for (const ref of net.pins) {
@@ -113,14 +134,13 @@ export function connectedGroups(b: Board, net: Net): string[][] {
     const refdes = ref.slice(0, dot);
     const padNumber = ref.slice(dot + 1);
     const comp = b.components.find((c) => c.refdes === refdes);
-    if (!comp) throw new Error(`connectedGroups: unknown refdes "${refdes}" (in pin "${ref}")`);
+    if (!comp) throw new Error(`netIslands: unknown refdes "${refdes}" (in pin "${ref}")`);
     const pad = comp.footprint.pads.find((p) => p.number === padNumber);
     if (!pad) {
-      throw new Error(`connectedGroups: pad "${padNumber}" not found on "${refdes}" (pin "${ref}")`);
+      throw new Error(`netIslands: pad "${padNumber}" not found on "${refdes}" (pin "${ref}")`);
     }
     const at = padWorld(comp, pad).at;
     const layers = padCopperLayers(pad, comp.side, cu);
-    pinNodeIdx.push(nodes.length);
     nodes.push({ kind: 'pin', ref, at, layers });
   }
 
@@ -166,16 +186,30 @@ export function connectedGroups(b: Board, net: Net): string[][] {
     }
   }
 
-  const groupsByRoot = new Map<number, string[]>();
-  for (const idx of pinNodeIdx) {
-    const root = uf.find(idx);
-    const ref = (nodes[idx] as PinNode).ref;
-    const arr = groupsByRoot.get(root);
-    if (arr) arr.push(ref);
-    else groupsByRoot.set(root, [ref]);
+  const islandsByRoot = new Map<number, NetIsland>();
+  function islandFor(root: number): NetIsland {
+    let island = islandsByRoot.get(root);
+    if (!island) {
+      island = { pins: [], trackIds: [], viaIds: [] };
+      islandsByRoot.set(root, island);
+    }
+    return island;
+  }
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    const island = islandFor(uf.find(i));
+    if (node.kind === 'pin') {
+      island.pins.push(node.ref);
+    } else if (node.kind === 'trackEnd') {
+      const id = netTracks[node.trackIdx].id;
+      // Each track contributes two nodes; only record it once (on 'start').
+      if (node.which === 'start') island.trackIds.push(id);
+    } else {
+      island.viaIds.push(netVias[node.viaIdx].id);
+    }
   }
 
-  return Array.from(groupsByRoot.values());
+  return Array.from(islandsByRoot.values()).sort((a, b2) => b2.pins.length - a.pins.length);
 }
 
 /** Minimum distance between any pin anchor in group a vs group b, plus the closest pair. */

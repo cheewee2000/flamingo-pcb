@@ -165,6 +165,61 @@ body {
   color: var(--signal-red);
 }
 
+/* ---- Header search (components + nets) ---- */
+
+.search-box {
+  position: relative;
+  margin-right: 16px;
+}
+.search-input {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink);
+  background: var(--paper-2);
+  border: 1px solid var(--paper-3);
+  padding: 3px 8px;
+  width: 200px;
+  outline: none;
+}
+.search-input:focus {
+  border-color: var(--ink-faint);
+  background: var(--paper);
+}
+.search-results {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 30;
+  min-width: 260px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+}
+.search-result-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+.search-result-item:hover,
+.search-result-item.active {
+  background: var(--paper-3);
+}
+.search-result-label {
+  font-weight: 700;
+}
+.search-result-detail {
+  color: var(--ink-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
 /* ---- Modal: flush rectangle, single hairline border, flat scrim ---- */
 
 .modal-scrim {

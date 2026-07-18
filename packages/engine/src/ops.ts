@@ -15,6 +15,7 @@ import type {
   Zone,
 } from './types.js';
 import { copperLayersOf, isCopper } from './layers.js';
+import { widenTracks } from './widen.js';
 
 /**
  * Discriminated union of all board-mutating operations.
@@ -44,6 +45,7 @@ export type Op =
   | { op: 'addZone'; zone: Omit<Zone, 'id' | 'fill'> }
   | { op: 'addHole'; hole: Omit<MountingHole, 'id'> }
   | { op: 'addSilkText'; text: Omit<SilkText, 'id'> }
+  | { op: 'editSilkText'; id: string; text: Partial<Omit<SilkText, 'id'>> }
   | { op: 'addSilkLine'; line: Omit<SilkLine, 'id'> }
   | { op: 'addDimension'; dimension: Omit<Dimension, 'id'> }
   | { op: 'removeItem'; id: string }
@@ -56,6 +58,7 @@ export type Op =
   | { op: 'addVia'; via: Omit<Via, 'id'> }
   | { op: 'addTracks'; tracks: Omit<Track, 'id'>[]; vias: Omit<Via, 'id'>[] }
   | { op: 'unroute'; net?: string }
+  | { op: 'widenTracks'; nets?: string[] }
   | { op: 'setBoardMeta'; name?: string; copperLayers?: 2 | 4 | 6 };
 
 export interface OpResult {
@@ -203,6 +206,19 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
       Object.assign(zone, op.zone);
       // Geometry or rule changes invalidate any cached fill.
       delete zone.fill;
+      return ok(board, createdIds);
+    }
+
+    case 'editSilkText': {
+      const silk = board.silk.find((s) => s.id === op.id);
+      if (!silk) return err(`No silk text with id "${op.id}"`);
+      if (op.text.text !== undefined && op.text.text.trim() === '') {
+        return err('silk text cannot be empty');
+      }
+      if (op.text.height !== undefined && !(op.text.height > 0)) {
+        return err('silk text height must be > 0');
+      }
+      Object.assign(silk, op.text);
       return ok(board, createdIds);
     }
 
@@ -426,6 +442,12 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
         board.tracks = [];
         board.vias = [];
       }
+      return ok(board, createdIds);
+    }
+
+    case 'widenTracks': {
+      const res = widenTracks(board, op.nets);
+      createdIds.push(...res.createdIds);
       return ok(board, createdIds);
     }
 

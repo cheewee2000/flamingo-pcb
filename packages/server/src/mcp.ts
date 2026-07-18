@@ -946,6 +946,28 @@ export function createMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'widen_tracks',
+    {
+      description:
+        'Widen under-class-width tracks back toward their net class trackWidth wherever the fattened copper still clears DRC. Segments that cannot widen whole are split so only the span at the pad/obstruction keeps the thin escape width (a neck-down). Runs automatically after autoroute; call directly after manual thin routing.',
+      inputSchema: {
+        nets: z
+          .array(z.string())
+          .optional()
+          .describe('Nets whose tracks to widen (omit for every net)'),
+      },
+    },
+    ({ nets }) => {
+      const op: Op = { op: 'widenTracks', ...(nets && nets.length > 0 ? { nets } : {}) };
+      return applyAndReport(ctx, op, (res) =>
+        res.createdIds.length === 0
+          ? 'No tracks could be widened (everything already at class width or blocked).'
+          : `Widened tracks: ${res.createdIds.length} replacement segment(s) written.`,
+      );
+    },
+  );
+
+  server.registerTool(
     'autoroute',
     {
       description:
