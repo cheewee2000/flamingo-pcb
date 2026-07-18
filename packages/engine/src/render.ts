@@ -271,29 +271,39 @@ export function renderSVG(b: Board, opts: RenderOpts = {}): string {
 
     // zones on this layer
     const zones = b.zones.filter((z) => z.layer === layer);
+    const filledZones = zones.filter((z) => z.fill && z.fill.length > 0);
     for (const z of zones) {
-      if (z.fill && z.fill.length > 0) {
-        // Winding-encoded rings (outer CCW + hole CW, see zonefill.ts): render
-        // as one even-odd path so holes cut through the solid copper.
-        const d = z.fill
-          .map((poly) => 'M ' + poly.map((p) => `${pt(p)}`).join(' L ') + ' Z')
-          .join(' ');
-        parts.push(
-          `<path d="${d}" fill="${color}" fill-opacity="0.55" fill-rule="evenodd" stroke="none"/>`,
-        );
-      } else {
-        parts.push(
-          `<polygon points="${polygonPoints(z.polygon)}" fill="${color}" fill-opacity="0.25" stroke="none"/>`,
-        );
-      }
+      if (z.fill && z.fill.length > 0) continue;
+      parts.push(
+        `<polygon points="${polygonPoints(z.polygon)}" fill="${color}" fill-opacity="0.25" stroke="none"/>`,
+      );
     }
 
     // tracks on this layer
     const tracks = b.tracks.filter((t) => t.layer === layer);
+    const trackSvg = (t: (typeof tracks)[number]): string =>
+      `<path d="${segPathD(t.seg)}" stroke="${color}" stroke-width="${fmt(t.width)}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+    const pourNets = new Set(filledZones.map((z) => z.net));
+
+    if (filledZones.length > 0) {
+      // Pour + its same-net tracks composite as ONE opacity group: the group's
+      // opacity applies to their union, so a GND trace over the GND pour reads
+      // as one solid copper region instead of a brighter line stacked on
+      // translucent copper. Winding-encoded rings (outer CCW + hole CW, see
+      // zonefill.ts) render as one even-odd path so holes cut through.
+      parts.push('<g opacity="0.55">');
+      for (const z of filledZones) {
+        const d = z.fill!
+          .map((poly) => 'M ' + poly.map((p) => `${pt(p)}`).join(' L ') + ' Z')
+          .join(' ');
+        parts.push(`<path d="${d}" fill="${color}" fill-rule="evenodd" stroke="none"/>`);
+      }
+      for (const t of tracks) if (pourNets.has(t.net)) parts.push(trackSvg(t));
+      parts.push('</g>');
+    }
     for (const t of tracks) {
-      parts.push(
-        `<path d="${segPathD(t.seg)}" stroke="${color}" stroke-width="${fmt(t.width)}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
-      );
+      if (filledZones.length > 0 && pourNets.has(t.net)) continue;
+      parts.push(trackSvg(t));
     }
 
     // SMD pads physically on this layer (F.Cu / B.Cu only)

@@ -116,6 +116,20 @@ const CANVAS_FONT = `'Space Mono', 'Menlo', monospace`;
 // Small path/shape helpers
 // ---------------------------------------------------------------------------
 
+// Offscreen scratch layer for pour blending. Created lazily inside draw()
+// so importing this module stays DOM-free (node-side unit tests import it).
+let pourCanvas: HTMLCanvasElement | null = null;
+function pourLayerCtx(w: number, h: number): CanvasRenderingContext2D {
+  if (!pourCanvas) pourCanvas = document.createElement('canvas');
+  if (pourCanvas.width !== w) pourCanvas.width = w;
+  if (pourCanvas.height !== h) pourCanvas.height = h;
+  const c = pourCanvas.getContext('2d');
+  if (!c) throw new Error('2D canvas context unavailable for pour layer');
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.clearRect(0, 0, w, h);
+  return c;
+}
+
 function pathPolygon(ctx: CanvasRenderingContext2D, view: ViewTransform, pts: Point[]): void {
   ctx.beginPath();
   pts.forEach((p, i) => {
@@ -466,19 +480,54 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
     if (vis[layer] === false) continue;
     const color = COPPER_COLOR[layer]!;
 
-    if (vis[ZONES_KEY] !== false) {
+    const zonesVisible = vis[ZONES_KEY] !== false;
+    const filledZones = zonesVisible
+      ? board.zones.filter((z) => z.layer === layer && z.fill && z.fill.length > 0)
+      : [];
+    if (zonesVisible) {
       for (const z of board.zones) {
         if (z.layer !== layer) continue;
-        if (z.fill && z.fill.length > 0) {
-          for (const poly of z.fill) fillPolygon(ctx, view, poly, color, 0.55);
-        } else {
-          fillPolygon(ctx, view, z.polygon, color, 0.25);
+        if (!z.fill || z.fill.length === 0) fillPolygon(ctx, view, z.polygon, color, 0.25);
+      }
+    }
+
+    const pourNets = new Set(filledZones.map((z) => z.net));
+    if (filledZones.length > 0) {
+      // Pour + its same-net tracks are drawn at full alpha on an offscreen
+      // layer, then composited onto the board once at 0.55 — overlaps tint
+      // uniformly, so a GND trace over the GND pour reads as one copper
+      // region instead of a brighter line on translucent copper. The rings
+      // fill as a single even-odd path so hole rings knock out rather than
+      // double-paint (mirrors the SVG renderer's <g opacity> group).
+      const off = pourLayerCtx(ctx.canvas.width, ctx.canvas.height);
+      off.setTransform(ctx.getTransform());
+      off.fillStyle = color;
+      off.beginPath();
+      for (const z of filledZones) {
+        for (const ring of z.fill!) {
+          ring.forEach((p, i) => {
+            const s = worldToScreen(view, p);
+            if (i === 0) off.moveTo(s.x, s.y);
+            else off.lineTo(s.x, s.y);
+          });
+          off.closePath();
         }
       }
+      off.fill('evenodd');
+      for (const t of board.tracks) {
+        if (t.layer !== layer || !pourNets.has(t.net)) continue;
+        strokeTrack(off, view, t, color);
+      }
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 0.55;
+      ctx.drawImage(off.canvas, 0, 0);
+      ctx.restore();
     }
 
     for (const t of board.tracks) {
       if (t.layer !== layer) continue;
+      if (pourNets.has(t.net)) continue; // already composited with the pour above
       strokeTrack(ctx, view, t, color);
     }
 

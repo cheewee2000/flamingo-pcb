@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderSVG, splitLabelLayers, labelFontMm } from '../src/index.js';
+import { renderSVG, splitLabelLayers, labelFontMm, fillAllZones } from '../src/index.js';
 import { newBoard } from '../src/index.js';
 import type { Board, Footprint, ComponentInst, Pad } from '../src/index.js';
 
@@ -395,6 +395,67 @@ describe('renderSVG - board-level silk lines', () => {
     b.silkLines = [{ id: 'SL1', layer: 'F.Silk', start: { x: 0, y: 0 }, end: { x: 10, y: 0 }, width: 0.15 }];
     const filtered = renderSVG(b, { layers: ['B.Cu', 'Edge'] });
     expect(filtered).not.toContain('#F2EDA1');
+  });
+});
+
+describe('renderSVG - pour blend group', () => {
+  /** 20x20 board with a filled F.Cu GND pour, one GND track and one SIG track. */
+  function pourBoard(): Board {
+    const b = newBoard('pour', 2);
+    b.outline = [
+      { type: 'line', start: { x: 0, y: 0 }, end: { x: 20, y: 0 } },
+      { type: 'line', start: { x: 20, y: 0 }, end: { x: 20, y: 20 } },
+      { type: 'line', start: { x: 20, y: 20 }, end: { x: 0, y: 20 } },
+      { type: 'line', start: { x: 0, y: 20 }, end: { x: 0, y: 0 } },
+    ];
+    b.nets = [
+      { name: 'GND', class: 'default', pins: [] },
+      { name: 'SIG', class: 'default', pins: [] },
+    ];
+    b.zones = [
+      {
+        id: 'z1',
+        layer: 'F.Cu',
+        net: 'GND',
+        polygon: [
+          { x: 2, y: 2 },
+          { x: 18, y: 2 },
+          { x: 18, y: 18 },
+          { x: 2, y: 18 },
+        ],
+        clearance: 0.3,
+        minWidth: 0.25,
+        thermal: { gap: 0.3, spokeWidth: 0.4 },
+      },
+    ];
+    b.tracks = [
+      { id: 'TG', layer: 'F.Cu', width: 0.777, net: 'GND', seg: { type: 'line', start: { x: 3, y: 10 }, end: { x: 17, y: 10 } } },
+      { id: 'TS', layer: 'F.Cu', width: 0.888, net: 'SIG', seg: { type: 'line', start: { x: 3, y: 6 }, end: { x: 17, y: 6 } } },
+    ];
+    return fillAllZones(b);
+  }
+
+  it('draws the pour and its same-net tracks inside one opacity group; foreign tracks outside', () => {
+    const svg = renderSVG(pourBoard());
+    const gStart = svg.indexOf('<g opacity="0.55">');
+    expect(gStart).toBeGreaterThan(-1);
+    const gEnd = svg.indexOf('</g>', gStart);
+    expect(gEnd).toBeGreaterThan(gStart);
+    const gndTrack = svg.indexOf('stroke-width="0.7770"');
+    const sigTrack = svg.indexOf('stroke-width="0.8880"');
+    // GND track composites WITH the pour (same group -> same tint, no
+    // double-darkening); the SIG track stays a full-strength element outside.
+    expect(gndTrack).toBeGreaterThan(gStart);
+    expect(gndTrack).toBeLessThan(gEnd);
+    expect(sigTrack).toBeGreaterThan(gEnd);
+  });
+
+  it('unfilled zones keep the faint standalone polygon and no blend group', () => {
+    const b = pourBoard();
+    const unfilled: Board = { ...b, zones: b.zones.map((z) => ({ ...z, fill: undefined })) };
+    const svg = renderSVG(unfilled);
+    expect(svg).toContain('fill-opacity="0.25"');
+    expect(svg).not.toContain('<g opacity="0.55">');
   });
 });
 

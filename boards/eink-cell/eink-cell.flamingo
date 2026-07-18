@@ -23067,7 +23067,18 @@
     }
   ],
   "tracks": [],
-  "vias": [],
+  "vias": [
+    {
+      "id": "a19fea8c-df03-438a-ad7c-7e8765c3baad",
+      "at": {
+        "x": 48,
+        "y": 81.5
+      },
+      "net": "GND",
+      "drill": 0.4,
+      "diameter": 0.8
+    }
+  ],
   "zones": [
     {
       "id": "6fb10cc0-d37e-46c8-9da5-2da1ebe058bc",
