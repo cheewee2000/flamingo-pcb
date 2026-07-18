@@ -147,7 +147,9 @@ describe('padOutline', () => {
   it('rect pad on a bottom-side component (no component rotation): mirrors x', () => {
     // Local rect (w=2,h=1) centered at pad.at=(1,0), rotation 0:
     // corners (0,-0.5),(2,-0.5),(2,0.5),(0,0.5).
-    // Mirror x (bottom side): (0,-0.5),(-2,-0.5),(-2,0.5),(0,0.5).
+    // Mirror x (bottom side): (0,-0.5),(-2,-0.5),(-2,0.5),(0,0.5) — but
+    // padOutline normalizes winding to CCW (the mirror reverses it), so the
+    // returned ring is that sequence reversed.
     // No component rotation/translation (c.at=0,0 rotation=0).
     const fp = makeFootprint([]);
     const c = makeComponent({ at: { x: 0, y: 0 }, rotation: 0, side: 'bottom', footprint: fp });
@@ -162,15 +164,23 @@ describe('padOutline', () => {
     const outline = padOutline(c, pad);
     expect(outline).toHaveLength(4);
     const expected = [
-      { x: 0, y: -0.5 },
-      { x: -2, y: -0.5 },
-      { x: -2, y: 0.5 },
       { x: 0, y: 0.5 },
+      { x: -2, y: 0.5 },
+      { x: -2, y: -0.5 },
+      { x: 0, y: -0.5 },
     ];
     outline.forEach((p, i) => {
       expect(p.x).toBeCloseTo(expected[i].x, 9);
       expect(p.y).toBeCloseTo(expected[i].y, 9);
     });
+    // Winding must be CCW (positive signed area) even though the mirror
+    // reversed the source ring.
+    let area = 0;
+    outline.forEach((p, i) => {
+      const q = outline[(i + 1) % outline.length];
+      area += p.x * q.y - q.x * p.y;
+    });
+    expect(area).toBeGreaterThan(0);
   });
 
   it('top-side rect pad is not mirrored', () => {

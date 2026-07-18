@@ -180,8 +180,25 @@ function robustClip(op: ClipOp, ...geoms: MultiPolygon[]): MultiPolygon {
     }
   }
   switch (op) {
-    case 'difference':
-      return geoms[0];
+    case 'difference': {
+      // A single degenerate operand (e.g. two buffered obstacles exactly
+      // tangent) throws on every grid; returning geoms[0] wholesale would
+      // silently yield an UNCARVED pour. Subtract subtrahends one at a
+      // time instead, skipping only the ones that still throw — the damage
+      // stays local to the bad obstacle and DRC keeps gating the result.
+      let acc = geoms[0];
+      for (const g of geoms.slice(1)) {
+        for (const grid of [0.01, 0.02]) {
+          try {
+            acc = runClip('difference', [snapMulti(acc, grid), snapMulti(g, grid)]);
+            break;
+          } catch {
+            // escalate, then skip this subtrahend
+          }
+        }
+      }
+      return acc;
+    }
     case 'union':
       return geoms.flat();
     case 'intersection':
