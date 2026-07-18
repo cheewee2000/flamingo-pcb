@@ -417,6 +417,80 @@ export function deriveInfo(root: RawResult): Partial<PartInfo> {
 }
 
 /**
+ * A component's 3D model reference, extracted from the footprint's SVGNODE
+ * `outline3D` entry. Coordinates are in the SAME footprint-local engine space as
+ * the parsed pads: origin-relative, Y negated (EasyEDA y-down -> engine y-up),
+ * scaled by UNIT_MM.
+ */
+export interface Model3d {
+  /** EasyEDA 3D model UUID (32 hex chars). Download OBJ at
+   *  https://modules.easyeda.com/3dmodel/{uuid}. Distinct from packageDetail.uuid. */
+  uuid: string;
+  /** Model anchor in footprint-local engine mm (origin-relative, Y negated). */
+  originMm: Point;
+  /** Vertical (out-of-board) offset in mm. EasyEDA `z` * UNIT_MM, passed through
+   *  with its original sign (EasyEDA convention: +z is up, away from the top of
+   *  the board); no origin offset and no Y-style flip applies to this axis. */
+  zMm: number;
+  /** EasyEDA's euler rotation in DEGREES, uninterpreted (raw "x,y,z" split). The
+   *  mapping into any particular 3D viewer's axis/handedness is the caller's job. */
+  rotationDeg: { x: number; y: number; z: number };
+  /** Model bounding-box footprint size in mm (c_width/c_height * UNIT_MM). */
+  widthMm: number;
+  heightMm: number;
+}
+
+/** Split a comma-separated numeric attribute ("4000,3000" / "0,0,90") into numbers. */
+function parseCsvNums(s: string | undefined): number[] {
+  if (!s) return [];
+  return s.split(',').map((t) => num(t.trim()));
+}
+
+/**
+ * Extract the 3D model reference from a cached EasyEDA component response, or
+ * null if the footprint has no `outline3D` SVGNODE / no valid model uuid.
+ *
+ * The SVGNODE shape string is `SVGNODE~{...json...}` whose `attrs` carry:
+ *   uuid (3D model id), c_etype:"outline3D", c_origin ("x,y" canvas units),
+ *   c_rotation ("x,y,z" euler degrees), z (vertical offset, canvas units),
+ *   c_width / c_height (bbox, canvas units).
+ */
+export function extractModel3d(apiJson: unknown): Model3d | null {
+  const root = unwrap(apiJson);
+  const ds = root.packageDetail?.dataStr;
+  const head = ds?.head;
+  const shapes = ds?.shape;
+  if (!head || !Array.isArray(shapes)) return null;
+  const ox = num(String(head.x ?? 0));
+  const oy = num(String(head.y ?? 0));
+
+  for (const line of shapes) {
+    if (typeof line !== 'string' || !line.startsWith('SVGNODE~')) continue;
+    let attrs: Record<string, string> | undefined;
+    try {
+      attrs = (JSON.parse(line.slice('SVGNODE~'.length)) as { attrs?: Record<string, string> }).attrs;
+    } catch {
+      continue; // malformed SVGNODE json: skip
+    }
+    if (!attrs || attrs.c_etype !== 'outline3D') continue;
+    const uuid = (attrs.uuid ?? '').trim().toLowerCase();
+    if (!/^[0-9a-f]{32}$/.test(uuid)) continue;
+
+    const [cox = ox, coy = oy] = parseCsvNums(attrs.c_origin);
+    const [rx = 0, ry = 0, rz = 0] = parseCsvNums(attrs.c_rotation);
+    return {
+      uuid,
+      originMm: { x: (cox - ox) * UNIT_MM, y: -(coy - oy) * UNIT_MM },
+      zMm: num(attrs.z) * UNIT_MM,
+      rotationDeg: { x: rx, y: ry, z: rz },
+      widthMm: num(attrs.c_width) * UNIT_MM,
+      heightMm: num(attrs.c_height) * UNIT_MM,
+    };
+  }
+  return null;
+}
+
+/**
  * Parse an EasyEDA component API response into our Footprint + partial PartInfo.
  * Throws only when the footprint itself is unusable (missing dataStr/shape).
  * Cosmetic unknown shape types are logged once and skipped, never thrown.
