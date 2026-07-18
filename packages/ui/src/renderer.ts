@@ -754,7 +754,7 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
     }
   }
 
-  // ---- DRC markers (always empty today; wired for a later task) ----
+  // ---- DRC markers (locations from the last "Run DRC" panel check) ----
   for (const m of state.drcMarkers) strokeCircle(ctx, view, m, 0.5, DRC_COLOR, 0.15);
 
   ctx.restore();

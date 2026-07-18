@@ -1045,6 +1045,50 @@ input[type='text'].props-inline-input {
 
 /* ---- Export fab: same hairline-button family as Rip up all ---- */
 
+.drc-btn {
+  width: 100%;
+  padding: 6px 4px;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.drc-btn:hover:not(:disabled) {
+  opacity: 0.55;
+}
+
+.drc-btn:disabled {
+  background: var(--paper-2);
+  color: var(--ink-faint);
+  border-color: var(--rule);
+  cursor: default;
+}
+
+.drc-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.drc-list-item {
+  padding: 2px 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.drc-list-item:hover {
+  opacity: 0.55;
+}
+
 .exportfab-btn {
   padding: 6px 4px;
   background: var(--paper);

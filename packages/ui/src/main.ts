@@ -9,6 +9,7 @@ import './style.css';
 import type { Board, Op, Point } from '@flamingo/engine';
 import { boardBBox, padOutline, ratsnest } from '@flamingo/engine';
 import { store, type AppState } from './state.js';
+import { prepareBoard } from './board-prep.js';
 import { attachViewControls, centerOn, fitToBoard, flipView, screenToWorld } from './view.js';
 import { createRenderer } from './renderer.js';
 import { initPanels } from './panels.js';
@@ -31,7 +32,8 @@ const viewportEl = document.getElementById('viewport') as HTMLElement;
 // Live sync -- set up first so `ctx.sendOp` exists before tools are created.
 // ---------------------------------------------------------------------------
 
-function onBoard(board: Board): void {
+function onBoard(rawBoard: Board): void {
+  const board = prepareBoard(rawBoard);
   const state = store.get();
   const ratsnestLines = ratsnest(board);
   const patch: Partial<AppState> = { board, ratsnestLines };
@@ -86,6 +88,12 @@ function focusComponent(refdes: string): void {
   });
 }
 
+/** Center the view on a board point (DRC violation click-through). */
+function focusPoint(p: Point): void {
+  const rect = canvas.getBoundingClientRect();
+  store.set({ view: centerOn(store.get().view, p, rect.width, rect.height) });
+}
+
 /**
  * After /api/open succeeds: clear all selection state and load the new board
  * by GET rather than waiting on the websocket push — the ws 'board' message
@@ -96,7 +104,7 @@ function boardOpened(): void {
   store.set({ selection: null, selectedNet: null, hover: null });
   void (async () => {
     try {
-      const board = (await (await fetch('/api/board')).json()) as Board;
+      const board = prepareBoard((await (await fetch('/api/board')).json()) as Board);
       const rect = canvas.getBoundingClientRect();
       const state = store.get();
       store.set({
@@ -140,9 +148,12 @@ initPanels(
     saveBtn: document.getElementById('save-btn') as HTMLButtonElement,
     searchInput: document.getElementById('search-input') as HTMLInputElement,
     searchResults: document.getElementById('search-results')!,
+    drcBtn: document.getElementById('drc-btn') as HTMLButtonElement,
+    drcStatus: document.getElementById('drc-status')!,
+    drcList: document.getElementById('drc-list')!,
   },
   toolManager,
-  { focusComponent, boardOpened, sendOp: (op) => wsApi.sendOp(op) },
+  { focusComponent, boardOpened, sendOp: (op) => wsApi.sendOp(op), focusPoint },
 );
 
 const renderer = createRenderer(canvas, () => store.get(), (ctx2d, view, state) => {
