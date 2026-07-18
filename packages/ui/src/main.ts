@@ -266,6 +266,7 @@ const TOOL_SHORTCUTS: Record<string, string> = {
   KeyK: 'keepout',
   KeyZ: 'zone',
   KeyH: 'hole',
+  KeyV: 'via',
   KeyT: 'silk',
   KeyX: 'ripup',
   KeyM: 'measure',
