@@ -441,6 +441,7 @@ async function handleApi(
       res.writeHead(200, {
         'content-type': 'application/step',
         'content-disposition': `attachment; filename="${fileName}"`,
+        'content-length': Buffer.byteLength(step),
       });
       res.end(step);
     } catch (err) {

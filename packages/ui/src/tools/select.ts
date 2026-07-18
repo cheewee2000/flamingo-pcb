@@ -16,21 +16,51 @@
  * `moveComponent` on drop -- never mid-drag, per the task-10 decision that
  * the server is the single authority.
  *
+ * Standalone silk text (`board.silk`) and mounting holes drag the same way:
+ * ghost preview while dragging, then a single `editSilkText` / `editHole`
+ * `{at}` op on drop past the threshold (server-authoritative, undoable).
+ * Always single-item -- the marquee group is components-only, so silk/holes
+ * never group-drag. Component refdes/value labels have no position field and
+ * stay fixed.
+ *
  * Clicking a pad/track/via also still toggles `selectedNet` exactly like
  * Task 9's viewer did (via the narrower `hitTest`).
  */
 
-import type { ComponentInst, Point } from '@flamingo/engine';
-import { bboxOf, componentTransformPoints, dist, padOutline } from '@flamingo/engine';
+import type { ComponentInst, MountingHole, Op, Point, SilkText } from '@flamingo/engine';
+import { bboxOf, componentTransformPoints, dist, holeSlotCenterline, padOutline } from '@flamingo/engine';
 import { hitEditTarget, hitEditTargets, hitTest, sameEditTarget } from '../hit-test.js';
 import type { PointerEvt, Tool, ToolCtx } from './tool.js';
 import { fillOverlayPolygon, strokeOverlayPolygon } from './overlay-utils.js';
 import { worldToScreen } from '../view.js';
+import type { ViewTransform } from '../state.js';
 
 const DRAG_THRESHOLD_PX = 4;
 const SELECT_COLOR = '#4da6ff';
 const GHOST_FILL = '#4da6ff';
 const MARQUEE_COLOR = '#ffffff';
+// Same stack as renderer.ts's CANVAS_FONT (not exported there; overlay-utils
+// hardcodes the identical string for its labels).
+const GHOST_FONT = `'Space Mono', 'Menlo', monospace`;
+
+/** A single draggable non-component item: standalone silk text or mounting hole. */
+export interface ItemDrag {
+  kind: 'silk' | 'hole';
+  id: string;
+  startAt: Point;
+}
+
+/**
+ * Pure drop -> op computation for a silk-text / hole drag. Mirrors the
+ * component path exactly: the drop position is `startAt + delta`, where the
+ * delta already comes from grid-snapped pointer events (no extra snap here).
+ */
+export function itemDropOp(item: ItemDrag, delta: Point): Op {
+  const at = { x: item.startAt.x + delta.x, y: item.startAt.y + delta.y };
+  return item.kind === 'silk'
+    ? { op: 'editSilkText', id: item.id, text: { at } }
+    : { op: 'editHole', id: item.id, hole: { at } };
+}
 
 function componentWorldBBox(c: ComponentInst): { minX: number; minY: number; maxX: number; maxY: number } | null {
   const pts: Point[] = [];
@@ -40,10 +70,58 @@ function componentWorldBBox(c: ComponentInst): { minX: number; minY: number; max
   return bboxOf(pts);
 }
 
+/**
+ * Ghost of a silk text at its dragged position. Same rotation math as
+ * renderer.ts's drawRotatedText (not exported there, and this task can't
+ * touch renderer.ts): measure the on-screen direction of the world rotation
+ * by transforming two points, so the text reads correctly under view flip.
+ */
+function drawSilkGhost(ctx: CanvasRenderingContext2D, view: ViewTransform, s: SilkText, at: Point): void {
+  const rad = (s.rotation * Math.PI) / 180;
+  const p = worldToScreen(view, at);
+  const pd = worldToScreen(view, { x: at.x + Math.cos(rad), y: at.y + Math.sin(rad) });
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(Math.atan2(pd.y - p.y, pd.x - p.x));
+  ctx.globalAlpha = 0.75;
+  ctx.fillStyle = SELECT_COLOR;
+  ctx.font = `${Math.max(s.height * view.scale, 6)}px ${GHOST_FONT}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(s.text, 0, 0);
+  ctx.restore();
+}
+
+/** Ghost of a mounting hole (pad-sized circle, or capsule for slots) at its dragged position. */
+function drawHoleGhost(ctx: CanvasRenderingContext2D, view: ViewTransform, h: MountingHole, at: Point): void {
+  const { start, end } = holeSlotCenterline({ ...h, at });
+  const a = worldToScreen(view, start);
+  const b = worldToScreen(view, end);
+  const widthPx = Math.max(h.padDiameter, h.drill) * view.scale;
+  ctx.save();
+  ctx.globalAlpha = 0.4;
+  ctx.fillStyle = GHOST_FILL;
+  ctx.strokeStyle = GHOST_FILL;
+  ctx.beginPath();
+  if (a.x === b.x && a.y === b.y) {
+    ctx.arc(a.x, a.y, widthPx / 2, 0, 2 * Math.PI);
+    ctx.fill();
+  } else {
+    ctx.lineCap = 'round';
+    ctx.lineWidth = widthPx;
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 export function createSelectTool(): Tool {
   // Component drag (single, or the whole multiSelection group).
   let dragComps: { refdes: string; startAt: Point }[] = [];
   let dragGrabRefdes: string | null = null;
+  // Single-item silk-text / hole drag (never group-drags -- see file header).
+  let dragItem: ItemDrag | null = null;
   let dragStartWorld: Point | null = null;
   let dragDelta: Point | null = null;
   // Marquee (window selection).
@@ -54,6 +132,7 @@ export function createSelectTool(): Tool {
   function reset(): void {
     dragComps = [];
     dragGrabRefdes = null;
+    dragItem = null;
     dragStartWorld = null;
     dragDelta = null;
     marqueeStart = null;
@@ -84,6 +163,18 @@ export function createSelectTool(): Tool {
           .filter((c): c is ComponentInst => c !== undefined)
           .map((c) => ({ refdes: c.refdes, startAt: c.at }));
         dragGrabRefdes = hit.refdes;
+        dragStartWorld = ev.world;
+        dragDelta = { x: 0, y: 0 };
+      } else if (hit && (hit.kind === 'silk' || hit.kind === 'hole')) {
+        // Standalone silk text / mounting hole: arm a single-item drag. A
+        // plain click (below the drag threshold) still falls through to the
+        // normal click-select path in onPointerUp.
+        const item =
+          hit.kind === 'silk'
+            ? state.board.silk.find((s) => s.id === hit.id)
+            : state.board.holes.find((h) => h.id === hit.id);
+        if (!item) return;
+        dragItem = { kind: hit.kind, id: hit.id, startAt: item.at };
         dragStartWorld = ev.world;
         dragDelta = { x: 0, y: 0 };
       } else {
@@ -123,6 +214,14 @@ export function createSelectTool(): Tool {
           ctx.sendOp({ op: 'moveComponents', moves });
         }
         if (dragGrabRefdes) ctx.setState({ selection: { kind: 'component', refdes: dragGrabRefdes } });
+        reset();
+        return;
+      }
+
+      // Drop a silk-text / hole drag: one edit op, server-authoritative.
+      if (dragItem && dragDelta && moved) {
+        ctx.sendOp(itemDropOp(dragItem, dragDelta));
+        ctx.setState({ selection: { kind: dragItem.kind, id: dragItem.id } });
         reset();
         return;
       }
@@ -225,7 +324,19 @@ export function createSelectTool(): Tool {
         ctx2d.restore();
         return;
       }
-      if (dragComps.length === 0 || !dragDelta || !state.board) return;
+      if (!dragDelta || !state.board) return;
+      if (dragItem) {
+        const at = { x: dragItem.startAt.x + dragDelta.x, y: dragItem.startAt.y + dragDelta.y };
+        if (dragItem.kind === 'silk') {
+          const s = state.board.silk.find((it) => it.id === dragItem!.id);
+          if (s) drawSilkGhost(ctx2d, view, s, at);
+        } else {
+          const h = state.board.holes.find((it) => it.id === dragItem!.id);
+          if (h) drawHoleGhost(ctx2d, view, h, at);
+        }
+        return;
+      }
+      if (dragComps.length === 0) return;
       for (const d of dragComps) {
         const comp = state.board.components.find((c) => c.refdes === d.refdes);
         if (!comp) continue;

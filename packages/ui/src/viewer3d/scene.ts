@@ -24,6 +24,7 @@ import {
   padOutline,
   pointInPolygon,
 } from '@flamingo/engine';
+import { boardSilkTextSpec, buildSilkTextMesh, footprintSilkTextSpec } from './silktext.js';
 
 export const BOARD_T = 1.6;
 
@@ -306,7 +307,7 @@ export function buildBoardGroup(board: Board): BoardGeometry {
     group.add(disc2);
   }
 
-  // ---- silkscreen (footprint items + board silk lines), its own group ----
+  // ---- silkscreen (footprint items + board silk lines/text), its own group ----
   const silk = buildSilkGroup(board);
   group.add(silk);
 
@@ -341,12 +342,20 @@ function buildSilkGroup(board: Board): THREE.Group {
         const [wc] = componentTransformPoints(c, [item.center]);
         const pts = arcPoints({ x: wc.x + item.radius, y: wc.y }, { x: wc.x + item.radius, y: wc.y }, wc, false);
         for (let i = 0; i < pts.length - 1; i++) push(pts[i], pts[i + 1], top, z);
+      } else if (item.kind === 'text') {
+        const mesh = buildSilkTextMesh(footprintSilkTextSpec(c, item), top ? SILK_TOP : SILK_BOT, BOARD_T);
+        if (mesh) silk.add(mesh);
       }
     }
   }
   for (const line of board.silkLines) {
     const top = line.layer !== 'B.Silk';
     push(line.start, line.end, top, top ? BOARD_T + 0.08 : -0.08);
+  }
+  for (const s of board.silk) {
+    const top = s.layer !== 'B.Silk';
+    const mesh = buildSilkTextMesh(boardSilkTextSpec(s), top ? SILK_TOP : SILK_BOT, BOARD_T);
+    if (mesh) silk.add(mesh);
   }
 
   for (const [verts, color] of [
@@ -361,7 +370,8 @@ function buildSilkGroup(board: Board): THREE.Group {
   return silk;
 }
 
-/** Recursively dispose geometries (materials are shared module singletons). */
+/** Recursively dispose geometries (materials — including the silk-text
+ * texture/material caches in silktext.ts — are shared module singletons). */
 export function disposeGroup(obj: THREE.Object3D): void {
   obj.traverse((o) => {
     const mesh = o as THREE.Mesh;

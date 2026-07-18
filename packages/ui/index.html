@@ -62,6 +62,11 @@
         <div id="viewer3d-hud" class="viewer3d-hud" hidden>
           <label><input type="checkbox" id="v3d-components" checked /> components</label>
           <label><input type="checkbox" id="v3d-silk" checked /> silk</label>
+          <div class="v3d-step">
+            <button id="v3d-step-btn" class="v3d-step-btn" type="button">STEP</button>
+            <div id="v3d-step-bar" class="v3d-step-bar"><div id="v3d-step-fill" class="v3d-step-fill"></div></div>
+          </div>
+          <span id="v3d-step-err" class="v3d-step-err"></span>
           <span class="viewer3d-hint">drag orbit · wheel zoom · shift-drag pan</span>
         </div>
         <div id="side-badge" class="side-badge" hidden>BOTTOM</div>
