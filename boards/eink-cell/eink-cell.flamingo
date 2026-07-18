@@ -23075,11 +23075,11 @@
         ]
       },
       "at": {
-        "x": 4.5,
-        "y": 78.99
+        "x": 2.8,
+        "y": 77.5
       },
       "rotation": 0,
-      "side": "bottom",
+      "side": "top",
       "fields": {
         "value": "TESTPOINT DNP",
         "package": "TESTPOINT-D1.5MM",
@@ -23137,7 +23137,7 @@
         "y": 81.53
       },
       "rotation": 0,
-      "side": "bottom",
+      "side": "top",
       "fields": {
         "value": "TESTPOINT DNP",
         "package": "TESTPOINT-D1.5MM",
@@ -23195,7 +23195,7 @@
         "y": 84.07
       },
       "rotation": 0,
-      "side": "bottom",
+      "side": "top",
       "fields": {
         "value": "TESTPOINT DNP",
         "package": "TESTPOINT-D1.5MM",
@@ -23249,11 +23249,11 @@
         ]
       },
       "at": {
-        "x": 4.5,
-        "y": 89.15
+        "x": 5.4,
+        "y": 88.6
       },
       "rotation": 0,
-      "side": "bottom",
+      "side": "top",
       "fields": {
         "value": "TESTPOINT DNP",
         "package": "TESTPOINT-D1.5MM",
@@ -23311,7 +23311,7 @@
         "y": 91.69
       },
       "rotation": 0,
-      "side": "bottom",
+      "side": "top",
       "fields": {
         "value": "TESTPOINT DNP",
         "package": "TESTPOINT-D1.5MM",
@@ -23369,7 +23369,7 @@
         "y": 78.99
       },
       "rotation": 0,
-      "side": "bottom",
+      "side": "top",
       "fields": {
         "value": "TESTPOINT DNP",
         "package": "TESTPOINT-D1.5MM",
@@ -23427,7 +23427,7 @@
         "y": 81.53
       },
       "rotation": 0,
-      "side": "bottom",
+      "side": "top",
       "fields": {
         "value": "TESTPOINT DNP",
         "package": "TESTPOINT-D1.5MM",
@@ -23485,7 +23485,7 @@
         "y": 84.07
       },
       "rotation": 0,
-      "side": "bottom",
+      "side": "top",
       "fields": {
         "value": "TESTPOINT DNP",
         "package": "TESTPOINT-D1.5MM",
@@ -23543,7 +23543,7 @@
         "y": 86.61
       },
       "rotation": 0,
-      "side": "bottom",
+      "side": "top",
       "fields": {
         "value": "TESTPOINT DNP",
         "package": "TESTPOINT-D1.5MM",
@@ -23601,7 +23601,7 @@
         "y": 115.5
       },
       "rotation": 0,
-      "side": "bottom",
+      "side": "top",
       "fields": {
         "value": "TESTPOINT DNP",
         "package": "TESTPOINT-D1.5MM",
@@ -23659,7 +23659,7 @@
         "y": 46
       },
       "rotation": 0,
-      "side": "bottom",
+      "side": "top",
       "fields": {
         "value": "TESTPOINT DNP",
         "package": "TESTPOINT-D1.5MM",
@@ -23713,11 +23713,11 @@
         ]
       },
       "at": {
-        "x": 39,
-        "y": 50.5
+        "x": 37.2,
+        "y": 41.5
       },
       "rotation": 0,
-      "side": "bottom",
+      "side": "top",
       "fields": {
         "value": "TESTPOINT DNP",
         "package": "TESTPOINT-D1.5MM",
@@ -23771,11 +23771,11 @@
         ]
       },
       "at": {
-        "x": 32,
-        "y": 45
+        "x": 35,
+        "y": 41.5
       },
       "rotation": 0,
-      "side": "bottom",
+      "side": "top",
       "fields": {
         "value": "TESTPOINT DNP",
         "package": "TESTPOINT-D1.5MM",
@@ -23833,7 +23833,7 @@
         "y": 70.5
       },
       "rotation": 0,
-      "side": "bottom",
+      "side": "top",
       "fields": {
         "value": "TESTPOINT DNP",
         "package": "TESTPOINT-D1.5MM",
@@ -24728,7 +24728,7 @@
       "layer": "F.Silk",
       "at": {
         "x": 5.5,
-        "y": 88.5
+        "y": 90.2
       },
       "text": "B1",
       "height": 1,
@@ -24923,10 +24923,10 @@
     },
     {
       "id": "ccf290ba-360b-44ae-a5e3-60e7b3071aa1",
-      "layer": "B.Silk",
+      "layer": "F.Silk",
       "at": {
-        "x": 2.3,
-        "y": 78.99
+        "x": 2.8,
+        "y": 76.2
       },
       "text": "VSYS",
       "height": 0.6,
@@ -24934,7 +24934,7 @@
     },
     {
       "id": "1e2be6fe-9c36-4416-ad43-11eda5d044c0",
-      "layer": "B.Silk",
+      "layer": "F.Silk",
       "at": {
         "x": 2.3,
         "y": 81.53
@@ -24945,7 +24945,7 @@
     },
     {
       "id": "89e2a418-c470-4df1-95db-4b3c5bedbc74",
-      "layer": "B.Silk",
+      "layer": "F.Silk",
       "at": {
         "x": 2.3,
         "y": 84.07
@@ -24956,10 +24956,10 @@
     },
     {
       "id": "9a924f98-cedd-4c67-a099-2ccbea2811dd",
-      "layer": "B.Silk",
+      "layer": "F.Silk",
       "at": {
-        "x": 2.3,
-        "y": 89.15
+        "x": 2.4,
+        "y": 88.55
       },
       "text": "SCL",
       "height": 0.6,
@@ -24967,7 +24967,7 @@
     },
     {
       "id": "8fdbc25b-1176-44f0-b7cd-f5bebf56400c",
-      "layer": "B.Silk",
+      "layer": "F.Silk",
       "at": {
         "x": 2.3,
         "y": 91.69
@@ -24978,7 +24978,7 @@
     },
     {
       "id": "19e4955a-b308-4f37-a9f7-5816ab69e787",
-      "layer": "B.Silk",
+      "layer": "F.Silk",
       "at": {
         "x": 34.3,
         "y": 78.99
@@ -24989,7 +24989,7 @@
     },
     {
       "id": "a9889fc6-f1c7-45d2-9c19-4772e5b3ef6f",
-      "layer": "B.Silk",
+      "layer": "F.Silk",
       "at": {
         "x": 34.3,
         "y": 81.53
@@ -25000,7 +25000,7 @@
     },
     {
       "id": "cdf92ec4-7589-4672-b2cc-b385e206e4ec",
-      "layer": "B.Silk",
+      "layer": "F.Silk",
       "at": {
         "x": 34.3,
         "y": 84.07
@@ -25011,7 +25011,7 @@
     },
     {
       "id": "5fa915eb-2d95-4345-9f59-7ea1d156630c",
-      "layer": "B.Silk",
+      "layer": "F.Silk",
       "at": {
         "x": 34.3,
         "y": 86.61
@@ -25022,7 +25022,7 @@
     },
     {
       "id": "e0a6bf09-f00e-4b9e-81f0-e5142ef348ab",
-      "layer": "B.Silk",
+      "layer": "F.Silk",
       "at": {
         "x": 11.5,
         "y": 113.9
@@ -25033,7 +25033,7 @@
     },
     {
       "id": "41c29382-4171-4eab-8138-2dc576566b6a",
-      "layer": "B.Silk",
+      "layer": "F.Silk",
       "at": {
         "x": 55,
         "y": 44.4
@@ -25044,10 +25044,10 @@
     },
     {
       "id": "4d3bd624-bf01-4609-8173-f88b1e9ca41d",
-      "layer": "B.Silk",
+      "layer": "F.Silk",
       "at": {
-        "x": 39,
-        "y": 48.9
+        "x": 37.2,
+        "y": 43
       },
       "text": "PREVGH",
       "height": 0.6,
@@ -25055,10 +25055,10 @@
     },
     {
       "id": "12492e8f-f49a-4bb0-a47e-56983b9ad150",
-      "layer": "B.Silk",
+      "layer": "F.Silk",
       "at": {
-        "x": 32,
-        "y": 43.4
+        "x": 33,
+        "y": 43.5
       },
       "text": "PREVGL",
       "height": 0.6,
@@ -25066,7 +25066,7 @@
     },
     {
       "id": "a1ed654b-1171-4fe6-b472-c62d6ceba3d9",
-      "layer": "B.Silk",
+      "layer": "F.Silk",
       "at": {
         "x": 60.5,
         "y": 68.9
