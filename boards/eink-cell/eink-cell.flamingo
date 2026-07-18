@@ -375,7 +375,7 @@
       }
     },
     {
-      "id": "532c792d-3234-4730-9420-9106053c6eb1",
+      "id": "bb97c0ea-e8c1-412f-8df0-4ef054bc155f",
       "layers": [
         "F.Cu",
         "B.Cu"
@@ -383,64 +383,6 @@
       "polygon": [
         {
           "x": 23.1,
-          "y": 8.73
-        },
-        {
-          "x": 23.5,
-          "y": 8.73
-        },
-        {
-          "x": 23.5,
-          "y": 9.5
-        },
-        {
-          "x": 23.1,
-          "y": 9.5
-        }
-      ],
-      "keepout": {
-        "copper": true,
-        "via": true
-      }
-    },
-    {
-      "id": "711676e8-b7ac-4fc7-ab7b-1b80d3db6762",
-      "layers": [
-        "F.Cu",
-        "B.Cu"
-      ],
-      "polygon": [
-        {
-          "x": 25.1,
-          "y": 8.73
-        },
-        {
-          "x": 26.5,
-          "y": 8.73
-        },
-        {
-          "x": 26.5,
-          "y": 9.5
-        },
-        {
-          "x": 25.1,
-          "y": 9.5
-        }
-      ],
-      "keepout": {
-        "copper": true,
-        "via": true
-      }
-    },
-    {
-      "id": "d661cbb9-958e-44bd-af3d-e6bee759ffff",
-      "layers": [
-        "F.Cu",
-        "B.Cu"
-      ],
-      "polygon": [
-        {
-          "x": 28.1,
           "y": 8.73
         },
         {
@@ -452,7 +394,7 @@
           "y": 9.5
         },
         {
-          "x": 28.1,
+          "x": 23.1,
           "y": 9.5
         }
       ],
@@ -24501,7 +24443,144 @@
       "viaDiameter": 0.6
     }
   ],
-  "tracks": [],
+  "tracks": [
+    {
+      "id": "330b833f-0bee-46d5-bd84-1701f563c8c9",
+      "layer": "F.Cu",
+      "width": 0.25,
+      "net": "ANT",
+      "seg": {
+        "type": "line",
+        "start": {
+          "x": 21.72,
+          "y": 5.5
+        },
+        "end": {
+          "x": 21.72,
+          "y": 10.6
+        }
+      }
+    },
+    {
+      "id": "3a7d98cc-6982-431c-b800-477343dcb051",
+      "layer": "F.Cu",
+      "width": 0.25,
+      "net": "ANT",
+      "seg": {
+        "type": "line",
+        "start": {
+          "x": 21.72,
+          "y": 10.6
+        },
+        "end": {
+          "x": 6.32,
+          "y": 10.6
+        }
+      }
+    },
+    {
+      "id": "21b195fe-567f-4b54-9ba8-447e39edf116",
+      "layer": "F.Cu",
+      "width": 0.25,
+      "net": "ANT",
+      "seg": {
+        "type": "line",
+        "start": {
+          "x": 6.32,
+          "y": 10.6
+        },
+        "end": {
+          "x": 4.72,
+          "y": 12.2
+        }
+      }
+    },
+    {
+      "id": "8e5b2296-dab3-4df5-a06b-251e04713075",
+      "layer": "F.Cu",
+      "width": 0.25,
+      "net": "ANT",
+      "seg": {
+        "type": "line",
+        "start": {
+          "x": 4.72,
+          "y": 12.2
+        },
+        "end": {
+          "x": 4.72,
+          "y": 13.2
+        }
+      }
+    },
+    {
+      "id": "69c3c131-c797-46cd-a805-aec5a5c50834",
+      "layer": "F.Cu",
+      "width": 0.25,
+      "net": "GNSS_RF",
+      "seg": {
+        "type": "line",
+        "start": {
+          "x": 4.72,
+          "y": 14.6
+        },
+        "end": {
+          "x": 4.72,
+          "y": 19.24
+        }
+      }
+    },
+    {
+      "id": "1d9e2d7f-fc40-4583-80e2-238028031f29",
+      "layer": "F.Cu",
+      "width": 0.25,
+      "net": "GNSS_RF",
+      "seg": {
+        "type": "line",
+        "start": {
+          "x": 4.72,
+          "y": 19.24
+        },
+        "end": {
+          "x": 4.8,
+          "y": 19.32
+        }
+      }
+    },
+    {
+      "id": "d6531856-ee5b-44f0-af48-ea91855a52f2",
+      "layer": "F.Cu",
+      "width": 0.25,
+      "net": "GNSS_RF",
+      "seg": {
+        "type": "line",
+        "start": {
+          "x": 4.8,
+          "y": 19.32
+        },
+        "end": {
+          "x": 4.9,
+          "y": 19.42
+        }
+      }
+    },
+    {
+      "id": "e2c3cc41-4bba-49d2-ba6b-fc8d5a21ddb8",
+      "layer": "F.Cu",
+      "width": 0.25,
+      "net": "GNSS_RF",
+      "seg": {
+        "type": "line",
+        "start": {
+          "x": 4.9,
+          "y": 19.42
+        },
+        "end": {
+          "x": 4.9,
+          "y": 21.82
+        }
+      }
+    }
+  ],
   "vias": [],
   "zones": [
     {
@@ -24569,7 +24648,7 @@
       "layer": "F.Silk",
       "at": {
         "x": 33.5,
-        "y": 85.6
+        "y": 93.6
       },
       "text": "PWR VIA VIN — NEVER USB-C + VIN TOGETHER",
       "height": 1,
@@ -24766,10 +24845,10 @@
       "id": "f6d2f9ea-927a-4173-a911-cb06c40d944c",
       "layer": "F.Silk",
       "at": {
-        "x": 46,
-        "y": 4.5
+        "x": 39,
+        "y": 4
       },
-      "text": "CWT_SSE5GM9_2606",
+      "text": "CWT_SSE5GM9_2606_V1",
       "height": 2,
       "rotation": 0
     },
