@@ -109,11 +109,15 @@ function edgeCapsules(pts: Point[], delta: number): Polygon[] {
 }
 
 /**
- * Snap every coordinate of a MultiPolygon to a grid. Used only as a fallback
- * to dodge polygon-clipping's sweepline degeneracies (see robustDifference).
+ * Snap every coordinate of a MultiPolygon to a grid. Applied to every clip
+ * input up front to keep polygon-clipping's sweepline off its degenerate
+ * near-coincident-vertex paths (see robustClip).
  */
 function snapMulti(m: MultiPolygon, grid: number): MultiPolygon {
-  const s = (n: number): number => Math.round(n / grid) * grid;
+  const s = (n: number): number => {
+    const v = Math.round(n / grid) * grid;
+    return v === 0 ? 0 : v; // fold -0 (from rounding tiny negatives) to +0
+  };
   return m.map((poly) => poly.map((ring) => ring.map(([x, y]): Pair => [s(x), s(y)])));
 }
 
@@ -136,11 +140,15 @@ function runClip(op: ClipOp, geoms: MultiPolygon[]): MultiPolygon {
  * SweepLine failures the library throws on near-coincident, high-precision
  * vertices — exactly what a real autorouter emits (45-degree track corners at
  * sub-micron precision, or the ~2µm segments freerouting output can produce).
- * The happy path is untouched (bit-for-bit identical to a direct call), so
- * exact inputs — every unit-test fixture — are unaffected. Only when the
- * clipper actually throws do we retry with all vertices snapped to a 10µm
- * grid, which is imperceptible for a copper pour yet removes the
- * degeneracies. Escalates to a coarser 20µm grid if 10µm still trips it.
+ *
+ * ALL inputs are snapped to a 10µm grid BEFORE the first attempt. Snapping is
+ * imperceptible for a copper pour (JLCPCB tolerance is far coarser) and it is
+ * what makes real routed boards tractable: sub-micron vertices don't just make
+ * the sweepline throw, they make it *churn* — on a real 66×126mm board the
+ * exact-first difference burned 3.3s before throwing and 3.4s total per fill,
+ * vs ~10ms snapped (measured 2026-07-18, eink-cell). On-grid inputs (every
+ * hand-authored fixture) snap to themselves, so exact inputs are unaffected.
+ * Escalates to a coarser 20µm grid if 10µm still trips the clipper.
  *
  * If every attempt still throws, we degrade rather than propagate the
  * exception (which would abort the whole fill and block fab export) -- each
@@ -161,27 +169,23 @@ function runClip(op: ClipOp, geoms: MultiPolygon[]): MultiPolygon {
  *     difference fallback -- downstream DRC still gates the result.
  */
 function robustClip(op: ClipOp, ...geoms: MultiPolygon[]): MultiPolygon {
-  try {
-    return runClip(op, geoms);
-  } catch {
-    for (const grid of [0.01, 0.02]) {
-      try {
-        return runClip(
-          op,
-          geoms.map((g) => snapMulti(g, grid)),
-        );
-      } catch {
-        // try the next, coarser grid
-      }
+  for (const grid of [0.01, 0.02]) {
+    try {
+      return runClip(
+        op,
+        geoms.map((g) => snapMulti(g, grid)),
+      );
+    } catch {
+      // escalate to the coarser grid
     }
-    switch (op) {
-      case 'difference':
-        return geoms[0];
-      case 'union':
-        return geoms.flat();
-      case 'intersection':
-        return geoms[0];
-    }
+  }
+  switch (op) {
+    case 'difference':
+      return geoms[0];
+    case 'union':
+      return geoms.flat();
+    case 'intersection':
+      return geoms[0];
   }
 }
 
