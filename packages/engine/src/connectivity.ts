@@ -12,10 +12,18 @@
  * Freerouting output snaps track/via endpoints to pad centers, so a plain
  * distance-based epsilon is sufficient without also inflating by half the
  * track width.
+ *
+ * Zones: a same-net zone WITH a computed fill acts as glue — every node whose
+ * anchor point lies inside the fill (even-odd over the winding-encoded rings)
+ * on the zone's layer is unioned through it, matching the physical copper.
+ * Unfilled zones contribute nothing, so consumers of the live (never-filled)
+ * board — ratsnest, autoroute — are unaffected; only filled-board consumers
+ * (the DRC unconnected-net check inside export/api-drc, screenshots) get the
+ * pour credit.
  */
 
 import type { Board, Net, Point, Track, LayerId } from './types.js';
-import { padWorld, dist } from './geometry.js';
+import { padWorld, dist, pointInPolygon } from './geometry.js';
 import { copperLayersOf, padCopperLayers } from './layers.js';
 
 const EPSILON_MM = 0.01;
@@ -183,6 +191,25 @@ export function netIslands(b: Board, net: Net): NetIsland[] {
       if (dist(a.at, bNode.at) > EPSILON_MM) continue;
       if (!sharesLayer(layersOf(a), layersOf(bNode))) continue;
       uf.union(i, j);
+    }
+  }
+
+  // Filled same-net pours are copper too: union every node whose anchor sits
+  // inside the fill on the zone's layer (see the header). Even-odd membership
+  // honors hole rings, so a node inside a clearance knockout does NOT join.
+  const inFill = (fill: Point[][], p: Point): boolean => {
+    let crossings = 0;
+    for (const ring of fill) if (pointInPolygon(p, ring)) crossings++;
+    return crossings % 2 === 1;
+  };
+  for (const z of b.zones) {
+    if (z.net !== net.name || !z.fill || z.fill.length === 0) continue;
+    let first = -1;
+    for (let i = 0; i < nodes.length; i++) {
+      if (!layersOf(nodes[i]).includes(z.layer)) continue;
+      if (!inFill(z.fill, nodes[i].at)) continue;
+      if (first === -1) first = i;
+      else uf.union(first, i);
     }
   }
 

@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { newBoard } from '../src/index.js';
+import { newBoard, fillAllZones } from '../src/index.js';
 import type { Board, Footprint, ComponentInst, Pad, Track, Via } from '../src/index.js';
 import {
   padAnchor,
   connectedGroups,
+  netIslands,
   ratsnest,
   isFullyRouted,
 } from '../src/connectivity.js';
@@ -264,5 +265,66 @@ describe('isFullyRouted', () => {
       ]),
     );
     expect(result.length).toBe(2);
+  });
+});
+
+describe('zone-aware connectivity (filled pours count as copper)', () => {
+  /** 20x20 outlined board, GND zone over the whole board, two far-apart GND pads. */
+  function pourBoard(): Board {
+    const b = baseBoard();
+    b.outline = [
+      { type: 'line', start: { x: 0, y: 0 }, end: { x: 20, y: 0 } },
+      { type: 'line', start: { x: 20, y: 0 }, end: { x: 20, y: 20 } },
+      { type: 'line', start: { x: 20, y: 20 }, end: { x: 0, y: 20 } },
+      { type: 'line', start: { x: 0, y: 20 }, end: { x: 0, y: 0 } },
+    ];
+    b.components.push(makeComponent('R1', { x: 4, y: 10 }, [smdPad('1', 'top', { x: 0, y: 0 })]));
+    b.components.push(makeComponent('R2', { x: 16, y: 10 }, [smdPad('1', 'top', { x: 0, y: 0 })]));
+    b.nets.push({ name: 'GND', class: 'default', pins: ['R1.1', 'R2.1'] });
+    b.zones.push({
+      id: 'z1',
+      layer: 'F.Cu',
+      net: 'GND',
+      polygon: [
+        { x: 1, y: 1 },
+        { x: 19, y: 1 },
+        { x: 19, y: 19 },
+        { x: 1, y: 19 },
+      ],
+      clearance: 0.3,
+      minWidth: 0.25,
+      thermal: { gap: 0.3, spokeWidth: 0.4 },
+    });
+    return b;
+  }
+
+  it('unfilled zones contribute nothing (pads stay separate islands)', () => {
+    const b = pourBoard();
+    expect(connectedGroups(b, b.nets.find((n) => n.name === 'GND')!).length).toBe(2);
+  });
+
+  it('a filled same-net pour unions the pads it covers', () => {
+    const b = fillAllZones(pourBoard());
+    expect(connectedGroups(b, b.nets.find((n) => n.name === 'GND')!).length).toBe(1);
+  });
+
+  it('does not union across layers (B.Cu pad is not touched by an F.Cu pour)', () => {
+    const b = pourBoard();
+    // pad layer is component-relative: a 'top' pad on a bottom-side part lands on B.Cu
+    b.components.push(
+      makeComponent('R3', { x: 10, y: 16 }, [smdPad('1', 'top', { x: 0, y: 0 })], { side: 'bottom' }),
+    );
+    b.nets.find((n) => n.name === 'GND')!.pins.push('R3.1');
+    const filled = fillAllZones(b);
+    expect(connectedGroups(filled, filled.nets.find((n) => n.name === 'GND')!).length).toBe(2);
+  });
+
+  it('a lone same-net via inside the pour joins the pour island', () => {
+    const b = pourBoard();
+    b.vias.push({ id: 'V9', at: { x: 10, y: 5 }, drill: 0.3, diameter: 0.6, net: 'GND' });
+    const filled = fillAllZones(b);
+    const islands = netIslands(filled, filled.nets.find((n) => n.name === 'GND')!);
+    expect(islands.length).toBe(1);
+    expect(islands[0]!.viaIds).toContain('V9');
   });
 });
