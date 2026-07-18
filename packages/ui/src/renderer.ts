@@ -39,6 +39,7 @@ import {
   isSlot,
   holeSlotCenterline,
   capsulePolygon,
+  componentLabelPlacement,
   labelFontMm,
   padLabelLayout,
   netIslands,
@@ -581,8 +582,9 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
       for (const c of board.components) {
         if (c.side !== side) continue;
         for (const item of c.footprint.silk) drawFootprintSilkItem(ctx, view, c, item, color);
-        const [origin] = componentTransformPoints(c, [{ x: 0, y: 0 }]);
-        const p = worldToScreen(view, origin);
+        // refdes label: adjacent to the component body (below/right/left/
+        // above, pad-avoiding) — anchor from the shared engine helper.
+        const p = worldToScreen(view, componentLabelPlacement(board, c).at);
         ctx.fillStyle = color;
         ctx.font = `${Math.max(REFDES_HEIGHT_MM * view.scale, 6)}px ${CANVAS_FONT}`;
         ctx.textAlign = 'center';

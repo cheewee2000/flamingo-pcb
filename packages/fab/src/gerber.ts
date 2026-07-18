@@ -28,6 +28,7 @@ import {
   padWorld,
   componentTransformPoints,
   componentTransformRotation,
+  componentLabelPlacement,
   fillAllZones,
   bufferPolygon,
   isSlot,
@@ -374,14 +375,18 @@ function buildSilk(b: Board, side: 'F' | 'B'): string {
         }
       }
     }
-    // refdes label (upright at component origin, like the SVG renderer)
-    const [origin] = componentTransformPoints(comp, [{ x: 0, y: 0 }]);
-    strokes(strokeText(comp.refdes, origin, 1.0, 0, mirror), 0.15);
+    // refdes label (upright, adjacent to the component body, pad-avoiding —
+    // anchor shared with the SVG/canvas renderers and DRC)
+    const lp = componentLabelPlacement(b, comp);
+    strokes(strokeText(comp.refdes, lp.at, lp.height, lp.rotation, mirror), 0.15);
   }
 
+  // Board-level silk text. B.Silk text is mirrored (x -> -x about its anchor,
+  // before rotation) like bottom-component text, so it reads correctly on the
+  // fabbed board's underside — matching the 3D viewer's B.Silk convention.
   for (const s of b.silk) {
     if (s.layer !== silkLayer) continue;
-    strokes(strokeText(s.text, s.at, s.height, s.rotation, false), Math.max(0.12, s.height * 0.12));
+    strokes(strokeText(s.text, s.at, s.height, s.rotation, side === 'B'), Math.max(0.12, s.height * 0.12));
   }
 
   // Board-level silk lines (mechanical reference outlines) stroked at their width.
