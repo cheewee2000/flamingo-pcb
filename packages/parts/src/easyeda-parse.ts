@@ -446,6 +446,43 @@ function parseCsvNums(s: string | undefined): number[] {
   return s.split(',').map((t) => num(t.trim()));
 }
 
+interface SvgChildNode {
+  attrs?: Record<string, string>;
+}
+
+/**
+ * Bounding-box center (canvas units) of the SVGNODE's projection-outline
+ * children (`<polyline points="x y x y …">`), or null when there are none.
+ *
+ * This is the model's true anchor. The `c_origin` attr is frequently stale —
+ * it keeps the position the 3D shell had in whatever document it was first
+ * drawn in (LCSC data shows C0805 caps off by -1.413mm and some MOSFETs off by
+ * ~900mm), while the projection outline is what the EasyEDA editor actually
+ * renders, re-baked to the footprint's canvas. Where c_origin is sane the two
+ * agree, so preferring the outline center loses nothing.
+ */
+function projectionOutlineCenter(children: SvgChildNode[] | undefined): Point | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const child of children ?? []) {
+    const points = child?.attrs?.points;
+    if (typeof points !== 'string') continue;
+    const nums = points.trim().split(/[\s,]+/).map(Number);
+    for (let i = 0; i + 1 < nums.length; i += 2) {
+      const [x, y] = [nums[i], nums[i + 1]];
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (minX > maxX) return null;
+  return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+}
+
 /**
  * Extract the 3D model reference from a cached EasyEDA component response, or
  * null if the footprint has no `outline3D` SVGNODE / no valid model uuid.
@@ -466,21 +503,25 @@ export function extractModel3d(apiJson: unknown): Model3d | null {
 
   for (const line of shapes) {
     if (typeof line !== 'string' || !line.startsWith('SVGNODE~')) continue;
-    let attrs: Record<string, string> | undefined;
+    let node: { attrs?: Record<string, string>; childNodes?: SvgChildNode[] } | undefined;
     try {
-      attrs = (JSON.parse(line.slice('SVGNODE~'.length)) as { attrs?: Record<string, string> }).attrs;
+      node = JSON.parse(line.slice('SVGNODE~'.length)) as typeof node;
     } catch {
       continue; // malformed SVGNODE json: skip
     }
+    const attrs = node?.attrs;
     if (!attrs || attrs.c_etype !== 'outline3D') continue;
     const uuid = (attrs.uuid ?? '').trim().toLowerCase();
     if (!/^[0-9a-f]{32}$/.test(uuid)) continue;
 
+    // Anchor: projection-outline center when present (reliable), else c_origin
+    // (stale in a fair chunk of LCSC data — see projectionOutlineCenter).
     const [cox = ox, coy = oy] = parseCsvNums(attrs.c_origin);
+    const anchor = projectionOutlineCenter(node?.childNodes) ?? { x: cox, y: coy };
     const [rx = 0, ry = 0, rz = 0] = parseCsvNums(attrs.c_rotation);
     return {
       uuid,
-      originMm: { x: (cox - ox) * UNIT_MM, y: -(coy - oy) * UNIT_MM },
+      originMm: { x: (anchor.x - ox) * UNIT_MM, y: -(anchor.y - oy) * UNIT_MM },
       zMm: num(attrs.z) * UNIT_MM,
       rotationDeg: { x: rx, y: ry, z: rz },
       widthMm: num(attrs.c_width) * UNIT_MM,
