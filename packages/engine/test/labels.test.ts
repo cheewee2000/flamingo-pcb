@@ -8,6 +8,7 @@ import {
   COMPONENT_LABEL_GAP_MM,
   COMPONENT_LABEL_HEIGHT_MM,
   COMPONENT_LABEL_CHAR_ADVANCE,
+  pointInPolygon,
 } from '../src/index.js';
 
 function smdPad(number: string, at: Point, size = { w: 1, h: 1 }): Pad {
@@ -149,16 +150,90 @@ describe('componentLabelPlacement - board-aware collision avoidance', () => {
 
   it('falls back to the geometric default (below) when every candidate collides', () => {
     const c = landscape('R1', { x: 10, y: 10 });
-    // Pads parked on all four candidate spots.
-    const blockers = comp('U8', { x: 10, y: 10 }, [
-      smdPad('1', { x: 0, y: -1.9 }), // below
-      smdPad('2', { x: 0, y: 1.9 }), // above
-      smdPad('3', { x: 2.4, y: 0 }), // right
-      smdPad('4', { x: -2.4, y: 0 }), // left
-    ]);
-    const p = componentLabelPlacement(boardWith(c, blockers), c);
+    // A big courtyard that swallows R1 and every candidate label position, so
+    // no side/gap escapes it: all candidates score equal and the least-bad
+    // pick is the preferred geometric default (below).
+    const blocker = comp('U8', { x: 10, y: 10 }, [smdPad('1', { x: 0, y: 0 })], {
+      footprintOverrides: {
+        courtyard: [
+          [
+            { x: -5, y: -5 },
+            { x: 5, y: -5 },
+            { x: 5, y: 5 },
+            { x: -5, y: 5 },
+          ],
+        ],
+      },
+    });
+    const p = componentLabelPlacement(boardWith(c, blocker), c);
     expect(p.position).toBe('below');
     expect(p).toEqual(componentLabelPlacement(c));
+  });
+
+  it('pushes a label back inside the board outline when the default leaves it', () => {
+    // Landscape part hugging the bottom edge: its default "below" label would
+    // hang off the board. The solver must pick a candidate whose rect stays in.
+    const b = newBoard('t', 2);
+    b.outline = [
+      { type: 'line', start: { x: 0, y: 0 }, end: { x: 20, y: 0 } },
+      { type: 'line', start: { x: 20, y: 0 }, end: { x: 20, y: 20 } },
+      { type: 'line', start: { x: 20, y: 20 }, end: { x: 0, y: 20 } },
+      { type: 'line', start: { x: 0, y: 20 }, end: { x: 0, y: 0 } },
+    ];
+    const c = landscape('R1', { x: 10, y: 0.9 }); // body y 0.5..1.3, near bottom edge
+    b.components.push(c);
+    const poly = [
+      { x: 0, y: 0 },
+      { x: 20, y: 0 },
+      { x: 20, y: 20 },
+      { x: 0, y: 20 },
+    ];
+    const rect = componentLabelRect(b, c);
+    for (const corner of rect) {
+      expect(pointInPolygon(corner, poly)).toBe(true);
+    }
+    // The plain default would sit below the edge (outside).
+    const naive = componentLabelRect(c);
+    expect(naive.some((p) => !pointInPolygon(p, poly))).toBe(true);
+  });
+
+  it('gives two adjacent components non-overlapping label rects', () => {
+    // Two landscape parts stacked close vertically: both default to "below",
+    // which would collide. Label-label dodging must separate them.
+    const a = landscape('R1', { x: 10, y: 10 });
+    const d = landscape('R2', { x: 10, y: 8.5 });
+    const b = boardWith(a, d);
+    const ra = componentLabelRect(b, a);
+    const rb = componentLabelRect(b, d);
+    const bbA = { minX: Math.min(...ra.map((p) => p.x)), maxX: Math.max(...ra.map((p) => p.x)), minY: Math.min(...ra.map((p) => p.y)), maxY: Math.max(...ra.map((p) => p.y)) };
+    const bbB = { minX: Math.min(...rb.map((p) => p.x)), maxX: Math.max(...rb.map((p) => p.x)), minY: Math.min(...rb.map((p) => p.y)), maxY: Math.max(...rb.map((p) => p.y)) };
+    const overlap = bbA.minX < bbB.maxX && bbA.maxX > bbB.minX && bbA.minY < bbB.maxY && bbA.maxY > bbB.minY;
+    expect(overlap).toBe(false);
+  });
+
+  it('does not place a label over a neighboring component courtyard', () => {
+    // Neighbor with a courtyard sitting just below R1, where R1's default
+    // "below" label would land. The label must move off that courtyard.
+    const c = landscape('R1', { x: 10, y: 10 });
+    const neighbor = comp('U2', { x: 10, y: 8.6 }, [smdPad('1', { x: 0, y: 0 })], {
+      footprintOverrides: {
+        courtyard: [
+          [
+            { x: -1.5, y: -0.8 },
+            { x: 1.5, y: -0.8 },
+            { x: 1.5, y: 0.8 },
+            { x: -1.5, y: 0.8 },
+          ],
+        ],
+      },
+    });
+    const b = boardWith(c, neighbor);
+    const rect = componentLabelRect(b, c);
+    const rb = { minX: Math.min(...rect.map((p) => p.x)), maxX: Math.max(...rect.map((p) => p.x)), minY: Math.min(...rect.map((p) => p.y)), maxY: Math.max(...rect.map((p) => p.y)) };
+    // Neighbor courtyard world box: x 8.5..11.5, y 7.8..9.4.
+    const court = { minX: 8.5, maxX: 11.5, minY: 7.8, maxY: 9.4 };
+    const overlap = rb.minX < court.maxX && rb.maxX > court.minX && rb.minY < court.maxY && rb.maxY > court.minY;
+    expect(overlap).toBe(false);
   });
 
   it('board-aware rect matches the board-aware placement', () => {

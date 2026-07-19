@@ -358,14 +358,11 @@ describe('runDRC', () => {
   it('silk-over-pad: with ALL label candidates blocked, the below-fallback violates honestly', () => {
     const b = base();
     b.components.push(makeComponent('R1', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })]));
-    // Pads parked on every candidate spot (below/right/left/above) around R1.
+    // One large pad blanketing R1 and every candidate label spot (all sides,
+    // all gaps): no placement escapes it, so the least-bad fallback sits on
+    // copper and DRC flags it honestly.
     b.components.push(
-      makeComponent('U8', { x: 0, y: 0 }, [
-        smdPad('1', 'top', { x: 0, y: -1.3 }),
-        smdPad('2', 'top', { x: 0, y: 1.3 }),
-        smdPad('3', 'top', { x: 1.7, y: 0 }),
-        smdPad('4', 'top', { x: -1.7, y: 0 }),
-      ]),
+      makeComponent('U8', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 }, { w: 12, h: 12 })]),
     );
 
     const violations = violationsOf(b, 'silk-over-pad');
