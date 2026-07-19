@@ -14,7 +14,7 @@ node packages/server/dist/cli.js serve board.flamingo   # prints "Flamingo v0.1.
 
 - Serves the live UI at `http://localhost:4242`, streams board changes over
   `/ws`, and exposes the MCP endpoint at `/mcp`.
-- `.mcp.json` (repo root) wires the `flamingo` MCP server to `/mcp` — its **28
+- `.mcp.json` (repo root) wires the `flamingo` MCP server to `/mcp` — its **34
   tools are available only while the server is running**. Start the server
   first, then use the tools.
 - Port override: `FLAMINGO_PORT`. Autoroute timeout override:
@@ -26,6 +26,9 @@ node packages/server/dist/cli.js serve board.flamingo   # prints "Flamingo v0.1.
 
 1. **Choose parts.** `parts_search` then `parts_get`. Always `parts_get` before
    wiring a part — it lists the real pad numbers you'll reference.
+   `datasheet_get` downloads the part's datasheet PDF (global cache
+   `~/.flamingo/datasheets/`, plus a copy into the board's `datasheets/` dir) —
+   read it before stating any specs.
 2. **Lay out.** `new_board` (2/4/6 layers) → `set_board_outline` (rect with
    `cornerRadius`, polygon, or raw path) → `place_component` / `move_component`.
 3. **Connect.** `connect_pins` (net + `REFDES.PAD` refs) builds nets.
@@ -55,6 +58,11 @@ node packages/server/dist/cli.js serve board.flamingo   # prints "Flamingo v0.1.
 - **DRC ruleset** is chosen by layer count (`jlcpcb-2l/4l/6l`, in
   `packages/engine/src/drc/rules.ts`); the 2-layer copper-clearance floor is
   0.127mm.
+- **Component `value` is the bare value only** (`4.7k`, `100nF`, `SGM3732`) —
+  it becomes the BOM Comment, and JLCPCB flags one LCSC part appearing under
+  different Comments. Per-instance context ("I2C pull-up on SDA", "warm
+  channel") goes in `role`, which never reaches the BOM. Enforced by the
+  `bom-comment-conflict` DRC check.
 
 ## Stock check (part of DRC)
 
