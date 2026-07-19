@@ -246,3 +246,29 @@ brief — the Walter datasheet §7.1 only says "connect via u.FL").
 - Filled DRC 0; export_fab passes with no waiver; fab/ + Super_Pager-fab.zip
   + Super_Pager.step regenerated. The older eink-cell*.step exports predate
   the outline change (stale).
+
+## Battery (added 2026-07-19)
+
+**EEMB LP603048LC 900 mAh protected 1S LiPo** (datasheet
+`EEMB_LP603048LC_900mAh.pdf`): 6.3 × 30.5 × 49 mm max (≈50 incl. PCM/tabs,
+p4), charge max **1C = 900 mA** (p3 §2.7 — the only cell in this footprint
+class rated above 0.5C), discharge 2C = 1.8 A (p3 §2.8), rated to −40 °C
+(p3 §2.9). Capacity alternate if the stack can take 10 mm:
+DNK/YDL **LP103048 1500 mAh** (`DNK103048_1500mAh_PCM.pdf` — 0.5C = 750 mA
+charge, 3C/10 ms pulse). Both ship with JST-PH 2.0 leads → re-terminate to
+JST-SH 1.0 for J2; **JST lead polarity is not standardized — board expects
++ on J2 pin 1, meter before first plug-in.** Protected cell is mandatory
+(no separate protection IC on the board).
+
+- **Placement**: on the component side ("front"), flat bare zone right of the
+  Walter module — F.Silk corner brackets at **x 31.2–61.2, y 55.5–105.5**
+  (30 × 50 bay; cell rides over the ≤1.1 mm parts at the edges: Q1/C15/R1/R2
+  south, R7/R8/C17/C6 north; foam tape). Bounded by the Walter overhang
+  (x 30.4) and side switches (x ~62); J2 plug 2 mm below the bay, J3/U2
+  clear above. Back-side testpoints TP6–9/TP14 under the bay stay probeable.
+- **Charge current retuned for the cell**: R1 PROG 1.2 k → **1.5 k (C22843,
+  Basic)** → 733 mA typ / 843 mA max (TP4056 DS p5: Ibat ≈ 1100/R; ±15 %
+  tolerance would have put the old 917 mA typ over the cell's 900 mA rating).
+  843 mA worst-case also sits at the 103048 alternate's 750 mA limit
+  (+12 %, softened by the TP4056 thermal fold-back), so both cells work
+  without another swap. Same R0603 pads — routing untouched.
