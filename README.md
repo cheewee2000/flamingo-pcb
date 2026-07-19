@@ -74,9 +74,14 @@ prompt → parts → place → connect → route → drc → export
    `add_via` place surgical fixes by hand; `get_ratsnest` / `unroute` help
    iterate.
 6. **drc** — `run_drc` reports violations against the JLCPCB ruleset for the
-   board's layer count.
-7. **export** — `export_fab` runs DRC (fills zones first) and writes the
-   JLCPCB fileset — refusing on any violation unless `waiveDrc` is set.
+   board's layer count, and checks live JLCPCB assembly stock for every placed
+   part: a part with less stock than one board needs is a gating `stock-out`
+   violation; low stock (fewer than 100 boards buildable) and parts missing
+   from the JLC library are non-gating advisories. Set
+   `FLAMINGO_STOCK_CHECK=off` to skip the stock half (e.g. offline).
+7. **export** — `export_fab` runs DRC (fills zones first, including the stock
+   check) and writes the JLCPCB fileset — refusing on any violation unless
+   `waiveDrc` is set.
 
 `screenshot` renders the board to a PNG at any point so Claude can see what it's
 doing.
