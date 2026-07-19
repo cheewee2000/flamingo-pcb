@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import polygonClipping from 'polygon-clipping';
-import { applyOp, newBoard, parseBoard, pointInPolygon, boardBBox } from '../src/index.js';
-import type { Board, Op, PathSeg, Point, Zone } from '../src/index.js';
+import { applyOp, newBoard, parseBoard, pointInPolygon, boardBBox, padOutline, polyGroupDistance, groupFillRings } from '../src/index.js';
+import type { Board, ComponentInst, Op, Pad, PathSeg, Point, Zone } from '../src/index.js';
 import { fillZone, fillAllZones } from '../src/zonefill.js';
 
 const RECT_OUTLINE_10: PathSeg[] = [
@@ -336,6 +336,70 @@ describe('fillAllZones', () => {
     expect(b.zones[0].fill).toBeUndefined();
     expect(filled.zones[0].fill).toBeDefined();
     expect(filled.zones[0].fill!.length).toBeGreaterThan(0);
+  });
+});
+
+describe('degenerate clearance-buffer geometry (regression)', () => {
+  it('never pours over a foreign pad whose clearance buffer degenerates (eink-cell TP7)', () => {
+    // Exact coordinates from the eink-cell board (2026-07-19): a Ø1.5mm
+    // testpoint pad at (62.6, 78.12) with 0.3mm zone clearance produced
+    // float-noise micro-segments that made bufferPolygon's internal union
+    // throw at every snap grid. The old union fallback passed the raw
+    // degenerate geometry downstream, the final difference then threw at
+    // every grid too, and the per-subtrahend fallback skipped the pad's
+    // obstacle entirely -- pouring GND copper straight over the pad (DRC:
+    // clearance 0.00mm against the pad).
+    const outline: PathSeg[] = [
+      { type: 'line', start: { x: 55, y: 70 }, end: { x: 70, y: 70 } },
+      { type: 'line', start: { x: 70, y: 70 }, end: { x: 70, y: 85 } },
+      { type: 'line', start: { x: 70, y: 85 }, end: { x: 55, y: 85 } },
+      { type: 'line', start: { x: 55, y: 85 }, end: { x: 55, y: 70 } },
+    ];
+    let b = newBoard('tp7', 2);
+    b = apply(b, { op: 'setOutline', outline });
+    const pad: Pad = {
+      number: '1',
+      shape: 'circle',
+      at: { x: 0, y: 0 },
+      rotation: 0,
+      size: { w: 1.5, h: 1.5 },
+      layer: 'top',
+    };
+    const tp7: ComponentInst = {
+      refdes: 'TP7',
+      lcsc: 'C0',
+      footprint: { name: 'tp', lcsc: 'C0', pads: [pad], silk: [], courtyard: [] },
+      at: { x: 62.6, y: 78.12 },
+      rotation: 0,
+      side: 'top',
+      fields: {},
+    };
+    b = {
+      ...b,
+      components: [tp7],
+      nets: [
+        { name: 'GND', class: 'default', pins: [] },
+        { name: 'SIG', class: 'default', pins: ['TP7.1'] },
+      ],
+    };
+    const zonePoly: Point[] = [
+      { x: 55, y: 70 },
+      { x: 70, y: 70 },
+      { x: 70, y: 85 },
+      { x: 55, y: 85 },
+    ];
+    const fill = fillZone(b, zoneOf(b, { polygon: zonePoly, clearance: 0.3 }));
+    expect(fill.length).toBeGreaterThan(0);
+    // far corner of the zone still poured
+    expect(inFill(fill, { x: 56.5, y: 71.5 })).toBe(true);
+
+    const padPoly = padOutline(tp7, pad);
+    let d = Infinity;
+    for (const group of groupFillRings(fill)) {
+      d = Math.min(d, polyGroupDistance(padPoly, group));
+    }
+    // 0.02mm tolerance = two snap-grid steps (DRC epsilon is 0.01).
+    expect(d).toBeGreaterThanOrEqual(0.3 - 0.02);
   });
 });
 

@@ -73,10 +73,17 @@ function orient(pts: Point[], ccw: boolean): Point[] {
 }
 
 function disk(center: Point, r: number, segments = 24): Point[] {
+  // Circumscribed tessellation: vertices at r/cos(pi/n) so the polygon
+  // CONTAINS the true circle. An inscribed polygon's edges dip inside the
+  // circle by the sagitta, so a clearance-buffered obstacle under-covers and
+  // the pour can encroach the true clearance distance by a few microns.
+  // Every disk in this file buffers an obstacle or insets the outline, where
+  // over-covering errs toward under-fill -- the safe direction.
+  const R = r / Math.cos(Math.PI / segments);
   const pts: Point[] = [];
   for (let i = 0; i < segments; i++) {
     const a = (2 * Math.PI * i) / segments;
-    pts.push({ x: center.x + r * Math.cos(a), y: center.y + r * Math.sin(a) });
+    pts.push({ x: center.x + R * Math.cos(a), y: center.y + R * Math.sin(a) });
   }
   return pts;
 }
@@ -109,16 +116,49 @@ function edgeCapsules(pts: Point[], delta: number): Polygon[] {
 }
 
 /**
- * Snap every coordinate of a MultiPolygon to a grid. Applied to every clip
- * input up front to keep polygon-clipping's sweepline off its degenerate
- * near-coincident-vertex paths (see robustClip).
+ * Snap every coordinate of a MultiPolygon to a grid, then drop the
+ * degeneracies snapping creates: consecutive duplicate vertices (distinct
+ * raw vertices that landed on the same grid point become zero-length
+ * segments, a documented sweepline killer) and rings left with fewer than 3
+ * distinct vertices. A polygon whose OUTER ring collapses is dropped whole
+ * (holes without an outer are meaningless); a collapsed hole is dropped
+ * alone. Applied to every clip input up front to keep polygon-clipping's
+ * sweepline off its degenerate near-coincident-vertex paths (see robustClip).
  */
 function snapMulti(m: MultiPolygon, grid: number): MultiPolygon {
   const s = (n: number): number => {
     const v = Math.round(n / grid) * grid;
     return v === 0 ? 0 : v; // fold -0 (from rounding tiny negatives) to +0
   };
-  return m.map((poly) => poly.map((ring) => ring.map(([x, y]): Pair => [s(x), s(y)])));
+  const out: MultiPolygon = [];
+  for (const poly of m) {
+    const rings: Ring[] = [];
+    let outerCollapsed = false;
+    for (let ri = 0; ri < poly.length; ri++) {
+      const snapped: Pair[] = [];
+      for (const [x, y] of poly[ri]) {
+        const p: Pair = [s(x), s(y)];
+        const prev = snapped[snapped.length - 1];
+        if (prev && prev[0] === p[0] && prev[1] === p[1]) continue;
+        snapped.push(p);
+      }
+      // Rings can arrive closed (clip outputs) -- drop a closing duplicate.
+      while (
+        snapped.length > 1 &&
+        snapped[0][0] === snapped[snapped.length - 1][0] &&
+        snapped[0][1] === snapped[snapped.length - 1][1]
+      ) {
+        snapped.pop();
+      }
+      if (snapped.length < 3) {
+        if (ri === 0) outerCollapsed = true;
+        continue;
+      }
+      rings.push(snapped);
+    }
+    if (!outerCollapsed && rings.length > 0) out.push(rings);
+  }
+  return out;
 }
 
 type ClipOp = 'difference' | 'union' | 'intersection';
@@ -153,17 +193,21 @@ function runClip(op: ClipOp, geoms: MultiPolygon[]): MultiPolygon {
  * If every attempt still throws, we degrade rather than propagate the
  * exception (which would abort the whole fill and block fab export) -- each
  * op has a documented, safe last resort:
- *   - difference: return `geoms[0]` (the base) unobstructed. Safe because
- *     this doesn't reach fabrication silently: export_fab's filled-board DRC
- *     clearance check (runDRC over the fillAllZones output) catches an
- *     unobstructed fill overlapping other-net copper as a clearance
- *     violation and refuses the export, so the failure surfaces loudly
- *     instead of producing a bad board.
+ *   - difference: subtract the subtrahends one at a time; one that still
+ *     throws at every grid is replaced by its bounding box (over-carve: the
+ *     pour backs off, never encroaches), and only if even the bbox subtract
+ *     throws is it skipped -- at which point export_fab's filled-board DRC
+ *     catches the unobstructed fill as a clearance violation and refuses
+ *     the export, so the failure surfaces loudly instead of producing a bad
+ *     board.
  *   - union: return the inputs concatenated as separate polygons of one
- *     MultiPolygon, unclipped. Every call site here only uses a union result
- *     as an obstacle (to subtract) or an outline band (to test), never as a
- *     shape whose own area matters, so leaving overlaps un-merged is
- *     geometrically valid for those consumers.
+ *     MultiPolygon, SNAPPED (raw operands carry the float-noise
+ *     micro-segments that made the union throw, and would make every later
+ *     clip involving them throw too -- observed: an unclippable pad
+ *     obstacle whose skip poured GND copper over the pad). Overlapping
+ *     members are fine for the consumers here: polygon-clipping treats an
+ *     overlapping subtrahend multipolygon with union semantics, and the
+ *     outline-band consumer only tests against it.
  *   - intersection: return `geoms[0]` (the first operand), i.e. the larger,
  *     unconstrained area. Conservative in the same direction as the
  *     difference fallback -- downstream DRC still gates the result.
@@ -175,35 +219,90 @@ function robustClip(op: ClipOp, ...geoms: MultiPolygon[]): MultiPolygon {
         op,
         geoms.map((g) => snapMulti(g, grid)),
       );
-    } catch {
+    } catch (e) {
+      if (process.env.FLAMINGO_CLIP_DEBUG)
+        console.error(`[clipdebug] ${op} threw at grid ${grid}: ${(e as Error).message} (operands: ${geoms.length})`);
       // escalate to the coarser grid
     }
   }
+  if (process.env.FLAMINGO_CLIP_DEBUG)
+    console.error(`[clipdebug] ${op} FALLBACK reached (operands: ${geoms.length})`);
   switch (op) {
     case 'difference': {
       // A single degenerate operand (e.g. two buffered obstacles exactly
       // tangent) throws on every grid; returning geoms[0] wholesale would
       // silently yield an UNCARVED pour. Subtract subtrahends one at a
-      // time instead, skipping only the ones that still throw — the damage
-      // stays local to the bad obstacle and DRC keeps gating the result.
+      // time instead. A subtrahend that STILL throws at every grid is
+      // replaced by its bounding box: over-carving is the safe direction
+      // for an obstacle (the pour backs off), whereas skipping it pours
+      // copper straight over the obstacle -- observed on a real board as
+      // GND fill covering a testpoint pad (DRC clearance 0.00mm).
       let acc = geoms[0];
+      let idx = 0;
       for (const g of geoms.slice(1)) {
+        idx++;
+        let done = false;
         for (const grid of [0.01, 0.02]) {
           try {
             acc = runClip('difference', [snapMulti(acc, grid), snapMulti(g, grid)]);
+            done = true;
             break;
           } catch {
-            // escalate, then skip this subtrahend
+            // escalate, then substitute the bbox
           }
+        }
+        if (!done) {
+          if (process.env.FLAMINGO_CLIP_DEBUG)
+            console.error(`[clipdebug] difference subtrahend #${idx} unclippable; substituting its bbox`);
+          const bb = multiBBox(g);
+          if (bb) {
+            try {
+              acc = runClip('difference', [snapMulti(acc, 0.02), snapMulti([bb], 0.02)]);
+              done = true;
+            } catch {
+              // truly stuck: skip this subtrahend, DRC still gates the result
+            }
+          }
+          if (!done && process.env.FLAMINGO_CLIP_DEBUG)
+            console.error(`[clipdebug] difference SKIPPED subtrahend #${idx}: ${JSON.stringify(g)}`);
         }
       }
       return acc;
     }
     case 'union':
-      return geoms.flat();
+      // Concatenated-not-merged is fine for the obstacle/band consumers here,
+      // but concatenate the SNAPPED inputs: the raw operands carry the very
+      // float-noise micro-segments that made the union throw, and passing
+      // them downstream makes every later clip involving them throw too.
+      return geoms.flatMap((g) => snapMulti(g, 0.01));
     case 'intersection':
       return geoms[0];
   }
+}
+
+/** Axis-aligned bounding box of a MultiPolygon as a single rectangle polygon. */
+function multiBBox(m: MultiPolygon): Polygon | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const poly of m)
+    for (const ring of poly)
+      for (const [x, y] of ring) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+  if (minX > maxX || minY > maxY) return null;
+  return [
+    [
+      [minX, minY],
+      [maxX, minY],
+      [maxX, maxY],
+      [minX, maxY],
+    ],
+  ];
 }
 
 /** Dilate a polygon outward by `delta` (round joins). Returns a MultiPolygon. */
