@@ -48,6 +48,7 @@ export interface PanelEls {
   exportFabBtn: HTMLButtonElement;
   exportFabStatus: HTMLElement;
   exportStepBtn: HTMLButtonElement;
+  exportStepDetailBtn: HTMLButtonElement;
   exportStepBar: HTMLElement;
   exportStepFill: HTMLElement;
   exportStepError: HTMLElement;
@@ -1440,14 +1441,13 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
   // ---------------------------------------------------------------------------
 
   function wireExportStepControls(): void {
-    const btn = els.exportStepBtn;
     const bar = els.exportStepBar;
     const fill = els.exportStepFill;
     let busy = false;
 
-    async function run(): Promise<void> {
+    async function run(mode: 'blocks' | 'detail'): Promise<void> {
       try {
-        const res = await fetch('/api/export.step');
+        const res = await fetch(mode === 'detail' ? '/api/export.step?mode=detail' : '/api/export.step');
         if (!res.ok) {
           const body = await res.json().catch(() => ({}) as { error?: string });
           throw new Error(body.error ?? res.statusText);
@@ -1476,21 +1476,28 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
         els.exportStepError.textContent = `STEP failed: ${err instanceof Error ? err.message : String(err)}`;
       } finally {
         busy = false;
-        btn.disabled = false;
+        els.exportStepBtn.disabled = false;
+        els.exportStepDetailBtn.disabled = false;
         bar.classList.remove('busy', 'sweep');
         fill.style.width = '';
       }
     }
 
-    btn.addEventListener('click', () => {
-      if (busy) return;
-      busy = true;
-      btn.disabled = true;
-      els.exportStepError.textContent = '';
-      fill.style.width = '';
-      bar.classList.add('busy', 'sweep');
-      void run();
-    });
+    for (const [btn, mode] of [
+      [els.exportStepBtn, 'blocks'],
+      [els.exportStepDetailBtn, 'detail'],
+    ] as const) {
+      btn.addEventListener('click', () => {
+        if (busy) return;
+        busy = true;
+        els.exportStepBtn.disabled = true;
+        els.exportStepDetailBtn.disabled = true;
+        els.exportStepError.textContent = '';
+        fill.style.width = '';
+        bar.classList.add('busy', 'sweep');
+        void run(mode);
+      });
+    }
   }
 
   function onStateChange(state: AppState): void {

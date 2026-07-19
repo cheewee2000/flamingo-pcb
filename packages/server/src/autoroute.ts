@@ -9,7 +9,7 @@
  */
 
 import type { Board, OpError } from '@flamingo/engine';
-import { isFullyRouted, RULESETS } from '@flamingo/engine';
+import { isFullyRouted, planZoneStitching, RULESETS } from '@flamingo/engine';
 import { exportDSN, importSES } from '@flamingo/fab';
 import type { Doc } from './document.js';
 import type { RouteRunner } from './route.js';
@@ -32,6 +32,10 @@ export interface AutorouteResult {
   retriedThin: string[];
   /** Tracks fattened back toward class width by the post-route widen pass. */
   widened: number;
+  /** Stitching vias added to reconnect orphaned pour islands (step 8). */
+  stitchedVias: number;
+  /** Orphan islands (≥2mm²) no safe stitching spot could reconnect. */
+  unstitchedIslands: { layer: string; net: string; area: number; at: { x: number; y: number } }[];
 }
 
 /**
@@ -124,6 +128,16 @@ export async function runAutoroute(
   // pieces-added minus count-delta = number of original tracks fattened.
   const widened = widenRes.createdIds.length - (doc.board.tracks.length - beforeWiden);
 
+  // 8. Zone stitching: routing carves the pours into islands, and any island
+  // with no same-net pad/via/track contact is dead copper. Reconnect each
+  // orphan through the opposite layer's connected pour with a stitching via.
+  const stitchPlan = planZoneStitching(doc.board);
+  if (stitchPlan.vias.length > 0) {
+    const stitchRes = doc.apply({ op: 'addTracks', tracks: [], vias: stitchPlan.vias });
+    if (!stitchRes.ok) throw new Error((stitchRes as OpError).error);
+    viasAdded += stitchPlan.vias.length;
+  }
+
   const routedCount = netList
     ? netList.length
     : doc.board.nets.filter((n) => n.pins.length >= 2).length;
@@ -135,6 +149,8 @@ export async function runAutoroute(
     remaining,
     retriedThin,
     widened,
+    stitchedVias: stitchPlan.vias.length,
+    unstitchedIslands: stitchPlan.unfixed,
   };
 }
 
@@ -150,6 +166,12 @@ export function formatAutorouteSummary(result: AutorouteResult): string {
   }
   if (result.widened > 0) {
     extras.push(`widened ${result.widened} track(s) back toward class width`);
+  }
+  if (result.stitchedVias > 0) {
+    extras.push(`stitched ${result.stitchedVias} orphaned pour island(s) with vias`);
+  }
+  if (result.unstitchedIslands.length > 0) {
+    extras.push(`${result.unstitchedIslands.length} pour island(s) unreachable by stitching (dead copper)`);
   }
   const extraStr = extras.length > 0 ? ` (${extras.join('; ')})` : '';
   return `Routed ${result.routedCount} net(s): ${result.tracksAdded} tracks, ${result.viasAdded} vias added. ${remainingStr}${extraStr}`;

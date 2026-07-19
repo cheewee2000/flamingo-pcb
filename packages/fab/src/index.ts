@@ -12,3 +12,4 @@ export { generateBOM } from './bom.js';
 export { generateCPL } from './cpl.js';
 export type { ExportFabResult } from './exportFab.js';
 export { exportFab } from './exportFab.js';
+export { strokeText } from './strokefont.js';
