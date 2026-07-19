@@ -10,7 +10,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { Board, Op, RenderOpts } from '@flamingo/engine';
 import { fillAllZones, parseBoard, planZoneStitching, ratsnest, renderSVG, runDRC, splitLabelLayers } from '@flamingo/engine';
-import { exportFab } from '@flamingo/fab';
+import { exportFab, generateBOM, generateCPL, generateGerbers } from '@flamingo/fab';
 import type { Model3d } from '@flamingo/parts';
 import { extractModel3d, fetchPart, readCache, searchParts } from '@flamingo/parts';
 import { runAutoroute } from './autoroute.js';
@@ -258,8 +258,14 @@ async function collectDetailModels(board: Board): Promise<Map<string, MeshGroup[
   return out;
 }
 
-/** Zip the four fab files in `dir` into `res` (attachment already headered). Resolves once fully flushed. */
-function streamFabZip(dir: string, res: ServerResponse): Promise<void> {
+/**
+ * Stream the fab fileset as one zip with the Gerber/drill files at TOP level
+ * (plus bom.csv / cpl.csv / board.render.svg alongside). JLCPCB's uploader
+ * ignores non-Gerber extras but can NOT see inside a nested zip — the old
+ * bundle-around-gerbers.zip shape read as "no layers found" when uploaded
+ * as-is. Resolves once fully flushed.
+ */
+function streamFabZip(files: Map<string, string>, res: ServerResponse): Promise<void> {
   return new Promise((resolveP, reject) => {
     const archive = new ZipArchive({ zlib: { level: 9 } });
     let done = false;
@@ -271,13 +277,11 @@ function streamFabZip(dir: string, res: ServerResponse): Promise<void> {
     };
     archive.on('error', reject);
     // 'finish' fires once the response is fully flushed; 'close' covers a client
-    // that aborts mid-download. Either way the temp dir is safe to remove.
+    // that aborts mid-download.
     res.on('finish', finish);
     res.on('close', finish);
     archive.pipe(res);
-    for (const name of ['gerbers.zip', 'bom.csv', 'cpl.csv', 'board.render.svg']) {
-      archive.file(join(dir, name), { name });
-    }
+    for (const [name, content] of files) archive.append(content, { name });
     void archive.finalize();
   });
 }
@@ -598,24 +602,25 @@ async function handleApi(
       });
       return true;
     }
-    let tmpDir: string | null = null;
     try {
-      tmpDir = await mkdtemp(join(tmpdir(), 'flamingo-fab-'));
-      await exportFab(doc.board, tmpDir);
+      // Gerbers from the already-filled board, top-level in the zip so the
+      // download is directly uploadable to JLCPCB; bom/cpl/svg ride along.
+      const files = new Map<string, string>(generateGerbers(filled).files);
+      files.set('bom.csv', generateBOM(doc.board));
+      files.set('cpl.csv', generateCPL(doc.board));
+      files.set('board.render.svg', renderSVG(filled));
       const fileName = `${doc.board.name.replace(/[^\w.-]+/g, '_') || 'board'}-fab.zip`;
       res.writeHead(200, {
         'content-type': 'application/zip',
         'content-disposition': `attachment; filename="${fileName}"`,
       });
-      await streamFabZip(tmpDir, res);
+      await streamFabZip(files, res);
     } catch (err) {
       if (!res.headersSent) {
         sendJSON(res, 500, { ok: false, error: err instanceof Error ? err.message : String(err) });
       } else {
         res.end();
       }
-    } finally {
-      if (tmpDir) await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
     }
     return true;
   }
