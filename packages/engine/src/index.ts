@@ -93,6 +93,8 @@ export {
 
 // Re-export zone fill
 export { fillZone, fillAllZones, bufferPolygon } from './zonefill.js';
+export type { StitchOptions, StitchPlan } from './stitch.js';
+export { planZoneStitching } from './stitch.js';
 
 // Re-export DRC
 export type { RuleSet } from './drc/rules.js';
