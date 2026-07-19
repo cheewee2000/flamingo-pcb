@@ -44175,7 +44175,7 @@
       "layer": "F.Silk",
       "at": {
         "x": 36,
-        "y": 90.6
+        "y": 91.1
       },
       "text": "PWR VIA VIN — NEVER USB-C + VIN TOGETHER",
       "height": 1,
@@ -44284,8 +44284,8 @@
       "id": "8899c1b3-467f-4989-a829-3a561e4d892b",
       "layer": "F.Silk",
       "at": {
-        "x": 34.5,
-        "y": 42.9
+        "x": 33,
+        "y": 42.3
       },
       "text": "FL-C",
       "height": 0.9,
