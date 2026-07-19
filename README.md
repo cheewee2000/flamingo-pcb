@@ -1,3 +1,5 @@
+<img width="1732" height="1235" alt="Screenshot 2026-07-19 at 10 11 36 AM" src="https://github.com/user-attachments/assets/420a00d3-6ce6-4431-87b0-71b8e9271e6e" />
+<img width="1776" height="1279" alt="Screenshot 2026-07-19 at 10 11 28 AM" src="https://github.com/user-attachments/assets/cc5a99a7-e894-490a-975a-5c25e4dcca2d" />
 # Flamingo
 
 ![version](https://img.shields.io/badge/version-0.1.0-ff5a8c)
