@@ -131,4 +131,3 @@ tracespace-validates every Gerber.
 
 ## License
 
-None yet — this is a private, unpublished project.
