@@ -10,6 +10,7 @@
 
 import type { Board, LayerId, Point, RatLine } from '@flamingo/engine';
 import type { EditTarget } from './hit-test.js';
+import type { RouteStatus } from './ws.js';
 
 /** Pan/zoom/flip transform between world mm (y-up) and canvas px (y-down). */
 export interface ViewTransform {
@@ -52,6 +53,8 @@ export interface ToolOptions {
   holePlated: boolean;
   /** Fallback net for the via tool when the cursor isn't over any copper. */
   viaNet: string;
+  /** Active copper layer for the track tool (re-synced to a valid layer per board, see panels.ts). */
+  trackLayer: LayerId;
 }
 
 export interface AppState {
@@ -91,6 +94,8 @@ export interface AppState {
   toolOptions: ToolOptions;
   /** Live ruler readout from the measure tool, or null when not measuring. */
   measureMm: number | null;
+  /** Latest autoroute status broadcast from the server, or null when no route is/has been running this session. */
+  routeStatus: RouteStatus | null;
 }
 
 export const MIN_SCALE = 0.5;
@@ -132,8 +137,10 @@ function initialState(): AppState {
       holeDrillMm: 2.2,
       holePlated: false,
       viaNet: '',
+      trackLayer: 'F.Cu',
     },
     measureMm: null,
+    routeStatus: null,
   };
 }
 

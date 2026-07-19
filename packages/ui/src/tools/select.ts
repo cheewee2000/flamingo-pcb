@@ -32,6 +32,7 @@ import { bboxOf, componentTransformPoints, dist, holeSlotCenterline, padOutline 
 import { hitEditTarget, hitEditTargets, hitTest, sameEditTarget } from '../hit-test.js';
 import type { PointerEvt, Tool, ToolCtx } from './tool.js';
 import { fillOverlayPolygon, strokeOverlayPolygon } from './overlay-utils.js';
+import { silkTextParams } from '../renderer.js';
 import { worldToScreen } from '../view.js';
 import type { ViewTransform } from '../state.js';
 
@@ -71,18 +72,18 @@ function componentWorldBBox(c: ComponentInst): { minX: number; minY: number; max
 }
 
 /**
- * Ghost of a silk text at its dragged position. Same rotation math as
- * renderer.ts's drawRotatedText (not exported there, and this task can't
- * touch renderer.ts): measure the on-screen direction of the world rotation
- * by transforming two points, so the text reads correctly under view flip.
+ * Ghost of a silk text at its dragged position. Shares renderer.ts's
+ * `silkTextParams` so the preview mirrors exactly like the committed label
+ * under the current view flip / silk side (back silk reads mirrored in front
+ * view and vice versa).
  */
 function drawSilkGhost(ctx: CanvasRenderingContext2D, view: ViewTransform, s: SilkText, at: Point): void {
-  const rad = (s.rotation * Math.PI) / 180;
+  const { angleRad, mirror } = silkTextParams(view.flipped, s.layer === 'B.Silk', s.rotation);
   const p = worldToScreen(view, at);
-  const pd = worldToScreen(view, { x: at.x + Math.cos(rad), y: at.y + Math.sin(rad) });
   ctx.save();
   ctx.translate(p.x, p.y);
-  ctx.rotate(Math.atan2(pd.y - p.y, pd.x - p.x));
+  ctx.rotate(angleRad);
+  if (mirror) ctx.scale(-1, 1);
   ctx.globalAlpha = 0.75;
   ctx.fillStyle = SELECT_COLOR;
   ctx.font = `${Math.max(s.height * view.scale, 6)}px ${GHOST_FONT}`;

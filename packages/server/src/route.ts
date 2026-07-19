@@ -29,6 +29,83 @@ export interface RunFreeroutingOptions {
   java?: string;
   /** Override the timeout in ms. */
   timeoutMs?: number;
+  /** Live progress parsed from freerouting's stdout (started / per-pass / session-done). */
+  onProgress?: (ev: RouteProgress) => void;
+}
+
+// ---------------------------------------------------------------------------
+// Live progress parsing
+//
+// Freerouting emits INFO lines to stdout during routing. We line-buffer the
+// stdout stream (chunks split lines) and pull structured events out of the
+// recognised lines. Regexes stay tolerant -- they match on the salient
+// keywords/numbers, NOT the "[SESSION\JOB]" id prefix, whose format varies.
+// Sample lines:
+//   [F9645E\C0D71A] Starting routing of 'blinker' on 15 threads...
+//   [..] Auto-router pass #1 on board '…' was completed in 0.27 seconds with the score of 942.92 (4 unrouted).
+//   [..] Auto-router session completed: started with 25 unrouted nets, completed in 0.38 seconds, final score: 958.44 (3 unrouted).
+// ---------------------------------------------------------------------------
+
+export type RouteProgress =
+  | { kind: 'started'; threads?: number }
+  | { kind: 'pass'; pass: number; score?: number; unrouted?: number }
+  | { kind: 'session-done'; score?: number; unrouted?: number };
+
+/** Parse a single freerouting stdout line into a progress event, or null if it isn't one we track. */
+export function parseRouteLine(line: string): RouteProgress | null {
+  const score = (): number | undefined => {
+    const m = /(?:score of|final score:)\s*([0-9]+(?:\.[0-9]+)?)/i.exec(line);
+    return m ? Number(m[1]) : undefined;
+  };
+  const unrouted = (): number | undefined => {
+    const m = /\(\s*([0-9]+)\s*unrouted/i.exec(line);
+    return m ? Number(m[1]) : undefined;
+  };
+
+  if (/session\s+completed/i.test(line)) {
+    return { kind: 'session-done', score: score(), unrouted: unrouted() };
+  }
+  const pass = /auto-?router\s+pass\s*#?\s*([0-9]+)/i.exec(line);
+  if (pass) {
+    return { kind: 'pass', pass: Number(pass[1]), score: score(), unrouted: unrouted() };
+  }
+  if (/starting\s+routing/i.test(line)) {
+    const t = /on\s+([0-9]+)\s+threads?/i.exec(line);
+    return t ? { kind: 'started', threads: Number(t[1]) } : { kind: 'started' };
+  }
+  return null;
+}
+
+/**
+ * Line-buffering wrapper over `parseRouteLine`: feed it raw stdout chunks (which
+ * can split a line across two chunks) via `push`, and `flush` any trailing
+ * partial line when the stream ends. Emits a progress event per recognised line.
+ */
+export function createRouteProgressParser(onProgress: (ev: RouteProgress) => void): {
+  push(chunk: string): void;
+  flush(): void;
+} {
+  let buf = '';
+  const handle = (line: string): void => {
+    const ev = parseRouteLine(line);
+    if (ev) onProgress(ev);
+  };
+  return {
+    push(chunk: string): void {
+      buf += chunk;
+      let idx: number;
+      while ((idx = buf.indexOf('\n')) >= 0) {
+        handle(buf.slice(0, idx).replace(/\r$/, ''));
+        buf = buf.slice(idx + 1);
+      }
+    },
+    flush(): void {
+      if (buf.length > 0) {
+        handle(buf.replace(/\r$/, ''));
+        buf = '';
+      }
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +165,12 @@ const JAVA_INSTALL_HINT =
  * traces / removes vias), which is all we need. `profile.id` must be a real
  * UUID and the profile block must be present, or freerouting NPEs on a null
  * userId. Analytics is also disabled via env var as belt-and-suspenders.
+ *
+ * Caveat: `gui.enabled: false` here is aspirational — 2.2.4 resets it to true
+ * on load whenever a display is available, so the real GUI suppression is the
+ * `-Djava.awt.headless=true` JVM flag passed in `runFreerouting` (see the
+ * comment there). The optimizer/analytics settings in this file DO merge and
+ * take effect.
  */
 const FREEROUTING_CONFIG = {
   profile: { id: '00000000-0000-4000-8000-000000000000', email: '', allow_telemetry: false, allow_contact: false },
@@ -235,7 +318,15 @@ export async function runFreerouting(
     await writeFile(inPath, dsn, 'utf8');
     const env = await writeFreeroutingConfig(dir);
 
-    const args = ['-jar', jar, '-de', inPath, '-do', outPath, '-mp', String(passes)];
+    // -Djava.awt.headless=true is load-bearing: freerouting 2.2.4 ignores the
+    // config's `gui.enabled: false` whenever a display is available (it resets
+    // it to true on load), pops a real window plus a modal "start routing (5…)"
+    // countdown dialog, and routes via the GUI path — costing ~5s per run and
+    // stealing focus. With AWT headless the GUI init fails cleanly and
+    // freerouting falls back to its true CLI scheduler, starting the route
+    // ~1s after launch (verified against v2.2.4 with thread dumps).
+    const args = ['-Djava.awt.headless=true', '-jar', jar, '-de', inPath, '-do', outPath, '-mp', String(passes)];
+    const progress = opts.onProgress ? createRouteProgressParser(opts.onProgress) : null;
     const ses = await new Promise<string>((resolve, reject) => {
       const child = spawn(java, args, { stdio: ['ignore', 'pipe', 'pipe'], env });
       let stdout = '';
@@ -247,7 +338,9 @@ export async function runFreerouting(
       }, timeoutMs);
 
       child.stdout.on('data', (d: Buffer) => {
-        stdout += d.toString('utf8');
+        const s = d.toString('utf8');
+        stdout += s;
+        progress?.push(s);
       });
       child.stderr.on('data', (d: Buffer) => {
         stderr += d.toString('utf8');
@@ -258,6 +351,7 @@ export async function runFreerouting(
       });
       child.on('close', (code) => {
         clearTimeout(timer);
+        progress?.flush();
         if (timedOut) {
           reject(new Error(`freerouting timed out after ${timeoutMs}ms`));
           return;
@@ -287,7 +381,7 @@ export async function runFreerouting(
 }
 
 export interface RouteRunner {
-  run(dsn: string, opts?: { passes?: number }): Promise<string>;
+  run(dsn: string, opts?: { passes?: number; onProgress?: (ev: RouteProgress) => void }): Promise<string>;
 }
 
 /** The production runner: locate java + jar and run freerouting for real. */

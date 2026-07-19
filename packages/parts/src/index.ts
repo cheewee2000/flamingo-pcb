@@ -4,3 +4,16 @@ export { fetchPart } from './fetch.js';
 export { searchParts, type SearchOpts } from './search.js';
 export { cacheDir, readCache, writeCache } from './cache.js';
 export { fetchJlcStock, clearStockCache, type JlcStock, type FetchStockOpts } from './stock.js';
+export {
+  getDatasheet,
+  datasheetsCacheDir,
+  isPdf,
+  extractDatasheetUrl,
+  sanitizeMpn,
+  type DatasheetDeps,
+  type DatasheetOutcome,
+  type DatasheetOk,
+  type DatasheetFail,
+  type GetDatasheetOpts,
+  type HttpResult,
+} from './datasheet.js';

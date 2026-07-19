@@ -12,13 +12,41 @@ import type { Board, OpError } from '@flamingo/engine';
 import { isFullyRouted, planZoneStitching, RULESETS } from '@flamingo/engine';
 import { exportDSN, importSES } from '@flamingo/fab';
 import type { Doc } from './document.js';
-import type { RouteRunner } from './route.js';
+import type { RouteProgress, RouteRunner } from './route.js';
+
+/**
+ * Which freerouting invocation a progress event came from. `runAutoroute` calls
+ * the router up to twice: `route` is the initial full-width pass; `retry` is the
+ * escape-width re-route of the nets that stayed split after the first pass (the
+ * widen/stitch steps in between don't call the router).
+ */
+export type RouteStage = 'route' | 'retry';
+
+/** Broadcastable route status (one `running` per progress event, one terminal `done`/`failed`). */
+export interface RouteStatus {
+  state: 'running' | 'done' | 'failed';
+  stage?: RouteStage;
+  pass?: number;
+  unrouted?: number;
+  score?: number;
+  message?: string;
+}
 
 export interface AutorouteOptions {
   /** Route only these nets (existing routes on other nets stay as obstacles). Omit to route the whole board. */
   nets?: string[];
   /** Max autorouter passes (Freerouting default is used when omitted). */
   passes?: number;
+  /** Live progress from freerouting, tagged with which run (route / retry) produced it. */
+  onProgress?: (stage: RouteStage, ev: RouteProgress) => void;
+}
+
+/** Build the per-run RouteRunner options, forwarding progress tagged with `stage`. */
+function runOpts(opts: AutorouteOptions, stage: RouteStage): { passes?: number; onProgress?: (ev: RouteProgress) => void } | undefined {
+  const out: { passes?: number; onProgress?: (ev: RouteProgress) => void } = {};
+  if (opts.passes !== undefined) out.passes = opts.passes;
+  if (opts.onProgress) out.onProgress = (ev) => opts.onProgress!(stage, ev);
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 export interface AutorouteResult {
@@ -64,7 +92,7 @@ export async function runAutoroute(
   // 2. Export DSN, 3. run freerouting, 4. import SES.
   const board: Board = doc.board;
   const dsn = exportDSN(board, netList ? { nets: netList } : {});
-  const ses = await route.run(dsn, opts.passes !== undefined ? { passes: opts.passes } : undefined);
+  const ses = await route.run(dsn, runOpts(opts, 'route'));
   const { tracks, vias } = importSES(ses, board);
 
   // 5. Apply the routed geometry.
@@ -108,7 +136,7 @@ export async function runAutoroute(
       shadow.tracks = shadow.tracks.filter((t) => !thinNets.includes(t.net));
       shadow.vias = shadow.vias.filter((v) => !thinNets.includes(v.net));
       const dsn2 = exportDSN(shadow, { nets: thinNets });
-      const ses2 = await route.run(dsn2, opts.passes !== undefined ? { passes: opts.passes } : undefined);
+      const ses2 = await route.run(dsn2, runOpts(opts, 'retry'));
       const imported = importSES(ses2, doc.board);
       const applyRes2 = doc.apply({ op: 'addTracks', tracks: imported.tracks, vias: imported.vias });
       if (!applyRes2.ok) throw new Error((applyRes2 as OpError).error);
@@ -152,6 +180,43 @@ export async function runAutoroute(
     stitchedVias: stitchPlan.vias.length,
     unstitchedIslands: stitchPlan.unfixed,
   };
+}
+
+/** Map a freerouting progress event to a `running` status (terminal states come from the wrapper). */
+function progressToStatus(stage: RouteStage, ev: RouteProgress): RouteStatus {
+  const s: RouteStatus = { state: 'running', stage };
+  if (ev.kind === 'pass') s.pass = ev.pass;
+  if ('unrouted' in ev && ev.unrouted !== undefined) s.unrouted = ev.unrouted;
+  if ('score' in ev && ev.score !== undefined) s.score = ev.score;
+  return s;
+}
+
+/**
+ * Run the autoroute pipeline and push RouteStatus updates to `broadcast`: an
+ * immediate `running`, one `running` per freerouting progress event, then a
+ * single terminal `done` (with the summary) or `failed` (with the error). Used
+ * by both the HTTP /api/route path and the MCP autoroute tool so every WS
+ * client sees the same live progress regardless of who started the route. The
+ * pipeline itself (and its errors) are unchanged -- failures still throw.
+ */
+export async function runAutorouteBroadcast(
+  doc: Doc,
+  route: RouteRunner,
+  opts: AutorouteOptions,
+  broadcast: (status: RouteStatus) => void,
+): Promise<AutorouteResult> {
+  broadcast({ state: 'running', message: 'Starting autoroute…' });
+  try {
+    const result = await runAutoroute(doc, route, {
+      ...opts,
+      onProgress: (stage, ev) => broadcast(progressToStatus(stage, ev)),
+    });
+    broadcast({ state: 'done', unrouted: result.remaining.length, message: formatAutorouteSummary(result) });
+    return result;
+  } catch (err) {
+    broadcast({ state: 'failed', message: err instanceof Error ? err.message : String(err) });
+    throw err;
+  }
 }
 
 /** The one-line human summary the MCP autoroute tool reports. */

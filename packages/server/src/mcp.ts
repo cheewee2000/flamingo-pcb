@@ -35,10 +35,11 @@ import {
   runDRC,
 } from '@flamingo/engine';
 import { exportFab } from '@flamingo/fab';
+import { getDatasheet } from '@flamingo/parts';
 import type { JlcStock, PartInfo, SearchOpts } from '@flamingo/parts';
 import type { Doc } from './document.js';
 import type { RouteRunner } from './route.js';
-import { formatAutorouteSummary, runAutoroute } from './autoroute.js';
+import { formatAutorouteSummary, runAutorouteBroadcast } from './autoroute.js';
 import { pngDimensions, renderPNG } from './screenshot.js';
 import { checkStock, stockCheckEnabled } from './stock.js';
 import { exportStep } from './step.js';
@@ -467,6 +468,7 @@ export function createMcpServer(ctx: McpContext): McpServer {
       lines.push(
         `${info.lcsc} | ${info.mpn} | ${info.mfr} | ${info.package} | ${info.basic ? 'Basic' : 'Extended'}${info.description ? ` | ${info.description}` : ''}`,
       );
+      if (info.datasheet) lines.push(`Datasheet: ${info.datasheet} (fetch the PDF with datasheet_get)`);
       lines.push(`Footprint: ${footprint.name} (${footprint.pads.length} pad(s))`);
       for (const pad of footprint.pads) {
         const drill = pad.drill ? `, drill ${fmt(pad.drill.diameter)}mm${pad.drill.plated ? '' : ' (unplated)'}` : '';
@@ -474,6 +476,36 @@ export function createMcpServer(ctx: McpContext): McpServer {
           `  pad ${pad.number}: ${pad.shape} at (${fmt(pad.at.x)}, ${fmt(pad.at.y)}) size ${fmt(pad.size.w)}x${fmt(pad.size.h)}mm, ${pad.layer}${drill}`,
         );
       }
+      return textResult(lines.join('\n'));
+    },
+  );
+
+  server.registerTool(
+    'datasheet_get',
+    {
+      description:
+        "Fetch the datasheet PDF for an LCSC part. Resolves the part's datasheet link (usually an LCSC product page) to the actual PDF, validates it, and caches it under ~/.flamingo/datasheets/. When a board file is open, also copies it to <board dir>/datasheets/<MPN>-<LCSC>.pdf.",
+      inputSchema: {
+        lcsc: z.string().describe('LCSC part number, e.g. "C21190"'),
+        refresh: z.boolean().optional().describe('Re-fetch even if a cached PDF exists (default false)'),
+      },
+    },
+    async ({ lcsc, refresh }) => {
+      const boardDir = ctx.doc.filePath ? dirname(ctx.doc.filePath) : undefined;
+      const result = await getDatasheet(lcsc, {
+        ...(refresh !== undefined ? { refresh } : {}),
+        ...(boardDir ? { boardDir } : {}),
+      });
+      if (!result.ok) return errorResult(result.error);
+      const kb = (result.bytes / 1024).toFixed(1);
+      const lines = [
+        `Datasheet for ${result.lcsc}${result.mpn ? ` (${result.mpn})` : ''} — ${kb} KB${result.fromCache ? ' (from cache)' : ''}`,
+        `Saved to: ${result.path}`,
+      ];
+      if (result.projectPath) {
+        lines.push(`Cache copy: ${result.cachePath}`);
+      }
+      lines.push(`Source: ${result.sourceUrl}`);
       return textResult(lines.join('\n'));
     },
   );
@@ -490,11 +522,16 @@ export function createMcpServer(ctx: McpContext): McpServer {
         y: z.number().optional().describe('Y position in mm. Omit to auto-place.'),
         rotation: z.number().optional().describe('Rotation in degrees CCW (default 0)'),
         side: sideSchema.optional().describe('Board side (default "top")'),
-        value: z.string().optional().describe('Value field override, e.g. "10k", "100nF"'),
+        value: z
+          .string()
+          .optional()
+          .describe(
+            'Value field override — the bare value only, e.g. "10k", "100nF". Becomes the BOM Comment: JLCPCB flags one LCSC part appearing under different Comments, so never bake nets or functions into it ("4.7k SDA", "SGM3732 W" are wrong — that context belongs in role). DRC enforces this (bom-comment-conflict).',
+          ),
         role: z
           .string()
           .optional()
-          .describe('Plain-English note on what this part is for on this board, e.g. "Decouples the 3V3 rail at U2". Shown in the UI selection panel.'),
+          .describe('Plain-English note on what this part is for on this board, e.g. "Decouples the 3V3 rail at U2" or "I2C pull-up on SDA". Shown in the UI selection panel; never exported to the BOM — per-instance context goes here, not in value.'),
       },
     },
     async ({ lcsc, refdes, x, y, rotation, side, value, role }) => {
@@ -1023,7 +1060,12 @@ export function createMcpServer(ctx: McpContext): McpServer {
     },
     async ({ nets, passes }) => {
       try {
-        const result = await runAutoroute(ctx.doc, ctx.route, { nets, passes });
+        const result = await runAutorouteBroadcast(
+          ctx.doc,
+          ctx.route,
+          { nets, passes },
+          (status) => ctx.doc.emitRouteStatus(status),
+        );
         return textResult(formatAutorouteSummary(result));
       } catch (err) {
         return errorResult(`autoroute failed: ${err instanceof Error ? err.message : String(err)}`);

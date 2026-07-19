@@ -25,6 +25,7 @@ import {
   type ToolOptions,
 } from './state.js';
 import type { ToolManager } from './tools/manager.js';
+import type { RouteStatus } from './ws.js';
 import { islandsFor } from './renderer.js';
 
 export interface PanelEls {
@@ -128,6 +129,10 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
   const netRows = new Map<string, HTMLElement>();
   const bomRowsByRefdes = new Map<string, HTMLElement>();
   let measureReadoutEl: HTMLElement | null = null;
+  // Live route-button updater + the last status it saw (set by wireRouteControls,
+  // called from onStateChange whenever store.routeStatus changes).
+  let routeStatusHandler: ((s: RouteStatus | null) => void) | null = null;
+  let lastRouteStatus: RouteStatus | null = null;
   // True while the header project-name is being inline-edited, so board
   // updates don't clobber the open input with the (still-old) name.
   let renamingName = false;
@@ -746,6 +751,7 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
     const cur = state.toolOptions;
     const patch: Partial<ToolOptions> = {};
     if (!layers.includes(cur.zoneLayer)) patch.zoneLayer = layers[0];
+    if (!layers.includes(cur.trackLayer)) patch.trackLayer = layers[0];
     if (!nets.includes(cur.zoneNet)) patch.zoneNet = nets[0] ?? '';
     if (!nets.includes(cur.viaNet)) patch.viaNet = nets.includes('GND') ? 'GND' : nets[0] ?? '';
     if (Object.keys(patch).length > 0) {
@@ -872,6 +878,33 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
         hint.textContent = 'Click copper to drop a via on its net; over bare board the dropdown net is used. Size comes from the net class.';
 
         row.append(netLabel, hint);
+        els.toolOptions.appendChild(row);
+        break;
+      }
+      case 'track': {
+        if (!board) break;
+        const row = document.createElement('div');
+        row.className = 'tool-options-row';
+
+        const layerLabel = document.createElement('label');
+        layerLabel.textContent = 'layer';
+        const layerSel = document.createElement('select');
+        for (const l of copperLayersOf(board)) {
+          const o = document.createElement('option');
+          o.value = l;
+          o.textContent = l;
+          o.selected = l === opts.trackLayer;
+          layerSel.appendChild(o);
+        }
+        layerSel.addEventListener('change', () => setToolOptions({ trackLayer: layerSel.value as LayerId }));
+        layerLabel.appendChild(layerSel);
+
+        const hint = document.createElement('div');
+        hint.className = 'tool-hint';
+        hint.textContent =
+          'Click a pad/track to start on its net, then click to lay vertices (Shift = free angle). L switches layer + drops a via. Same-net click, Enter, or dbl-click finishes; Esc discards.';
+
+        row.append(layerLabel, hint);
         els.toolOptions.appendChild(row);
         break;
       }
@@ -1256,6 +1289,33 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
       status.appendChild(el);
     }
 
+    /** Button label from a live 'running' status, e.g. "Routing… retry · pass 3 · 12 unrouted". */
+    function liveLabel(s: RouteStatus): string {
+      const bits: string[] = [];
+      if (s.stage === 'retry') bits.push('retry');
+      if (s.pass !== undefined) bits.push(`pass ${s.pass}`);
+      if (s.unrouted !== undefined) bits.push(`${s.unrouted} unrouted`);
+      return bits.length > 0 ? `Routing… ${bits.join(' · ')}` : 'Routing…';
+    }
+
+    // Drive the button from broadcast route status so it reflects any route in
+    // progress -- including one started elsewhere (the MCP autoroute tool), not
+    // just this client's button. A local doRoute() owns the finish for its own
+    // request (numeric summary + reset in finally), so terminal states are
+    // ignored here while `routing` is true.
+    routeStatusHandler = (s: RouteStatus | null): void => {
+      if (!s) return;
+      if (s.state === 'running') {
+        btn.disabled = true;
+        btn.textContent = liveLabel(s);
+        return;
+      }
+      if (routing) return;
+      btn.disabled = false;
+      btn.textContent = 'Lock & Route';
+      if (s.message) setResult(s.message, s.state === 'failed' ? 'err' : 'ok');
+    };
+
     async function doRoute(): Promise<void> {
       if (routing) return;
       routing = true;
@@ -1519,6 +1579,10 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
       lastSelection = state.selection;
       lastPropsBoard = state.board;
       buildProps(state);
+    }
+    if (state.routeStatus !== lastRouteStatus) {
+      lastRouteStatus = state.routeStatus;
+      routeStatusHandler?.(state.routeStatus);
     }
     updateSelection(state);
     updateStatusBar(state);

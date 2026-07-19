@@ -17,6 +17,7 @@ import { createKeepoutTool } from './keepout.js';
 import { createZoneTool } from './zone.js';
 import { createHoleTool } from './hole.js';
 import { createViaTool } from './via.js';
+import { createTrackTool } from './track.js';
 import { createSilkTool } from './silk.js';
 import { createRipupTool } from './ripup.js';
 import { createMeasureTool } from './measure.js';
@@ -36,6 +37,7 @@ export function createToolManager(ctx: ToolCtx): ToolManager {
     createZoneTool(),
     createHoleTool(),
     createViaTool(),
+    createTrackTool(),
     createSilkTool(),
     createRipupTool(),
     createMeasureTool(),

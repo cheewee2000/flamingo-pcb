@@ -13,7 +13,8 @@ import { prepareBoard } from './board-prep.js';
 import { attachViewControls, centerOn, fitToBoard, flipView, screenToWorld } from './view.js';
 import { createRenderer } from './renderer.js';
 import { initPanels } from './panels.js';
-import { connectWs } from './ws.js';
+import { connectWs, type RouteStatus } from './ws.js';
+import { showToast } from './toast.js';
 import { hitTest } from './hit-test.js';
 import { createToolManager } from './tools/manager.js';
 import { snapPoint } from './tools/overlay-utils.js';
@@ -50,7 +51,23 @@ function onConnectionChange(connected: boolean): void {
   store.set({ connected });
 }
 
-const wsApi = connectWs({ onBoard, onConnectionChange });
+// Surface op rejections (bad edit, unknown net/layer, …) as an error toast.
+// The server sends opResult only to the socket that issued the op, so this is
+// scoped to this client's own rejections. Successes stay silent -- the board
+// visibly updates.
+function onOpResult(result: { ok: boolean; error?: string }): void {
+  if (!result.ok) showToast(result.error ?? 'Edit rejected', 'error');
+}
+
+// Live autoroute progress (broadcast to every client). Park it in the store so
+// panels.ts can drive the route button's live label; a terminal 'failed' also
+// pops an error toast.
+function onRouteStatus(status: RouteStatus): void {
+  store.set({ routeStatus: status });
+  if (status.state === 'failed') showToast(`Route failed: ${status.message ?? 'unknown error'}`, 'error');
+}
+
+const wsApi = connectWs({ onBoard, onConnectionChange, onOpResult, onRouteStatus });
 
 // ---------------------------------------------------------------------------
 // Editing tools (Task 10)
@@ -208,6 +225,22 @@ function setView(view: '2d' | '3d'): void {
 document.getElementById('view-tab-2d')?.addEventListener('click', () => setView('2d'));
 document.getElementById('view-tab-3d')?.addEventListener('click', () => setView('3d'));
 
+// Flip-view button: view the board from the back. Reuses the existing
+// flipView mechanism (the same one the 'F' shortcut falls back to) — mirrors
+// the whole 2D render about the vertical axis and sets view.flipped, which the
+// renderer reads to mirror silk text and swap near/far compositing. The label
+// reflects the current side; the button glows red in back view like the badge.
+const flipViewBtn = document.getElementById('flip-view-btn') as HTMLButtonElement | null;
+flipViewBtn?.addEventListener('click', () => {
+  const rect = canvas.getBoundingClientRect();
+  store.set({ view: flipView(store.get().view, rect.width, rect.height) });
+});
+store.subscribe((state) => {
+  if (!flipViewBtn) return;
+  flipViewBtn.textContent = state.view.flipped ? 'Back' : 'Front';
+  flipViewBtn.classList.toggle('flipped', state.view.flipped);
+});
+
 (document.getElementById('v3d-components') as HTMLInputElement)?.addEventListener('change', (e) => {
   viewer3d.setShowComponents((e.target as HTMLInputElement).checked);
 });
@@ -285,6 +318,7 @@ const TOOL_SHORTCUTS: Record<string, string> = {
   KeyZ: 'zone',
   KeyH: 'hole',
   KeyV: 'via',
+  KeyW: 'track',
   KeyT: 'silk',
   KeyX: 'ripup',
   KeyM: 'measure',
