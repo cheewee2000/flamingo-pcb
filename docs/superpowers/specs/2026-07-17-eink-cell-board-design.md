@@ -207,3 +207,42 @@ Ignion NN02-224 RUN mXTEND (C5702652) tuned for GNSS per Ignion AN
   the Walter module's GNSS u.FL. Note: Ignion recommends final matching
   verification on the assembled device (their free Oxion/support service).
 - Bottom M2 holes now at (3.5/62.5, 13.5) — moved up out of the RF strip.
+
+## LTE antenna + bottom strip rework (added 2026-07-19, board now 66 × 128)
+
+Enclosure assumption (user): inner plan envelope = the PCB outline, so the
+LTE antenna must live over the board. Chosen part: **Taoglas FXP40.07.0085A**
+flex monopole — the smallest cellular flex that covers the Walter/GM02SP low
+bands (Cat-M1/NB1/NB2, ~700–960 MHz low band; bands are from Sequans' GM02SP
+brief — the Walter datasheet §7.1 only says "connect via u.FL").
+
+- FXP40 mech drawing p.24: body **42.6±0.5 × 12.1±0.4 × 0.24 mm**, 3M 467
+  adhesive back, 85±3 mm Ø1.13 coax to **IPEX MHF1** → mates the Walter LTE
+  u.FL directly (no carrier RF). Low-band efficiency is modest (12 % @700,
+  25 % @900, spec p.4) — fine for LTE-M link budgets. Order separately
+  (DigiKey; not on the JLC BOM — no pads, adhesive mount).
+- **Board grew 126.5 → 128 mm**: bottom edge extended to y=−1.5 (outline is
+  now a raw path; content above y 9.5 untouched, GNSS chain untouched at
+  absolute coords). Bottom M2 holes ride the new corner arcs at (3/63, 1.5).
+  Shrinking was not possible: no real ~700 MHz flex is under ~12 mm tall.
+- **Adhesive area** (F.Silk outline + "LTE ANT" label): x 17.5–60.5,
+  y −0.75–11.75 (43 × 12.5 = worst-case part + placement margin; 0.75 mm to
+  the board edge and to the display-tail slot at y 12.5). Right edge clears
+  the (63, 1.5) mounting-hole pad; left edge is ~5 mm from the W3011 —
+  GM02SP time-shares LTE and GNSS, so coupling is acceptable.
+- **Strip keepout retiled** (9 tiles, F+B copper+via): full coverage from the
+  new edge to y 9.5 plus an x 17–61 bridge band y 9.5–12.1 meeting the slot
+  keepout, leaving only the W3011 pad notch (x 8.15–12.8, y 4.3–6.7) and feed
+  corridor (x 9.88–11.85, y 6.7–9.5) open. This also removed two pre-existing
+  defects in the 38909bc gerbers: a floating 2.15 × 3.14 mm pour island (both
+  layers) in the old ANT position pocket at x 20.65–22.8, and a 0.4 × 0.5 mm
+  F.Cu sliver above pad 1.
+- **Two B.Cu-only keepouts added** (pad notch + corridor): the notch/corridor
+  openings are pad/track passages on F.Cu only; without these the back pour
+  flowed down the corridor and filled the notch — copper under the W3011,
+  against its DS p.6 "all layers" clearance rule. This was already present in
+  the 38909bc fab export; now clean (verified in gerbers).
+- Serial silk moved to B.Silk (38, 4) — the front strip is under the flex.
+- Filled DRC 0; export_fab passes with no waiver; fab/ + Super_Pager-fab.zip
+  + Super_Pager.step regenerated. The older eink-cell*.step exports predate
+  the outline change (stale).
