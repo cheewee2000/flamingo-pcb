@@ -2,4 +2,4 @@
  * Flamingo version, shown in the UI status bar. Kept in one place so the
  * displayed version and the package version can be bumped together.
  */
-export const VERSION = '0.7.10';
+export const VERSION = '0.7.11';

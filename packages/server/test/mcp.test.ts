@@ -486,6 +486,60 @@ describe('MCP endpoint', () => {
     expect(textOf(result as any)).toContain('DRC clean: 0 violations.');
   });
 
+  it('run_drc fills zones on a working copy: agrees with /api/drc on a pour board, leaves the live doc unfilled', async () => {
+    // Same DRC-clean routed pair as the previous test...
+    await client.callTool({
+      name: 'set_board_outline',
+      arguments: {
+        shape: 'polygon',
+        points: [
+          { x: -10, y: -10 },
+          { x: 50, y: -10 },
+          { x: 50, y: 30 },
+          { x: -10, y: 30 },
+        ],
+      },
+    });
+    await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R1', x: 0, y: 0 } });
+    await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R2', x: 5, y: 0 } });
+    await client.callTool({ name: 'connect_pins', arguments: { net: 'N1', pins: ['R1.2', 'R2.1'] } });
+    await client.callTool({ name: 'autoroute', arguments: {} });
+    // ...plus a board-covering pour. Its raw outline overlaps the unassigned
+    // pads R1.1/R2.2, so a check of the unfilled board would report phantom
+    // zone clearance violations that the filled export gate does not.
+    await client.callTool({
+      name: 'add_zone',
+      arguments: {
+        layer: 'F.Cu',
+        net: 'N1',
+        polygon: [
+          { x: -10, y: -10 },
+          { x: 50, y: -10 },
+          { x: 50, y: 30 },
+          { x: -10, y: 30 },
+        ],
+        clearance: 0.3,
+        minWidth: 0.2,
+        thermalGap: 0.3,
+        thermalSpokeWidth: 0.4,
+      },
+    });
+    expect(doc.board.zones[0].fill).toBeUndefined(); // live doc stores the zone unfilled
+
+    const result = await client.callTool({ name: 'run_drc', arguments: {} });
+    expect(result.isError).toBeFalsy();
+    expect(textOf(result as any)).toContain('DRC clean: 0 violations.');
+
+    // The filled check ran on a working copy: the live doc's zone is still
+    // unfilled, and undo removes the zone itself -- no fill op was appended
+    // on top of it.
+    expect(doc.board.zones[0].fill).toBeUndefined();
+    const apiDrc = (await (await fetch(`${base}/api/drc`)).json()) as { violations: unknown[] };
+    expect(apiDrc.violations).toEqual([]);
+    await client.callTool({ name: 'undo', arguments: {} });
+    expect(doc.board.zones).toHaveLength(0);
+  });
+
   it('run_drc reports an unconnected-net violation as data, without isError', async () => {
     await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R1', x: 5, y: 10 } });
     await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R2', x: 15, y: 10 } });
