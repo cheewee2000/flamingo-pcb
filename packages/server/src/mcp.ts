@@ -928,11 +928,18 @@ export function createMcpServer(ctx: McpContext): McpServer {
     'run_drc',
     {
       description:
-        'Run design rule checks (DRC) against the current board using the fab ruleset matching its layer count (JLCPCB 2/4/6-layer capabilities). Checks clearance, track width, drill/annular/via-diameter minimums, copper-to-edge, keepouts, hole-to-hole spacing, courtyard overlap, silk-over-pad, unconnected nets, and outline issues. Also checks live JLCPCB assembly stock for every placed part: a part with less stock than the board needs is a gating stock-out violation, while low-stock (<100 boards buildable) and unknown-stock findings are reported as non-gating advisories (set FLAMINGO_STOCK_CHECK=off to skip). Returns a report of violations (an empty report means the board is DRC-clean) -- violations are reported as data, not a tool error.',
+        'Run design rule checks (DRC) against the current board using the fab ruleset matching its layer count (JLCPCB 2/4/6-layer capabilities). Copper zones are filled on a working copy first, so the check sees exactly what export_fab gates on. Checks clearance, track width, drill/annular/via-diameter minimums, copper-to-edge, keepouts, hole-to-hole spacing, courtyard overlap, silk-over-pad, unconnected nets, and outline issues. Also checks live JLCPCB assembly stock for every placed part: a part with less stock than the board needs is a gating stock-out violation, while low-stock (<100 boards buildable) and unknown-stock findings are reported as non-gating advisories (set FLAMINGO_STOCK_CHECK=off to skip). Returns a report of violations (an empty report means the board is DRC-clean) -- violations are reported as data, not a tool error.',
       inputSchema: {},
     },
     async () => {
-      const { violations, advisories } = await runDrcWithStock(ctx, ctx.doc.board);
+      // Check the *filled* board, exactly like /api/drc and the export_fab
+      // gate: an unfilled zone's raw outline polygon overlaps every
+      // non-pour-net pad, so checking it as copper drowns real findings in
+      // phantom clearance noise (observed: ~1225 phantoms on a real board
+      // that exports clean). fillAllZones returns a copy -- the live doc's
+      // stored zones stay unfilled and nothing lands on the undo log.
+      const board = ctx.doc.board.zones.length > 0 ? fillAllZones(ctx.doc.board) : ctx.doc.board;
+      const { violations, advisories } = await runDrcWithStock(ctx, board);
       return textResult(formatDrcReport(violations) + formatStockAdvisories(advisories));
     },
   );
@@ -1119,7 +1126,11 @@ export function createMcpServer(ctx: McpContext): McpServer {
       },
     },
     ({ layers, region, highlightNet, widthPx, showRatsnest, showDrc }): CallToolResult => {
-      const board = ctx.doc.board;
+      // Fill zones (working copy) before counting: renderPNG fills internally
+      // for the overlay, so counting on the raw board would report phantom
+      // zone-outline violations/ratlines that the image doesn't show.
+      const board =
+        ctx.doc.board.zones.some((z) => !z.fill) ? fillAllZones(ctx.doc.board) : ctx.doc.board;
       const png = renderPNG(board, { layers, region, highlightNet, widthPx, showRatsnest, showDrc });
       const { width, height } = pngDimensions(png);
 

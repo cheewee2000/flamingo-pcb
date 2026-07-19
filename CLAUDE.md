@@ -74,11 +74,11 @@ node packages/server/dist/cli.js serve board.flamingo   # prints "Flamingo v0.1.
 - **DRC gates export.** `export_fab` fills all copper zones (`fillAllZones`) and
   runs the full ruleset on that *filled* board; it refuses to write files on any
   violation. Pass `waiveDrc: true` to override (waived violations are reported).
-- **The `run_drc` tool inspects the *unfilled* board.** A copper pour's raw
-  outline polygon overlaps every non-pour-net pad, so with GND zones present
-  `run_drc` reports lots of zone-vs-pad "clearance" noise that vanishes once the
-  zone is filled. Judge zone boards by whether `export_fab` succeeds without a
-  waiver, not by the raw `run_drc` count; the non-zone findings are still real.
+- **`run_drc` also checks the filled board.** Zones are filled on a working
+  copy first (the live doc's stored zones and the undo log are untouched), so
+  its report matches the export gate exactly -- no zone-outline noise. The
+  browser overlay may still show stale markers if the UI last ran DRC before a
+  fill; trust the tool report.
 
 ## parts_search caveat
 
