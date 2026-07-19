@@ -53,7 +53,14 @@
  */
 
 import type { Board, ComponentInst, Point } from './types.js';
-import { bboxOf, componentTransformPoints, padOutline, outlineToPolygon, pointInPolygon } from './geometry.js';
+import {
+  bboxOf,
+  componentTransformPoints,
+  componentTransformRotation,
+  padOutline,
+  outlineToPolygon,
+  pointInPolygon,
+} from './geometry.js';
 
 /** Refdes label text height in mm (unchanged project-wide convention). */
 export const COMPONENT_LABEL_HEIGHT_MM = 1.0;
@@ -254,6 +261,21 @@ interface SolveContext {
   outlinePoly: Point[] | null;
   /** Body box + owning refdes for every component with a body. */
   bodies: { refdes: string; box: BBox }[];
+  /** Silk text rects per side (board-level SilkText + footprint text items):
+   * a refdes label sitting on a hand-placed annotation ("VSYS" beside a test
+   * point) is as unreadable as label-on-label, so they cost the same. */
+  silkTexts: { top: BBox[]; bottom: BBox[] };
+}
+
+/** Axis-aligned bbox of a rotated text rect (DRC's 0.6·height·len model). */
+function textBBox(at: Point, rotationDeg: number, textLen: number, height: number): BBox {
+  const w = 0.6 * height * Math.max(1, textLen);
+  const rad = (rotationDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const hw = (Math.abs(cos) * w + Math.abs(sin) * height) / 2;
+  const hh = (Math.abs(sin) * w + Math.abs(cos) * height) / 2;
+  return { minX: at.x - hw, minY: at.y - hh, maxX: at.x + hw, maxY: at.y + hh };
 }
 
 function buildSolveContext(board: Board): SolveContext {
@@ -266,11 +288,22 @@ function buildSolveContext(board: Board): SolveContext {
     }
   }
   const bodies: { refdes: string; box: BBox }[] = [];
+  const silkTexts: SolveContext['silkTexts'] = { top: [], bottom: [] };
   for (const cc of board.components) {
     const box = componentObstacleBox(cc);
     if (box) bodies.push({ refdes: cc.refdes, box });
+    for (const item of cc.footprint.silk) {
+      if (item.kind !== 'text' || item.text.trim().length === 0) continue;
+      const [at] = componentTransformPoints(cc, [item.at]);
+      const rot = componentTransformRotation(cc, item.rotation);
+      silkTexts[cc.side === 'bottom' ? 'bottom' : 'top'].push(textBBox(at, rot, item.text.length, item.height));
+    }
   }
-  return { outlinePoly, bodies };
+  for (const s of board.silk) {
+    if (s.text.trim().length === 0) continue;
+    silkTexts[s.layer === 'B.Silk' ? 'bottom' : 'top'].push(textBBox(s.at, s.rotation, s.text.length, s.height));
+  }
+  return { outlinePoly, bodies, silkTexts };
 }
 
 /**
@@ -281,6 +314,7 @@ function buildSolveContext(board: Board): SolveContext {
 function candidateCost(
   rect: BBox,
   ownRefdes: string,
+  side: 'top' | 'bottom',
   ctx: SolveContext,
   placedLabels: BBox[],
 ): number {
@@ -295,6 +329,7 @@ function candidateCost(
     if (bboxOverlaps(rect, body.box)) cost += W_COMPONENT;
   }
   for (const lab of placedLabels) if (bboxOverlaps(rect, lab)) cost += W_LABEL;
+  for (const t of ctx.silkTexts[side]) if (bboxOverlaps(rect, t)) cost += W_LABEL;
   return cost;
 }
 
@@ -319,7 +354,13 @@ function solveOne(
   for (const extra of CANDIDATE_EXTRA_GAPS) {
     for (const position of [...order, ...CORNER_POSITIONS]) {
       const candidate = placementAt(box, position, width, height, COMPONENT_LABEL_GAP_MM + extra);
-      const cost = candidateCost(inflate(labelBBox(candidate), SCORE_PAD), c.refdes, ctx, placedLabels);
+      const cost = candidateCost(
+        inflate(labelBBox(candidate), SCORE_PAD),
+        c.refdes,
+        c.side === 'bottom' ? 'bottom' : 'top',
+        ctx,
+        placedLabels,
+      );
       if (cost < bestCost) {
         best = candidate;
         bestCost = cost;
@@ -358,7 +399,13 @@ function solveBoard(board: Board): Map<string, ComponentLabelPlacement> {
     for (const c of ordered) {
       const others = ordered.filter((o) => o.refdes !== c.refdes).map((o) => labelBBox(result.get(o.refdes)!));
       const current = result.get(c.refdes)!;
-      const currentCost = candidateCost(inflate(labelBBox(current), SCORE_PAD), c.refdes, ctx, others);
+      const currentCost = candidateCost(
+        inflate(labelBBox(current), SCORE_PAD),
+        c.refdes,
+        c.side === 'bottom' ? 'bottom' : 'top',
+        ctx,
+        others,
+      );
       if (currentCost === 0) continue;
       const fresh = solveOne(c, ctx, others);
       if (fresh.cost < currentCost) {
