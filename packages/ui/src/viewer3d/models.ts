@@ -128,14 +128,19 @@ function composeTransform(obj: THREE.Object3D, entry: ModelEntry, comp: Componen
   obj.rotation.set(deg(entry.rotationDeg.x), deg(entry.rotationDeg.y), deg(entry.rotationDeg.z), 'XYZ');
   // EasyEDA anchors the model by the CENTER of its rotated bbox at c_origin,
   // not by the model's local origin (many OBJs are off-center in their own
-  // frame). Recenter x/y; z stays a plain offset from the board face.
+  // frame). Recenter x/y. Z: EasyEDA's `z` attr is where the model's BOTTOM
+  // sits relative to the board face (0 = resting on it, negative = through-
+  // hole legs penetrating), so rest the rotated bbox bottom at zMm — verified
+  // against every cached part: nonzero z always equals the model's own zmin
+  // (USB-C −0.85, battery holder −3.0), while centered z=0 bodies (0402s,
+  // SOT-23s) must be lifted by −bb.min.z to sit on the surface.
   obj.position.set(0, 0, 0);
   obj.updateMatrixWorld(true);
   const bb = new THREE.Box3().setFromObject(obj);
   obj.position.set(
     entry.originMm.x - (bb.min.x + bb.max.x) / 2,
     entry.originMm.y - (bb.min.y + bb.max.y) / 2,
-    entry.zMm,
+    entry.zMm - bb.min.z,
   );
 
   const bottom = comp.side === 'bottom';

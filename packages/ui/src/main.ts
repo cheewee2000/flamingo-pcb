@@ -142,6 +142,7 @@ initPanels(
     exportFabBtn: document.getElementById('exportfab-btn') as HTMLButtonElement,
     exportFabStatus: document.getElementById('exportfab-status')!,
     exportStepBtn: document.getElementById('v3d-step-btn') as HTMLButtonElement,
+    exportStepDetailBtn: document.getElementById('v3d-step-detail-btn') as HTMLButtonElement,
     exportStepBar: document.getElementById('v3d-step-bar')!,
     exportStepFill: document.getElementById('v3d-step-fill')!,
     exportStepError: document.getElementById('v3d-step-err')!,
@@ -305,7 +306,16 @@ window.addEventListener('keydown', (ev) => {
     return;
   }
 
+  if (ev.code === 'KeyZ' && (ev.metaKey || ev.ctrlKey)) {
+    ev.preventDefault();
+    void fetch(ev.shiftKey ? '/api/redo' : '/api/undo', { method: 'POST' });
+    return;
+  }
+
   if (toolManager.active().onKey?.(ev, toolCtx)) return;
+
+  // Modifier chords (⌘S, ⌘C, …) are never tool shortcuts.
+  if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
 
   const toolId = TOOL_SHORTCUTS[ev.code];
   if (toolId) {
