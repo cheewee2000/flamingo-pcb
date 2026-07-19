@@ -9,7 +9,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { Board, Op, RenderOpts } from '@flamingo/engine';
-import { fillAllZones, parseBoard, ratsnest, renderSVG, runDRC, splitLabelLayers } from '@flamingo/engine';
+import { fillAllZones, parseBoard, planZoneStitching, ratsnest, renderSVG, runDRC, splitLabelLayers } from '@flamingo/engine';
 import { exportFab } from '@flamingo/fab';
 import type { Model3d } from '@flamingo/parts';
 import { extractModel3d, fetchPart, readCache, searchParts } from '@flamingo/parts';
@@ -22,7 +22,10 @@ import { defaultRouteRunner } from './route.js';
 import type { ScreenshotOpts } from './screenshot.js';
 import { renderPNG } from './screenshot.js';
 import { render3dHtml } from './viewer3d.js';
-import { exportStep } from './step.js';
+import { exportStep, exportStepDetail } from './step.js';
+import { parseObjMesh, placeMeshGroups } from './objmesh.js';
+import type { MeshGroup } from './objmesh.js';
+import { BOARD_T } from './viewer3d.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 // packages/server/dist/http.js -> packages/ui/dist
@@ -205,6 +208,54 @@ async function loadModel3d(lcsc: string): Promise<Model3d | null> {
   } catch {
     return null;
   }
+}
+
+/** Read a model OBJ from `~/.flamingo/models/`, downloading + caching on a miss. Throws on download failure. */
+async function loadModelObj(uuid: string): Promise<Buffer> {
+  const filePath = join(modelsCacheDir(), `${uuid}.obj`);
+  try {
+    return await readFile(filePath);
+  } catch {
+    // cache miss: download below
+  }
+  const resp = await fetch(`https://modules.easyeda.com/3dmodel/${uuid}`);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const data = Buffer.from(await resp.arrayBuffer());
+  await mkdir(modelsCacheDir(), { recursive: true });
+  await writeFile(filePath, data);
+  return data;
+}
+
+/**
+ * World-placed per-material mesh groups for every component whose part has a
+ * 3D model (refdes → groups), for the detail STEP export. Parts that can't
+ * resolve are simply omitted (they fall back to courtyard blocks).
+ */
+async function collectDetailModels(board: Board): Promise<Map<string, MeshGroup[]>> {
+  const byLcsc = new Map<string, Model3d | null>();
+  const parsedByUuid = new Map<string, MeshGroup[]>();
+  const out = new Map<string, MeshGroup[]>();
+  for (const c of board.components) {
+    if (!c.lcsc) continue;
+    let m = byLcsc.get(c.lcsc);
+    if (m === undefined) {
+      m = await loadModel3d(c.lcsc);
+      byLcsc.set(c.lcsc, m);
+    }
+    if (!m) continue;
+    let groups = parsedByUuid.get(m.uuid);
+    if (groups === undefined) {
+      try {
+        groups = parseObjMesh((await loadModelObj(m.uuid)).toString('utf8'));
+      } catch {
+        groups = []; // download failed: courtyard-block fallback
+      }
+      parsedByUuid.set(m.uuid, groups);
+    }
+    if (groups.length === 0) continue;
+    out.set(c.refdes, placeMeshGroups(groups, m, { at: c.at, rotation: c.rotation, side: c.side }, BOARD_T));
+  }
+  return out;
 }
 
 /** Zip the four fab files in `dir` into `res` (attachment already headered). Resolves once fully flushed. */
@@ -434,10 +485,39 @@ async function handleApi(
     return true;
   }
 
-  if (method === 'GET' && pathname === '/api/export.step') {
+  if (method === 'POST' && pathname === '/api/stitch') {
+    // Plan + apply stitching vias for orphaned pour islands (also runs
+    // automatically as the last step of POST /api/route).
     try {
-      const step = exportStep(doc.board);
-      const fileName = `${doc.board.name.replace(/[^\w.-]+/g, '_') || 'board'}.step`;
+      const plan = planZoneStitching(doc.board);
+      if (plan.vias.length > 0) {
+        const r = doc.apply({ op: 'addTracks', tracks: [], vias: plan.vias });
+        if (!r.ok) {
+          sendJSON(res, 400, r);
+          return true;
+        }
+      }
+      sendJSON(res, 200, {
+        ok: true,
+        stitchedVias: plan.vias.length,
+        vias: plan.vias.map((v) => ({ at: v.at, net: v.net })),
+        unstitchedIslands: plan.unfixed,
+        ignoredSlivers: plan.ignoredSlivers,
+      });
+    } catch (err) {
+      sendJSON(res, 500, { ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
+  if (method === 'GET' && pathname === '/api/export.step') {
+    // ?mode=detail adds copper/silk/real component meshes; default is blocks.
+    const detail = url.searchParams.get('mode') === 'detail';
+    try {
+      const step = detail
+        ? exportStepDetail(doc.board, await collectDetailModels(doc.board))
+        : exportStep(doc.board);
+      const fileName = `${doc.board.name.replace(/[^\w.-]+/g, '_') || 'board'}${detail ? '.detail' : ''}.step`;
       res.writeHead(200, {
         'content-type': 'application/step',
         'content-disposition': `attachment; filename="${fileName}"`,
@@ -488,24 +568,12 @@ async function handleApi(
       sendJSON(res, 400, { ok: false, error: 'model uuid must be 32 hex chars' });
       return true;
     }
-    const filePath = join(modelsCacheDir(), `${uuid}.obj`);
-    let data: Buffer | null = null;
+    let data: Buffer | null;
     try {
-      data = await readFile(filePath);
-    } catch {
-      data = null; // cache miss: download below
-    }
-    if (data === null) {
-      try {
-        const resp = await fetch(`https://modules.easyeda.com/3dmodel/${uuid}`);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        data = Buffer.from(await resp.arrayBuffer());
-        await mkdir(modelsCacheDir(), { recursive: true });
-        await writeFile(filePath, data);
-      } catch (err) {
-        sendJSON(res, 502, { ok: false, error: `could not fetch model: ${err instanceof Error ? err.message : String(err)}` });
-        return true;
-      }
+      data = await loadModelObj(uuid);
+    } catch (err) {
+      sendJSON(res, 502, { ok: false, error: `could not fetch model: ${err instanceof Error ? err.message : String(err)}` });
+      return true;
     }
     res.writeHead(200, {
       'content-type': 'text/plain; charset=utf-8',
