@@ -18,6 +18,42 @@ _The `esp32-breakout` reference board — 40×30mm, 2-layer, ESP32-S3-WROOM-1 +
 USB-C + AMS1117-3.3, autorouted and DRC-clean — built end to end through the MCP
 tools alone by `packages/server/scripts/e2e-esp32.ts`._
 
+## Features
+
+- **Prompt-first workflow over MCP** — 33 tools cover the whole flow: parts →
+  placement → nets → routing → DRC → fab export. No schematic step.
+- **Real parts** — LCSC keyword search plus EasyEDA footprint fetch/parse with
+  real pad numbers and geometry, cached locally under `~/.flamingo/parts/`.
+- **Live browser editor** — WebSocket-synced canvas view with selection and
+  drag editing, a via tool (hover copper to inherit its net), silk text/line
+  editing, board search, zone & label layer toggles, copper island tints, a
+  one-click **Lock & Route** button, and **Run DRC** with red canvas markers.
+- **3D view + STEP export** — interactive 3D board with real vendor component
+  models, 3D silkscreen, and STEP export in two flavours: light courtyard
+  blocks or full detail (copper, silk, drilled barrels).
+- **Autorouting** — Freerouting integration with per-net routing, automatic
+  thin-escape retry for fat nets that can't exit fine-pitch pads, a widen pass
+  that necks down only at obstructions, and automatic GND stitching vias for
+  orphaned pour islands.
+- **Copper features** — zone pours with filled-copper connectivity, keepouts,
+  mounting holes/slots, and per-net-class track width / clearance / via rules.
+- **DRC against JLCPCB capabilities** — rulesets picked by layer count:
+  clearance, track width, drill/annular/via minimums, copper-to-edge,
+  keepouts, hole-to-hole, courtyard overlap, silk-over-pad, unconnected nets,
+  and outline checks.
+- **Live stock check in DRC** — every placed part is checked against JLCPCB's
+  assembly parts library; out-of-stock parts gate export (waivable), low or
+  unknown stock is reported as a non-gating advisory.
+- **Board-aware silkscreen** — refdes labels are auto-placed on-board,
+  pad-safe, and non-overlapping by a whole-board solver.
+- **Fab-ready export** — Gerber X2 + Excellon drills, JLCPCB BOM/CPL, a
+  reference render SVG, and a browser download zip shaped for direct upload
+  to JLCPCB's order page.
+- **Op-log editing** — every change is an operation with full undo/redo;
+  boards are plain JSON files that diff cleanly in git.
+- **Agent-friendly feedback** — PNG screenshots (with ratsnest and DRC
+  overlays), text board summaries, and connection listings on demand.
+
 ## Quick start
 
 ```bash
@@ -88,7 +124,7 @@ doing.
 
 ## MCP tools
 
-30 tools are served at `http://localhost:4242/mcp`:
+33 tools are served at `http://localhost:4242/mcp`:
 
 | Group | Tools |
 | --- | --- |
@@ -96,10 +132,10 @@ doing.
 | **Parts** | `parts_search`, `parts_get` |
 | **Placement** | `place_component`, `move_component`, `remove_component` |
 | **Connectivity** | `connect_pins`, `disconnect_pins`, `create_net_class`, `assign_net_class` |
-| **Board features** | `set_board_outline`, `add_zone`, `add_keepout`, `add_mounting_hole`, `add_silk_text`, `remove_item` |
-| **Routing / analysis** | `add_track`, `add_via`, `get_ratsnest`, `autoroute`, `unroute`, `run_drc` |
+| **Board features** | `set_board_outline`, `add_zone`, `add_keepout`, `add_mounting_hole`, `add_silk_text`, `add_silk_line`, `remove_item` |
+| **Routing / analysis** | `add_track`, `add_via`, `get_ratsnest`, `autoroute`, `unroute`, `widen_tracks`, `run_drc` |
 | **History** | `undo`, `redo` |
-| **Output** | `export_fab`, `screenshot` |
+| **Output** | `export_fab`, `export_step`, `screenshot` |
 
 ## Architecture
 
