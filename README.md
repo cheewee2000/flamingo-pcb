@@ -12,11 +12,7 @@ running DRC, and exporting a
 [JLCPCB](https://jlcpcb.com/)-ready fab package (`gerbers.zip` + `bom.csv` +
 `cpl.csv`). A live browser view shows the board update as it's built.
 
-![ESP32-S3 breakout reference board](docs/images/esp32-breakout.png)
 
-_The `esp32-breakout` reference board — 40×30mm, 2-layer, ESP32-S3-WROOM-1 +
-USB-C + AMS1117-3.3, autorouted and DRC-clean — built end to end through the MCP
-tools alone by `packages/server/scripts/e2e-esp32.ts`._
 
 ## Features
 
