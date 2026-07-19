@@ -4,6 +4,7 @@ import { newBoard } from '@flamingo/engine';
 import { Doc } from '../src/document.js';
 import { startServer } from '../src/http.js';
 import type { StartedServer } from '../src/http.js';
+import type { RouteRunner } from '../src/route.js';
 
 /**
  * Queues every message the socket receives from the moment this is called
@@ -148,6 +149,54 @@ describe('WebSocket API', () => {
     expect(doc.board.name).toBe('survived');
 
     ws.close();
+  });
+
+  it('broadcasts live routeStatus (running… then a terminal done) to all clients during /api/route', async () => {
+    // A mock runner that emits freerouting-style progress through onProgress and
+    // returns a trivially-valid empty SES (no java involved).
+    const runner: RouteRunner = {
+      run: async (_dsn, opts) => {
+        opts?.onProgress?.({ kind: 'started', threads: 4 });
+        opts?.onProgress?.({ kind: 'pass', pass: 1, score: 100, unrouted: 2 });
+        opts?.onProgress?.({ kind: 'session-done', score: 120, unrouted: 0 });
+        return '(session route.ses (routes (resolution um 1)))';
+      },
+    };
+    const rdoc = new Doc(newBoard('routetest', 2));
+    const rserver = await startServer(rdoc, 0, { routeRunner: runner });
+    try {
+      const ws = new WebSocket(`ws://localhost:${rserver.port}/ws`);
+      const queue = messageQueue(ws);
+      await waitOpen(ws);
+      await queue.next(); // initial board
+
+      const res = await fetch(`http://localhost:${rserver.port}/api/route`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
+      expect(res.ok).toBe(true);
+
+      // Drain messages until the terminal routeStatus arrives, collecting the
+      // routeStatus stream (board broadcasts from applied ops are interleaved).
+      const statuses: Array<{ state: string; stage?: string; pass?: number; unrouted?: number }> = [];
+      for (let i = 0; i < 50; i++) {
+        const msg = (await queue.next()) as { type: string; status?: { state: string; stage?: string; pass?: number; unrouted?: number } };
+        if (msg.type === 'routeStatus' && msg.status) {
+          statuses.push(msg.status);
+          if (msg.status.state === 'done' || msg.status.state === 'failed') break;
+        }
+      }
+
+      expect(statuses.some((s) => s.state === 'running')).toBe(true);
+      expect(statuses.some((s) => s.state === 'running' && s.stage === 'route' && s.pass === 1 && s.unrouted === 2)).toBe(true);
+      const terminal = statuses[statuses.length - 1];
+      expect(terminal.state).toBe('done');
+
+      ws.close();
+    } finally {
+      await rserver.close();
+    }
   });
 
   it('replies with an opResult error instead of crashing when applyOp throws on a wrong-typed field', async () => {

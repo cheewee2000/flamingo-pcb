@@ -3,6 +3,7 @@ import { readFile, rename, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import type { Board, Op, OpError, OpResult } from '@flamingo/engine';
 import { applyOp, parseBoard, serializeBoard } from '@flamingo/engine';
+import type { RouteStatus } from './autoroute.js';
 
 const UNDO_CAP = 200;
 const DEFAULT_DEBOUNCE_MS = 500;
@@ -39,6 +40,15 @@ export class Doc extends EventEmitter {
   /** The board's current on-disk path, if any (set by the constructor/resetBoard). */
   get filePath(): string | undefined {
     return this._filePath;
+  }
+
+  /**
+   * Emit a transient autoroute progress/terminal status. Not document state
+   * (no undo, no persistence) -- it rides the same emitter as 'change' so the
+   * HTTP layer can fan it out to every websocket client (see attachWebSocket).
+   */
+  emitRouteStatus(status: RouteStatus): void {
+    this.emit('routeStatus', status);
   }
 
   /**

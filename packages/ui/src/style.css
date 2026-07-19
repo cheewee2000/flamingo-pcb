@@ -363,6 +363,20 @@ body {
 .view-tab.active:hover {
   opacity: 1;
 }
+/* Flip-view toggle: a normal view-tab until it engages back view, then it
+   glows the signal red that marks "you're looking at the bottom". */
+.flip-view-btn {
+  border-left: 1px solid rgba(255, 255, 255, 0.22);
+  min-width: 46px;
+}
+.flip-view-btn.flipped {
+  background: var(--signal-red);
+  color: #fff;
+  border-color: var(--signal-red);
+}
+.flip-view-btn.flipped:hover {
+  opacity: 0.85;
+}
 
 .viewer3d-canvas {
   position: absolute;
@@ -1177,4 +1191,45 @@ input[type='text'].props-inline-input {
   background: var(--signal-orange);
   color: var(--paper);
   border-color: var(--signal-orange);
+}
+
+/* ---- Toasts: bottom-center transient notices (newest on top) ---- */
+
+.toast-stack {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  z-index: 200;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  cursor: pointer;
+  max-width: min(520px, 90vw);
+  padding: 10px 14px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--ink);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  opacity: 1;
+  transition: opacity var(--dur) var(--ease);
+  word-break: break-word;
+}
+.toast-error {
+  border-left-color: var(--signal-red);
+}
+.toast-info {
+  border-left-color: var(--ink);
+}
+.toast-leaving {
+  opacity: 0;
 }

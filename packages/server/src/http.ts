@@ -13,7 +13,7 @@ import { fillAllZones, parseBoard, planZoneStitching, ratsnest, renderSVG, runDR
 import { exportFab, generateBOM, generateCPL, generateGerbers } from '@flamingo/fab';
 import type { Model3d } from '@flamingo/parts';
 import { extractModel3d, fetchJlcStock, fetchPart, readCache, searchParts } from '@flamingo/parts';
-import { runAutoroute } from './autoroute.js';
+import { runAutorouteBroadcast } from './autoroute.js';
 import { Doc } from './document.js';
 import type { McpContext, PartsApi } from './mcp.js';
 import { createMcpServer, resolveFabOutDir } from './mcp.js';
@@ -474,10 +474,15 @@ async function handleApi(
       return true;
     }
     try {
-      const result = await runAutoroute(doc, ctx.route, {
-        nets: netsRaw as string[] | undefined,
-        passes: passesRaw as number | undefined,
-      });
+      const result = await runAutorouteBroadcast(
+        doc,
+        ctx.route,
+        {
+          nets: netsRaw as string[] | undefined,
+          passes: passesRaw as number | undefined,
+        },
+        (status) => doc.emitRouteStatus(status),
+      );
       sendJSON(res, 200, {
         ok: true,
         ...result,
@@ -776,6 +781,17 @@ function attachWebSocket(doc: Doc, server: http.Server): WebSocketServer {
   };
   doc.on('change', onChange);
 
+  // Live autoroute progress: fan out to every client (unlike opResult, which is
+  // sender-only) so anyone watching sees the route advance regardless of who
+  // started it (UI button or MCP tool).
+  const onRouteStatus = (status: unknown): void => {
+    const msg = JSON.stringify({ type: 'routeStatus', status });
+    for (const ws of clients) {
+      if (ws.readyState === WebSocket.OPEN) ws.send(msg);
+    }
+  };
+  doc.on('routeStatus', onRouteStatus);
+
   wss.on('connection', (ws: WebSocket) => {
     clients.add(ws);
     ws.send(JSON.stringify({ type: 'board', board: doc.board }));
@@ -815,6 +831,7 @@ function attachWebSocket(doc: Doc, server: http.Server): WebSocketServer {
 
   wss.on('close', () => {
     doc.removeListener('change', onChange);
+    doc.removeListener('routeStatus', onRouteStatus);
   });
 
   return wss;

@@ -11,16 +11,34 @@
 
 import type { Board, Op } from '@flamingo/engine';
 
+/**
+ * Live autoroute status broadcast to every client (mirrors the server's
+ * RouteStatus in autoroute.ts): a stream of `running` updates during a route,
+ * then one terminal `done` or `failed`. `stage` is 'route' (main pass) or
+ * 'retry' (escape-width re-route of the still-unrouted nets).
+ */
+export interface RouteStatus {
+  state: 'running' | 'done' | 'failed';
+  stage?: 'route' | 'retry';
+  pass?: number;
+  unrouted?: number;
+  score?: number;
+  message?: string;
+}
+
 export interface WsHandlers {
   onBoard: (board: Board) => void;
   onConnectionChange: (connected: boolean) => void;
   /** Optional: surface op rejections (e.g. to a toast/log). */
   onOpResult?: (result: { ok: boolean; error?: string }) => void;
+  /** Optional: live autoroute progress (broadcast to all clients). */
+  onRouteStatus?: (status: RouteStatus) => void;
 }
 
 type ServerMsg =
   | { type: 'board'; board: Board }
-  | { type: 'opResult'; result: { ok: boolean; error?: string } };
+  | { type: 'opResult'; result: { ok: boolean; error?: string } }
+  | { type: 'routeStatus'; status: RouteStatus };
 
 const RECONNECT_DELAY_MS = 1000;
 
@@ -56,6 +74,8 @@ export function connectWs(handlers: WsHandlers): { sendOp: (op: Op) => void } {
         handlers.onBoard(msg.board);
       } else if (msg.type === 'opResult') {
         handlers.onOpResult?.(msg.result);
+      } else if (msg.type === 'routeStatus') {
+        handlers.onRouteStatus?.(msg.status);
       }
     });
 

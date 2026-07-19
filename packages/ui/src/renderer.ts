@@ -220,10 +220,32 @@ function strokeTrack(ctx: CanvasRenderingContext2D, view: ViewTransform, t: Trac
   ctx.stroke();
 }
 
-/** Draw text so it reads correctly under the current view flip: measure the
- * on-screen direction of the world rotation by transforming two points,
- * rather than hand-deriving a sign convention. */
-function drawRotatedText(
+/**
+ * Screen-space orientation + handedness for a silk label under the current view.
+ * Pure (no canvas) so it can be unit-tested.
+ *
+ * Standard PCB-CAD convention: the canvas views the board from the front (or,
+ * when `flipped`, physically flipped over about the vertical axis to view the
+ * back). A label reads correctly when its silk side is the side being viewed,
+ * and mirror-X (backwards) otherwise -- front view shows back silk reversed
+ * (seen through the board) and back view shows front silk reversed. World
+ * rotation is CCW and the screen is y-down, so a directly-viewed label draws at
+ * `-worldRot`; a through-the-board (mirrored) label is the vertical reflection
+ * of that, i.e. `+worldRot` with the glyphs flipped. Derivation: the flipped
+ * render is the whole front image mirrored about the vertical axis, which
+ * `worldToScreen` already applies to every position.
+ */
+export function silkTextParams(
+  flipped: boolean,
+  silkIsBottom: boolean,
+  worldRotDeg: number,
+): { angleRad: number; mirror: boolean } {
+  const mirror = silkIsBottom !== flipped;
+  return { angleRad: ((worldRotDeg * Math.PI) / 180) * (mirror ? 1 : -1), mirror };
+}
+
+/** Draw a silk label upright for its own side, mirror-X'd when seen from the far side (see silkTextParams). */
+function drawSilkText(
   ctx: CanvasRenderingContext2D,
   view: ViewTransform,
   at: Point,
@@ -231,15 +253,14 @@ function drawRotatedText(
   text: string,
   heightMm: number,
   color: string,
+  silkIsBottom: boolean,
 ): void {
-  const rad = (worldRotDeg * Math.PI) / 180;
-  const dirWorld = { x: at.x + Math.cos(rad), y: at.y + Math.sin(rad) };
+  const { angleRad, mirror } = silkTextParams(view.flipped, silkIsBottom, worldRotDeg);
   const p = worldToScreen(view, at);
-  const pd = worldToScreen(view, dirWorld);
-  const angle = Math.atan2(pd.y - p.y, pd.x - p.x);
   ctx.save();
   ctx.translate(p.x, p.y);
-  ctx.rotate(angle);
+  ctx.rotate(angleRad);
+  if (mirror) ctx.scale(-1, 1);
   ctx.fillStyle = color;
   ctx.font = `${Math.max(heightMm * view.scale, 6)}px ${CANVAS_FONT}`;
   ctx.textAlign = 'center';
@@ -380,7 +401,7 @@ function drawFootprintSilkItem(ctx: CanvasRenderingContext2D, view: ViewTransfor
     case 'text': {
       const [wat] = componentTransformPoints(c, [item.at]);
       const worldRot = componentTransformRotation(c, item.rotation);
-      drawRotatedText(ctx, view, wat, worldRot, item.text, item.height, color);
+      drawSilkText(ctx, view, wat, worldRot, item.text, item.height, color, c.side === 'bottom');
       break;
     }
   }
@@ -474,9 +495,11 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
 
   drawGrid(ctx, view, widthPx, heightPx);
 
-  // ---- copper layers, bottom-up ----
+  // ---- copper layers, far side first so the near side composites on top ----
+  // Front view: draw B.Cu..F.Cu (F.Cu near, on top). Back view: draw F.Cu..B.Cu
+  // so B.Cu reads as the near layer, matching the physically flipped board.
   const cu = copperLayersOf(board);
-  const layerOrder = cu.slice().reverse();
+  const layerOrder = view.flipped ? cu.slice() : cu.slice().reverse();
   for (const layer of layerOrder) {
     if (vis[layer] === false) continue;
     const color = COPPER_COLOR[layer]!;
@@ -576,25 +599,24 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
   }
 
   // ---- silk: footprint items + refdes labels + board-level SilkText ----
+  // Near side last so its silk sits on top: bottom-then-top in front view,
+  // top-then-bottom when viewing from the back.
   if (vis[SILK_KEY] !== false) {
-    for (const side of ['bottom', 'top'] as const) {
+    const silkSides: ('bottom' | 'top')[] = view.flipped ? ['top', 'bottom'] : ['bottom', 'top'];
+    for (const side of silkSides) {
       const color = silkColorFor(side);
       for (const c of board.components) {
         if (c.side !== side) continue;
         for (const item of c.footprint.silk) drawFootprintSilkItem(ctx, view, c, item, color);
         // refdes label: adjacent to the component body (below/right/left/
-        // above, pad-avoiding) — anchor from the shared engine helper.
-        const p = worldToScreen(view, componentLabelPlacement(board, c).at);
-        ctx.fillStyle = color;
-        ctx.font = `${Math.max(REFDES_HEIGHT_MM * view.scale, 6)}px ${CANVAS_FONT}`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(c.refdes, p.x, p.y);
+        // above, pad-avoiding) — anchor from the shared engine helper. Mirrors
+        // with its side just like footprint silk text.
+        drawSilkText(ctx, view, componentLabelPlacement(board, c).at, 0, c.refdes, REFDES_HEIGHT_MM, color, c.side === 'bottom');
       }
       const silkLayer = side === 'top' ? 'F.Silk' : 'B.Silk';
       for (const s of board.silk) {
         if (s.layer !== silkLayer) continue;
-        drawRotatedText(ctx, view, s.at, s.rotation, s.text, s.height, color);
+        drawSilkText(ctx, view, s.at, s.rotation, s.text, s.height, color, s.layer === 'B.Silk');
       }
       for (const line of board.silkLines) {
         if (line.layer !== silkLayer) continue;
