@@ -48,6 +48,9 @@ export function componentHeight(c: ComponentInst): number {
  * transform (mirror + rotation + translation), plus the height heuristic.
  */
 export function componentBox(c: ComponentInst): { x0: number; y0: number; x1: number; y1: number; h: number } | null {
+  // Bare-pad footprints (test points, fiducials) have no physical body — the
+  // pad itself is the whole part. No body box (here, in /3d, or in STEP).
+  if (c.footprint.pads.length <= 1 && c.footprint.silk.length === 0) return null;
   const pts: Point[] = [];
   for (const ring of c.footprint.courtyard ?? []) pts.push(...componentTransformPoints(c, ring));
   if (pts.length === 0) for (const pad of c.footprint.pads) pts.push(...padOutline(c, pad));
@@ -62,7 +65,7 @@ export function componentBox(c: ComponentInst): { x0: number; y0: number; x1: nu
 // ---------------------------------------------------------------------------
 
 type XY = [number, number];
-/** Line piece [x0,y0,x1,y1,sideSign] — sideSign 1 = top, -1 = bottom. */
+/** Line piece [x0,y0,x1,y1,w] — w = sideSign * width*100 (sign 1 top, -1 bottom). */
 type SidedSeg = [number, number, number, number, number];
 
 function r2(n: number): number {
@@ -70,7 +73,7 @@ function r2(n: number): number {
 }
 
 /** Tessellate a track/silk arc (world coords, cw = visually clockwise) into line pieces. */
-function arcPoints(start: Point, end: Point, center: Point, cw: boolean): Point[] {
+export function arcPoints(start: Point, end: Point, center: Point, cw: boolean): Point[] {
   const r = Math.hypot(start.x - center.x, start.y - center.y);
   if (r < 1e-6) return [start, end];
   const a0 = Math.atan2(start.y - center.y, start.x - center.x);
@@ -118,8 +121,8 @@ function extractData(board: Board): Viewer3dData {
   const cutouts: XY[][] = [];
   const barrels: [number, number, number][] = [];
 
-  const pushSilkSeg = (a: Point, b: Point, sideSign: number): void => {
-    silk.push([r2(a.x), r2(a.y), r2(b.x), r2(b.y), sideSign]);
+  const pushSilkSeg = (a: Point, b: Point, sideSign: number, width: number): void => {
+    silk.push([r2(a.x), r2(a.y), r2(b.x), r2(b.y), sideSign * Math.max(width, 0.1) * 100]);
   };
 
   for (const c of board.components) {
@@ -155,12 +158,12 @@ function extractData(board: Board): Viewer3dData {
     for (const item of c.footprint.silk) {
       if (item.kind === 'line') {
         const [a, b] = componentTransformPoints(c, [item.start, item.end]);
-        pushSilkSeg(a, b, sideSign);
+        pushSilkSeg(a, b, sideSign, item.width);
       } else if (item.kind === 'arc') {
         const [ws, we, wc] = componentTransformPoints(c, [item.start, item.end, item.center]);
         const worldCw = mirror ? !item.cw : item.cw;
         const pts = arcPoints(ws, we, wc, worldCw);
-        for (let i = 0; i < pts.length - 1; i++) pushSilkSeg(pts[i], pts[i + 1], sideSign);
+        for (let i = 0; i < pts.length - 1; i++) pushSilkSeg(pts[i], pts[i + 1], sideSign, item.width);
       } else if (item.kind === 'circle') {
         const [wc] = componentTransformPoints(c, [item.center]);
         const pts = arcPoints(
@@ -169,13 +172,13 @@ function extractData(board: Board): Viewer3dData {
           wc,
           false,
         );
-        for (let i = 0; i < pts.length - 1; i++) pushSilkSeg(pts[i], pts[i + 1], sideSign);
+        for (let i = 0; i < pts.length - 1; i++) pushSilkSeg(pts[i], pts[i + 1], sideSign, item.width);
       }
     }
   }
 
   for (const line of board.silkLines) {
-    pushSilkSeg(line.start, line.end, line.layer === 'B.Silk' ? -1 : 1);
+    pushSilkSeg(line.start, line.end, line.layer === 'B.Silk' ? -1 : 1, line.width);
   }
 
   for (const h of board.holes) {
@@ -274,7 +277,8 @@ body{margin:0;background:#14161a;color:#ccc;font:12px 'Space Mono','Menlo',monos
   <label><input type="checkbox" id="tZones" checked> zones</label>
   <label><input type="checkbox" id="tSilk" checked> silk</label>
   <label><input type="checkbox" id="tLabels"> labels</label>
-  <a class="btn" href="/api/export.step" download>Export STEP</a>
+  <a class="btn" href="/api/export.step" download title="board + component blocks">STEP</a>
+  <a class="btn" href="/api/export.step?mode=detail" download title="board + real models, copper, silk">STEP HD</a>
   <a href="/">back to editor</a>
 </div>
 <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
@@ -381,18 +385,25 @@ for(const c of D.comps){
   gParts.add(m);
 }
 
-// Silkscreen (footprint items + board lines).
+// Silkscreen (footprint items + board lines): real-width flat boxes, like tracks.
 const gSilk=new THREE.Group(); scene.add(gSilk);
 {
   const top=[],bot=[];
   for(const s of D.silk){ (s[4]>0?top:bot).push(s); }
-  for(const [arr,z,col] of [[top,D.T+0.08,0xf2eda1],[bot,-0.08,0xe8b2a7]]){
+  for(const [arr,z,col] of [[top,D.T+0.07,0xf2eda1],[bot,-0.07,0xe8b2a7]]){
     if(!arr.length) continue;
-    const verts=[];
-    for(const s of arr) verts.push(s[0],s[1],z,s[2],s[3],z);
-    const g=new THREE.BufferGeometry();
-    g.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
-    gSilk.add(new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:col})));
+    const geo=new THREE.BoxGeometry(1,1,0.02);
+    const inst=new THREE.InstancedMesh(geo,new THREE.MeshBasicMaterial({color:col}),arr.length);
+    const m4=new THREE.Matrix4(), q=new THREE.Quaternion(), zAxis=new THREE.Vector3(0,0,1);
+    arr.forEach((s,i)=>{
+      const w=Math.abs(s[4])/100;
+      const dx=s[2]-s[0], dy=s[3]-s[1];
+      const len=Math.hypot(dx,dy)||0.001;
+      q.setFromAxisAngle(zAxis,Math.atan2(dy,dx));
+      m4.compose(new THREE.Vector3((s[0]+s[2])/2,(s[1]+s[3])/2,z),q,new THREE.Vector3(len+w,w,1));
+      inst.setMatrixAt(i,m4);
+    });
+    gSilk.add(inst);
   }
 }
 

@@ -18,6 +18,7 @@ import * as THREE from 'three';
 import type { Board, ComponentInst, PathSeg, Point } from '@flamingo/engine';
 import {
   bboxOf,
+  componentLabelPlacement,
   componentTransformPoints,
   fillAllZones,
   holeSlotCenterline,
@@ -80,8 +81,17 @@ const BOX_MATS: Record<string, THREE.Material> = {
   part: new THREE.MeshStandardMaterial({ color: 0x3a3d45, roughness: 0.55 }),
 };
 
+/**
+ * Bare-pad footprints (test points, fiducials): a single pad with no silk has
+ * no physical body — its gold pad is the whole part, so no box is drawn.
+ */
+export function isBarePad(c: ComponentInst): boolean {
+  return c.footprint.pads.length <= 1 && c.footprint.silk.length === 0;
+}
+
 /** Fallback body: extruded courtyard bounding box with the height heuristic. */
 export function componentCourtyardBox(c: ComponentInst): THREE.Mesh | null {
+  if (isBarePad(c)) return null;
   const pts: Point[] = [];
   for (const ring of c.footprint.courtyard ?? []) pts.push(...componentTransformPoints(c, ring));
   if (pts.length === 0) for (const pad of c.footprint.pads) pts.push(...padOutline(c, pad));
@@ -318,39 +328,55 @@ export function buildBoardGroup(board: Board): BoardGeometry {
   return { group, silk, bbox };
 }
 
+/**
+ * Silk line work is stroked at its REAL width — flat capsule plates, one shape
+ * per segment (round caps double as round joints on polylines) merged into a
+ * single extrusion per side. Hairline `LineSegments` were invisible at board
+ * zoom (1px regardless of zoom), which read as "silk missing" on small parts.
+ * Unlit material: silk is matte paint and must stay legible from any angle.
+ */
 function buildSilkGroup(board: Board): THREE.Group {
   const silk = new THREE.Group();
-  const topVerts: number[] = [];
-  const botVerts: number[] = [];
-  const push = (a: Point, b: Point, top: boolean, z: number): void => {
-    (top ? topVerts : botVerts).push(a.x, a.y, z, b.x, b.y, z);
+  const topShapes: THREE.Shape[] = [];
+  const botShapes: THREE.Shape[] = [];
+  const stroke = (a: Point, b: Point, width: number, top: boolean): void => {
+    const ring = capsuleRing(a, b, Math.max(width, 0.1) / 2);
+    (top ? topShapes : botShapes).push(shapeFrom(ring));
   };
 
   for (const c of board.components) {
     const top = c.side !== 'bottom';
-    const z = top ? BOARD_T + 0.08 : -0.08;
     const mirror = c.side === 'bottom';
     for (const item of c.footprint.silk) {
       if (item.kind === 'line') {
         const [a, b] = componentTransformPoints(c, [item.start, item.end]);
-        push(a, b, top, z);
+        stroke(a, b, item.width, top);
       } else if (item.kind === 'arc') {
         const [ws, we, wc] = componentTransformPoints(c, [item.start, item.end, item.center]);
         const pts = arcPoints(ws, we, wc, mirror ? !item.cw : item.cw);
-        for (let i = 0; i < pts.length - 1; i++) push(pts[i], pts[i + 1], top, z);
+        for (let i = 0; i < pts.length - 1; i++) stroke(pts[i], pts[i + 1], item.width, top);
       } else if (item.kind === 'circle') {
         const [wc] = componentTransformPoints(c, [item.center]);
         const pts = arcPoints({ x: wc.x + item.radius, y: wc.y }, { x: wc.x + item.radius, y: wc.y }, wc, false);
-        for (let i = 0; i < pts.length - 1; i++) push(pts[i], pts[i + 1], top, z);
+        for (let i = 0; i < pts.length - 1; i++) stroke(pts[i], pts[i + 1], item.width, top);
       } else if (item.kind === 'text') {
         const mesh = buildSilkTextMesh(footprintSilkTextSpec(c, item), top ? SILK_TOP : SILK_BOT, BOARD_T);
         if (mesh) silk.add(mesh);
       }
     }
+    // Refdes label — same pad-avoiding anchor as the Gerber legend / 2D
+    // renderer (most footprints carry no text silk of their own, so without
+    // this caps/resistors show no text at all in 3D).
+    const lp = componentLabelPlacement(board, c);
+    const label = buildSilkTextMesh(
+      { text: c.refdes, height: lp.height, at: lp.at, rotationDeg: lp.rotation, side: top ? 'top' : 'bottom' },
+      top ? SILK_TOP : SILK_BOT,
+      BOARD_T,
+    );
+    if (label) silk.add(label);
   }
   for (const line of board.silkLines) {
-    const top = line.layer !== 'B.Silk';
-    push(line.start, line.end, top, top ? BOARD_T + 0.08 : -0.08);
+    stroke(line.start, line.end, line.width, line.layer !== 'B.Silk');
   }
   for (const s of board.silk) {
     const top = s.layer !== 'B.Silk';
@@ -358,14 +384,15 @@ function buildSilkGroup(board: Board): THREE.Group {
     if (mesh) silk.add(mesh);
   }
 
-  for (const [verts, color] of [
-    [topVerts, SILK_TOP],
-    [botVerts, SILK_BOT],
+  for (const [shapes, color, z0] of [
+    [topShapes, SILK_TOP, BOARD_T + 0.065],
+    [botShapes, SILK_BOT, -0.08],
   ] as const) {
-    if (!verts.length) continue;
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-    silk.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color })));
+    if (!shapes.length) continue;
+    const geo = new THREE.ExtrudeGeometry(shapes as THREE.Shape[], { depth: 0.015, bevelEnabled: false });
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color }));
+    mesh.position.z = z0;
+    silk.add(mesh);
   }
   return silk;
 }
