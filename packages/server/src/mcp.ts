@@ -35,11 +35,12 @@ import {
   runDRC,
 } from '@flamingo/engine';
 import { exportFab } from '@flamingo/fab';
-import type { PartInfo, SearchOpts } from '@flamingo/parts';
+import type { JlcStock, PartInfo, SearchOpts } from '@flamingo/parts';
 import type { Doc } from './document.js';
 import type { RouteRunner } from './route.js';
 import { formatAutorouteSummary, runAutoroute } from './autoroute.js';
 import { pngDimensions, renderPNG } from './screenshot.js';
+import { checkStock, stockCheckEnabled } from './stock.js';
 import { exportStep } from './step.js';
 
 /**
@@ -50,6 +51,8 @@ import { exportStep } from './step.js';
 export interface PartsApi {
   fetchPart(lcsc: string): Promise<{ footprint: Footprint; info: PartInfo }>;
   searchParts(query: string, opts?: SearchOpts): Promise<PartInfo[]>;
+  /** JLCPCB assembly-library stock for one LCSC id (see @flamingo/parts fetchJlcStock). */
+  fetchStock(lcsc: string): Promise<JlcStock>;
 }
 
 export interface McpContext {
@@ -165,6 +168,29 @@ function formatDrcReport(violations: DrcViolation[]): string {
     lines.push(`[${v.rule}] ${v.message} — at (${fmt(v.at.x)}, ${fmt(v.at.y)}); items: ${itemsStr}`);
   }
   return lines.join('\n');
+}
+
+/**
+ * Geometry DRC plus the JLCPCB stock check. Stock-out findings join the
+ * gating violation list; low/unknown-stock findings come back separately as
+ * non-gating advisories. FLAMINGO_STOCK_CHECK=off skips the stock half.
+ */
+async function runDrcWithStock(
+  ctx: McpContext,
+  board: Board,
+): Promise<{ violations: DrcViolation[]; advisories: DrcViolation[] }> {
+  const violations = runDRC(board);
+  if (!stockCheckEnabled()) return { violations, advisories: [] };
+  const stock = await checkStock(board, (lcsc) => ctx.partsApi.fetchStock(lcsc));
+  return { violations: [...violations, ...stock.violations], advisories: stock.advisories };
+}
+
+function formatStockAdvisories(advisories: DrcViolation[]): string {
+  if (advisories.length === 0) return '';
+  return (
+    `\n\nStock advisories (informational, never block export):\n` +
+    advisories.map((v) => `[${v.rule}] ${v.message} — items: ${v.items.join(', ')}`).join('\n')
+  );
 }
 
 /**
@@ -902,10 +928,13 @@ export function createMcpServer(ctx: McpContext): McpServer {
     'run_drc',
     {
       description:
-        'Run design rule checks (DRC) against the current board using the fab ruleset matching its layer count (JLCPCB 2/4/6-layer capabilities). Checks clearance, track width, drill/annular/via-diameter minimums, copper-to-edge, keepouts, hole-to-hole spacing, courtyard overlap, silk-over-pad, unconnected nets, and outline issues. Returns a report of violations (an empty report means the board is DRC-clean) -- violations are reported as data, not a tool error.',
+        'Run design rule checks (DRC) against the current board using the fab ruleset matching its layer count (JLCPCB 2/4/6-layer capabilities). Checks clearance, track width, drill/annular/via-diameter minimums, copper-to-edge, keepouts, hole-to-hole spacing, courtyard overlap, silk-over-pad, unconnected nets, and outline issues. Also checks live JLCPCB assembly stock for every placed part: a part with less stock than the board needs is a gating stock-out violation, while low-stock (<100 boards buildable) and unknown-stock findings are reported as non-gating advisories (set FLAMINGO_STOCK_CHECK=off to skip). Returns a report of violations (an empty report means the board is DRC-clean) -- violations are reported as data, not a tool error.',
       inputSchema: {},
     },
-    () => textResult(formatDrcReport(runDRC(ctx.doc.board))),
+    async () => {
+      const { violations, advisories } = await runDrcWithStock(ctx, ctx.doc.board);
+      return textResult(formatDrcReport(violations) + formatStockAdvisories(advisories));
+    },
   );
 
   server.registerTool(
@@ -1014,10 +1043,10 @@ export function createMcpServer(ctx: McpContext): McpServer {
     async ({ outDir, waiveDrc }) => {
       const board = ctx.doc.board;
       const filled = fillAllZones(board);
-      const violations = runDRC(filled);
+      const { violations, advisories } = await runDrcWithStock(ctx, filled);
       if (violations.length > 0 && !waiveDrc) {
         return errorResult(
-          `${formatDrcReport(violations)}\n\nExport refused; fix the violation(s) above or pass waiveDrc:true to export anyway.`,
+          `${formatDrcReport(violations)}${formatStockAdvisories(advisories)}\n\nExport refused; fix the violation(s) above or pass waiveDrc:true to export anyway.`,
         );
       }
 
@@ -1038,6 +1067,8 @@ export function createMcpServer(ctx: McpContext): McpServer {
       if (violations.length > 0) {
         lines.push('', `Waived ${violations.length} DRC violation(s):`, formatDrcReport(violations));
       }
+      const advisoryBlock = formatStockAdvisories(advisories);
+      if (advisoryBlock) lines.push(advisoryBlock.trimStart());
       return textResult(lines.join('\n'));
     },
   );

@@ -56,6 +56,19 @@ node packages/server/dist/cli.js serve board.flamingo   # prints "Flamingo v0.1.
   `packages/engine/src/drc/rules.ts`); the 2-layer copper-clearance floor is
   0.127mm.
 
+## Stock check (part of DRC)
+
+- `run_drc` and `export_fab` check **live JLCPCB assembly stock** (jlcpcb.com
+  parts library — the stock that matters for JLC assembly; not LCSC retail and
+  not the stale EasyEDA `stock` field) for every placed part with an LCSC id.
+- `stock-out` (stock < quantity the board needs) is a **gating violation** —
+  export refuses just like a geometry violation; `waiveDrc: true` waives it.
+- `stock-low` (< 100 boards buildable) and `stock-unknown` (part not in the
+  JLC library, or lookup failed) are **non-gating advisories** — printed in
+  the report, never blocking, so network failures can't brick an export.
+- Lookups are cached in memory for 10 min; `FLAMINGO_STOCK_CHECK=off`
+  disables the check entirely.
+
 ## DRC, zones, and export (important)
 
 - **DRC gates export.** `export_fab` fills all copper zones (`fillAllZones`) and

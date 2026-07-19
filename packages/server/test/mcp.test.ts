@@ -33,12 +33,24 @@ const FIXTURE_INFO: PartInfo = {
   basic: true,
 };
 
+/**
+ * Per-test JLC stock override, keyed by LCSC id. Parts not listed here report
+ * a healthy 1,000,000 units so stock never affects tests that aren't about it.
+ * Reset in beforeEach.
+ */
+let mockStocks: Record<string, number | null> = {};
+
 const mockPartsApi: PartsApi = {
   fetchPart: async (lcsc: string) => {
     if (lcsc !== 'C25804') throw new Error(`unknown fixture part "${lcsc}"`);
     return { footprint: FIXTURE_FOOTPRINT, info: FIXTURE_INFO };
   },
   searchParts: async () => [FIXTURE_INFO],
+  fetchStock: async (lcsc: string) => ({
+    lcsc,
+    stock: lcsc in mockStocks ? mockStocks[lcsc] : 1_000_000,
+    basic: false,
+  }),
 };
 
 // Mock router: returns an SES that routes net N1 with a single F.Cu wire
@@ -107,6 +119,7 @@ describe('MCP endpoint', () => {
   let projectDir: string;
 
   beforeEach(async () => {
+    mockStocks = {};
     projectDir = await mkdtemp(join(tmpdir(), 'flamingo-mcp-test-'));
     doc = new Doc(newBoard('mcptest', 2));
     started = await startServer(doc, 0, {
@@ -703,6 +716,74 @@ describe('MCP endpoint', () => {
       expect(result.isError).toBeFalsy();
       const st = await stat(join(projectDir, 'fab', 'bom.csv'));
       expect(st.isFile()).toBe(true);
+    });
+  });
+
+  describe('stock check', () => {
+    /** Outline + two routed R0603s: geometry-DRC-clean (same as the clean-board run_drc test). */
+    async function makeCleanRoutedBoard(): Promise<void> {
+      await client.callTool({
+        name: 'set_board_outline',
+        arguments: {
+          shape: 'polygon',
+          points: [
+            { x: -10, y: -10 },
+            { x: 50, y: -10 },
+            { x: 50, y: 30 },
+            { x: -10, y: 30 },
+          ],
+        },
+      });
+      await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R1', x: 0, y: 0 } });
+      await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R2', x: 5, y: 0 } });
+      await client.callTool({ name: 'connect_pins', arguments: { net: 'N1', pins: ['R1.2', 'R2.1'] } });
+      await client.callTool({ name: 'autoroute', arguments: {} });
+    }
+
+    it('run_drc reports an out-of-stock part as a stock-out violation', async () => {
+      mockStocks.C25804 = 0;
+      await makeCleanRoutedBoard();
+      const result = await client.callTool({ name: 'run_drc', arguments: {} });
+      expect(result.isError).toBeFalsy();
+      const text = textOf(result as any);
+      expect(text).toContain('stock-out');
+      expect(text).toContain('C25804');
+      expect(text).toContain('1 violation');
+    });
+
+    it('run_drc reports low stock as a non-gating advisory on an otherwise clean board', async () => {
+      mockStocks.C25804 = 150; // 2 per board -> 75 boards < 100
+      await makeCleanRoutedBoard();
+      const result = await client.callTool({ name: 'run_drc', arguments: {} });
+      const text = textOf(result as any);
+      expect(text).toContain('DRC clean: 0 violations.');
+      expect(text).toContain('stock-low');
+      expect(text).toContain('C25804');
+    });
+
+    it('export_fab refuses on stock-out and exports with waiveDrc:true', async () => {
+      mockStocks.C25804 = 1; // need 2 per board
+      await makeCleanRoutedBoard();
+
+      const refused = await client.callTool({ name: 'export_fab', arguments: {} });
+      expect(refused.isError).toBe(true);
+      expect(textOf(refused as any)).toContain('stock-out');
+
+      const waived = await client.callTool({ name: 'export_fab', arguments: { waiveDrc: true } });
+      expect(waived.isError).toBeFalsy();
+      const text = textOf(waived as any);
+      expect(text).toContain('Waived');
+      expect(text).toContain('stock-out');
+    });
+
+    it('export_fab succeeds with a stock-low advisory reported but not gating', async () => {
+      mockStocks.C25804 = 150;
+      await makeCleanRoutedBoard();
+      const result = await client.callTool({ name: 'export_fab', arguments: {} });
+      expect(result.isError).toBeFalsy();
+      const text = textOf(result as any);
+      expect(text).not.toContain('Waived');
+      expect(text).toContain('stock-low');
     });
   });
 });

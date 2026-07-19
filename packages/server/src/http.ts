@@ -12,7 +12,7 @@ import type { Board, Op, RenderOpts } from '@flamingo/engine';
 import { fillAllZones, parseBoard, planZoneStitching, ratsnest, renderSVG, runDRC, splitLabelLayers } from '@flamingo/engine';
 import { exportFab, generateBOM, generateCPL, generateGerbers } from '@flamingo/fab';
 import type { Model3d } from '@flamingo/parts';
-import { extractModel3d, fetchPart, readCache, searchParts } from '@flamingo/parts';
+import { extractModel3d, fetchJlcStock, fetchPart, readCache, searchParts } from '@flamingo/parts';
 import { runAutoroute } from './autoroute.js';
 import { Doc } from './document.js';
 import type { McpContext, PartsApi } from './mcp.js';
@@ -849,7 +849,7 @@ export function startServer(
   const ctx: McpContext = {
     doc,
     projectDir: opts.projectDir ?? process.cwd(),
-    partsApi: opts.partsApi ?? { fetchPart, searchParts },
+    partsApi: opts.partsApi ?? { fetchPart, searchParts, fetchStock: fetchJlcStock },
     route: opts.routeRunner ?? defaultRouteRunner,
   };
   const uiDistDir = opts.uiDistDir ?? UI_DIST;
