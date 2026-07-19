@@ -24,6 +24,7 @@ import { check as courtyardOverlapCheck } from './checks/courtyardOverlap.js';
 import { check as silkOverPadCheck } from './checks/silkOverPad.js';
 import { check as unconnectedCheck } from './checks/unconnected.js';
 import { check as outlineCheck } from './checks/outline.js';
+import { check as bomCommentCheck } from './checks/bomComment.js';
 
 export type { RuleSet } from './rules.js';
 export { RULESETS } from './rules.js';
@@ -134,6 +135,7 @@ const CHECKS: CheckFn[] = [
   silkOverPadCheck,
   unconnectedCheck,
   outlineCheck,
+  bomCommentCheck,
 ];
 
 /** Run every DRC check against `b` and concatenate their violations. */

@@ -765,3 +765,58 @@ describe('runDRC — blinker-routed fixture (filled zones)', () => {
     expect(new Set(violations.map((v) => v.rule))).toEqual(new Set(['silk-over-pad']));
   });
 });
+
+// ---------------------------------------------------------------------------
+// bom-comment-conflict
+// ---------------------------------------------------------------------------
+
+describe('runDRC — bom-comment-conflict', () => {
+  function comp(refdes: string, x: number, lcsc: string, value?: string): ComponentInst {
+    return makeComponent(refdes, { x, y: 5 }, [smdPad('1', 'top', { x: 0, y: 0 })], {
+      lcsc,
+      fields: value !== undefined ? { value } : {},
+    });
+  }
+
+  it('flags one LCSC id appearing under different comments, once per id', () => {
+    const b = base();
+    b.components.push(
+      comp('R1', 5, 'C23162', '4.7k SDA'),
+      comp('R2', 15, 'C23162', '4.7k SCL'),
+      comp('R3', 25, 'C23162', '4.7k SDA'),
+    );
+    const v = violationsOf(b, 'bom-comment-conflict');
+    expect(v).toHaveLength(1);
+    expect(v[0].items.sort()).toEqual(['R1', 'R2', 'R3']);
+    expect(v[0].message).toContain('4.7k SDA');
+    expect(v[0].message).toContain('4.7k SCL');
+  });
+
+  it('passes when every instance of a part shares one comment', () => {
+    const b = base();
+    b.components.push(comp('R1', 5, 'C23162', '4.7k'), comp('R2', 15, 'C23162', '4.7k'));
+    expect(violationsOf(b, 'bom-comment-conflict')).toHaveLength(0);
+  });
+
+  it('different LCSC ids may have different comments', () => {
+    const b = base();
+    b.components.push(comp('R1', 5, 'C23162', '4.7k'), comp('R2', 15, 'C25803', '100k'));
+    expect(violationsOf(b, 'bom-comment-conflict')).toHaveLength(0);
+  });
+
+  it('mirrors the BOM fallback: value beats description beats lcsc', () => {
+    const b = base();
+    // No value on either — comments fall back identically, no conflict.
+    b.components.push(comp('R1', 5, 'C23162'), comp('R2', 15, 'C23162'));
+    expect(violationsOf(b, 'bom-comment-conflict')).toHaveLength(0);
+    // One gains a value: now the comments differ.
+    b.components[b.components.length - 1].fields.value = '4.7k';
+    expect(violationsOf(b, 'bom-comment-conflict')).toHaveLength(1);
+  });
+
+  it('skips components without a real LCSC id (testpoints etc.)', () => {
+    const b = base();
+    b.components.push(comp('TP1', 5, 'TESTPOINT', 'TP A'), comp('TP2', 15, 'TESTPOINT', 'TP B'));
+    expect(violationsOf(b, 'bom-comment-conflict')).toHaveLength(0);
+  });
+});

@@ -56,6 +56,8 @@ function csvField(v: string): string {
   return v;
 }
 
+// Mirrored by the engine's bom-comment-conflict DRC check (drc/checks/bomComment.ts).
+// Keep the two in sync.
 function commentOf(c: ComponentInst): string {
   return c.fields.value || c.fields.description || c.lcsc;
 }
