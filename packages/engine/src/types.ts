@@ -133,7 +133,7 @@ export interface Keepout {
   id: string;
   layers: LayerId[] | 'all';
   polygon: Point[];
-  keepout: { copper: boolean; via: boolean };
+  keepout: { copper: boolean; via: boolean; pour?: boolean };
 }
 
 export interface MountingHole {

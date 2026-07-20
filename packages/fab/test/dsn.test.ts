@@ -191,6 +191,27 @@ describe('exportDSN', () => {
     expect(dsn).not.toContain('(keepout "" (polygon B.Cu 0 6000 6000');
   });
 
+  it('does not emit any keepout line for a pour-only keepout', () => {
+    let b = tinyBoard();
+    b = apply(b, {
+      op: 'addKeepout',
+      keepout: {
+        layers: ['F.Cu'],
+        polygon: [
+          { x: 2, y: 2 },
+          { x: 4, y: 2 },
+          { x: 4, y: 4 },
+          { x: 2, y: 4 },
+        ],
+        keepout: { copper: false, via: false, pour: true },
+      },
+    });
+    const dsn = exportDSN(b);
+    // pour-only => no router keepout and no via_keepout.
+    expect(dsn).not.toContain('(keepout "" (polygon F.Cu 0 2000 2000');
+    expect(dsn).not.toContain('(via_keepout "" (polygon signal 0 2000 2000');
+  });
+
   it('bakes pad rotation (mod 180 != 0) into a polygon padstack', () => {
     const fp: Footprint = {
       name: 'ROT',

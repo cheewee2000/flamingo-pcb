@@ -712,13 +712,14 @@ export function createMcpServer(ctx: McpContext): McpServer {
         polygon: z.array(pointSchema).min(3).describe('Polygon vertices in mm'),
         copper: z.boolean().optional().describe('Block copper pours/tracks in this area (default true)'),
         via: z.boolean().optional().describe('Block vias in this area (default true)'),
+        pour: z.boolean().optional().describe('Block copper POUR/fill here without flagging tracks/pads or blocking the router (for RF antenna keepouts)'),
       },
     },
-    ({ layers, polygon, copper, via }) => {
+    ({ layers, polygon, copper, via, pour }) => {
       const keepout: Omit<Keepout, 'id'> = {
         layers,
         polygon,
-        keepout: { copper: copper ?? true, via: via ?? true },
+        keepout: { copper: copper ?? true, via: via ?? true, pour: pour ?? false },
       };
       const op: Op = { op: 'addKeepout', keepout };
       return applyAndReport(ctx, op, (result) => `Added keepout ${result.createdIds[0]}`);

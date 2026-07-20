@@ -200,6 +200,29 @@ describe('fillZone', () => {
     expect(inFill(fill, { x: 5, y: 5 })).toBe(true);
   });
 
+  it('clips the pour for a pour-only keepout (copper: false, pour: true)', () => {
+    let b = baseBoard(false);
+    b = apply(b, {
+      op: 'addKeepout',
+      keepout: {
+        layers: 'all',
+        polygon: [
+          { x: 4, y: 4 },
+          { x: 6, y: 4 },
+          { x: 6, y: 6 },
+          { x: 4, y: 6 },
+        ],
+        keepout: { copper: false, via: false, pour: true },
+      },
+    });
+    const fill = fillZone(b, zoneOf(b));
+    expect(fill.length).toBeGreaterThan(0);
+    // inside the pour-only keepout -> excluded from the pour
+    expect(inFill(fill, { x: 5, y: 5 })).toBe(false);
+    // clear of the keepout -> filled
+    expect(inFill(fill, { x: 1, y: 1 })).toBe(true);
+  });
+
   it('does not clip the pour for a copper keepout on a different layer', () => {
     let b = baseBoard(false);
     b = apply(b, {

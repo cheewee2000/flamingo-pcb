@@ -572,6 +572,7 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
       staticRow('layers', Array.isArray(k.layers) ? k.layers.join(' ') : String(k.layers)),
       checkboxRow('blocks copper', k.keepout.copper, (v) => edit({ keepout: { ...k.keepout, copper: v } })),
       checkboxRow('blocks via', k.keepout.via, (v) => edit({ keepout: { ...k.keepout, via: v } })),
+      checkboxRow('blocks pour only', k.keepout.pour ?? false, (v) => edit({ keepout: { ...k.keepout, pour: v } })),
     );
     // Axis-aligned rectangles (the common case) get editable bounds; anything
     // else shows its extent read-only.
