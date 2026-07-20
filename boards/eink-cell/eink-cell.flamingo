@@ -21635,10 +21635,10 @@
     },
     {
       "refdes": "R11",
-      "lcsc": "C22356360",
+      "lcsc": "C2907006",
       "footprint": {
         "name": "R0603",
-        "lcsc": "C22356360",
+        "lcsc": "C2907006",
         "pads": [
           {
             "number": "2",
@@ -21807,9 +21807,9 @@
       "rotation": 0,
       "side": "top",
       "fields": {
-        "value": "",
-        "description": "",
-        "mfr": "HKR(香港电阻)",
+        "value": "2.2R",
+        "description": "2.2Ω 1% 0603 (EPD RESE source-measure sense)",
+        "mfr": "FOJAN",
         "package": "R0603",
         "basic": false
       }
