@@ -260,6 +260,26 @@ describe('runDRC', () => {
     expect(violations.some((v) => v.items.includes('T1'))).toBe(true);
   });
 
+  it('keepout: copper item intersecting a pour-only keepout does NOT violate', () => {
+    const geom = (): Keepout['polygon'] => rectPoly(0, 0, 4, 4);
+    // Same geometry, two modes: pour-only flags nothing; copper flags the track.
+    const build = (mode: Keepout['keepout']) => {
+      const b = base();
+      b.nets.push({ name: 'N1', class: 'default', pins: [] });
+      b.keepouts.push({ id: 'K1', layers: ['F.Cu'], polygon: geom(), keepout: mode });
+      b.tracks.push({
+        id: 'T1',
+        layer: 'F.Cu',
+        width: 0.3,
+        net: 'N1',
+        seg: { type: 'line', start: { x: 1, y: 2 }, end: { x: 3, y: 2 } },
+      });
+      return violationsOf(b, 'keepout');
+    };
+    expect(build({ copper: false, via: false, pour: true }).some((v) => v.items.includes('T1'))).toBe(false);
+    expect(build({ copper: true, via: false }).some((v) => v.items.includes('T1'))).toBe(true);
+  });
+
   it('hole-to-hole: two same-net vias closer than ruleset minimum spacing violate', () => {
     const b = base();
     b.nets.push({ name: 'N1', class: 'default', pins: [] });

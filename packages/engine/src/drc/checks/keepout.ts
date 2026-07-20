@@ -27,6 +27,8 @@ export function check(b: Board, rules: RuleSet, items: CopperItem[]): DrcViolati
   for (const k of b.keepouts) {
     const layers = k.layers;
 
+    // Pour-only keepouts (keepout.pour, keepout.copper === false) intentionally
+    // do NOT flag copper items here — they only clip zone/pour fill.
     if (k.keepout.copper) {
       for (const item of items) {
         if (layers !== 'all' && !layers.includes(item.layer)) continue;

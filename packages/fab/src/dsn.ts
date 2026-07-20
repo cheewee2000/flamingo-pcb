@@ -310,7 +310,8 @@ export function exportDSN(b: Board, opts: ExportDSNOptions = {}): string {
   out.push('  (structure');
   for (const layer of L) out.push(`    (layer ${layer} (type signal))`);
   out.push(`    (boundary ${boundaryPath(b)})`);
-  // copper keepouts
+  // copper keepouts (router keepouts). Pour-only keepouts (keepout.pour) are
+  // deliberately excluded here: they clip the pour but must not constrain the router.
   for (const k of b.keepouts) {
     if (!k.keepout.copper) continue;
     const coords = k.polygon.map((p) => `${um(p.x)} ${um(p.y)}`).join(' ');

@@ -372,9 +372,11 @@ export function fillZone(b: Board, zone: Zone): Point[][] {
   // against) affecting this layer. Buffer by zone.clearance like every
   // other obstacle above for conservative, consistent behavior -- a pour
   // shouldn't hug a keepout boundary any closer than it hugs a track.
-  // Via-only keepouts (keepout.copper === false) don't clip copper pours.
+  // Via-only keepouts (keepout.copper === false, keepout.pour !== true) don't
+  // clip copper pours. Pour-only keepouts (keepout.pour === true) DO clip the
+  // pour here even though they don't flag tracks/pads in DRC or block routing.
   for (const k of b.keepouts) {
-    if (!k.keepout.copper) continue;
+    if (!k.keepout.copper && !k.keepout.pour) continue;
     if (k.layers !== 'all' && !k.layers.includes(zone.layer)) continue;
     obstacles.push(bufferPolygon(k.polygon, zone.clearance));
   }
