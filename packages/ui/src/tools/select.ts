@@ -32,6 +32,7 @@ import {
   bboxOf,
   componentTransformPoints,
   dist,
+  dragSegmentReshape,
   holeSlotCenterline,
   padOutline,
   padWorld,
@@ -172,6 +173,8 @@ export function createSelectTool(): Tool {
   let dragGrabRefdes: string | null = null;
   // Single-item silk-text / hole drag (never group-drags -- see file header).
   let dragItem: ItemDrag | null = null;
+  // Single line-track drag (arc tracks fall through to click-select).
+  let dragTrackId: string | null = null;
   let dragStartWorld: Point | null = null;
   let dragDelta: Point | null = null;
   // Marquee (window selection).
@@ -183,6 +186,7 @@ export function createSelectTool(): Tool {
     dragComps = [];
     dragGrabRefdes = null;
     dragItem = null;
+    dragTrackId = null;
     dragStartWorld = null;
     dragDelta = null;
     marqueeStart = null;
@@ -227,6 +231,15 @@ export function createSelectTool(): Tool {
         dragItem = { kind: hit.kind, id: hit.id, startAt: item.at };
         dragStartWorld = ev.world;
         dragDelta = { x: 0, y: 0 };
+      } else if (hit && hit.kind === 'track') {
+        // Line tracks are draggable; arc tracks fall through to click-select
+        // in onPointerUp (dragTrackId stays null, moved-check is skipped).
+        const t = state.board.tracks.find((x) => x.id === hit.id);
+        if (t && t.seg.type === 'line') {
+          dragTrackId = hit.id;
+          dragStartWorld = ev.world;
+          dragDelta = { x: 0, y: 0 };
+        }
       } else {
         // Anything else (empty space, zone, keepout, ...): a drag from here is
         // a window selection; a plain click falls through to click-select.
@@ -265,6 +278,18 @@ export function createSelectTool(): Tool {
       if (dragItem && dragDelta && moved) {
         ctx.sendOp(itemDropOp(dragItem, dragDelta));
         ctx.setState({ selection: { kind: dragItem.kind, id: dragItem.id } });
+        reset();
+        return;
+      }
+
+      // Drop a line-track drag: reshape the dragged segment + its neighbors
+      // in one transaction (single undo step). Arc tracks never arm
+      // dragTrackId, so they always fall through to click-select below.
+      if (dragTrackId && dragDelta && moved) {
+        const { removeIds, add } = dragSegmentReshape(board, dragTrackId, dragDelta);
+        if (removeIds.length > 0 || add.length > 0) {
+          ctx.sendOp({ op: 'reshapeTracks', remove: removeIds, add });
+        }
         reset();
         return;
       }
@@ -376,6 +401,14 @@ export function createSelectTool(): Tool {
         } else {
           const h = state.board.holes.find((it) => it.id === dragItem!.id);
           if (h) drawHoleGhost(ctx2d, view, h, at);
+        }
+        return;
+      }
+      if (dragTrackId) {
+        const { add } = dragSegmentReshape(state.board, dragTrackId, dragDelta);
+        for (const t of add) {
+          if (t.seg.type !== 'line') continue;
+          strokeOverlayPolygon(ctx2d, view, [t.seg.start, t.seg.end], SELECT_COLOR, 1.5, false);
         }
         return;
       }
