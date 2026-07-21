@@ -111,6 +111,38 @@ function focusPoint(p: Point): void {
   store.set({ view: centerOn(store.get().view, p, rect.width, rect.height) });
 }
 
+/** Fit the view to a net: the pads of its pins plus any routed tracks/vias. */
+function focusNet(netName: string): void {
+  const state = store.get();
+  const board = state.board;
+  if (!board) return;
+  const xs: number[] = [];
+  const ys: number[] = [];
+  const add = (p: Point): void => {
+    xs.push(p.x);
+    ys.push(p.y);
+  };
+  const net = board.nets.find((n) => n.name === netName);
+  for (const pin of net?.pins ?? []) {
+    const dot = pin.indexOf('.'); // pin ref is REFDES.PAD; refdes has no dot.
+    if (dot < 0) continue;
+    const comp = board.components.find((c) => c.refdes === pin.slice(0, dot));
+    const pad = comp?.footprint.pads.find((p) => p.number === pin.slice(dot + 1));
+    if (comp && pad) for (const pt of padOutline(comp, pad)) add(pt);
+  }
+  for (const t of board.tracks) {
+    if (t.net === netName) {
+      add(t.seg.start);
+      add(t.seg.end);
+    }
+  }
+  for (const v of board.vias) if (v.net === netName) add(v.at);
+  if (xs.length === 0) return;
+  const bbox = { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) };
+  const rect = canvas.getBoundingClientRect();
+  store.set({ view: fitToBoard(state.view, bbox, rect.width, rect.height) });
+}
+
 /**
  * After /api/open succeeds: clear all selection state and load the new board
  * by GET rather than waiting on the websocket push — the ws 'board' message
@@ -175,7 +207,7 @@ const panels = initPanels(
     drcList: document.getElementById('drc-list')!,
   },
   toolManager,
-  { focusComponent, boardOpened, sendOp: (op) => wsApi.sendOp(op), focusPoint },
+  { focusComponent, focusNet, boardOpened, sendOp: (op) => wsApi.sendOp(op), focusPoint },
 );
 
 const renderer = createRenderer(canvas, () => store.get(), (ctx2d, view, state) => {
