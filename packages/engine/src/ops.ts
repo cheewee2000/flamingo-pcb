@@ -57,6 +57,8 @@ export type Op =
   | { op: 'addTrack'; track: Omit<Track, 'id'> }
   | { op: 'addVia'; via: Omit<Via, 'id'> }
   | { op: 'addTracks'; tracks: Omit<Track, 'id'>[]; vias: Omit<Via, 'id'>[] }
+  | { op: 'reshapeTracks'; remove: string[]; add: Omit<Track, 'id'>[] }
+  | { op: 'transaction'; ops: Op[] }
   | { op: 'unroute'; net?: string }
   | { op: 'widenTracks'; nets?: string[] }
   | { op: 'setBoardMeta'; name?: string; copperLayers?: 2 | 4 | 6 };
@@ -431,6 +433,41 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
       });
       createdIds.push(...trackIds, ...viaIds);
       return ok(board, createdIds);
+    }
+
+    case 'reshapeTracks': {
+      const validLayers = copperLayersOf(board);
+      for (const t of op.add) {
+        if (!board.nets.some((n) => n.name === t.net)) {
+          return err(`Unknown net "${t.net}"`);
+        }
+        if (!validLayers.includes(t.layer)) {
+          return err(`Layer "${t.layer}" is not valid for a ${board.copperLayers}-layer board`);
+        }
+      }
+      const removeSet = new Set(op.remove);
+      board.tracks = board.tracks.filter((t) => !removeSet.has(t.id));
+      for (const t of op.add) {
+        const id = globalThis.crypto.randomUUID();
+        board.tracks.push({ id, ...t });
+        createdIds.push(id);
+      }
+      return ok(board, createdIds);
+    }
+
+    case 'transaction': {
+      // Snapshot-based undo makes this atomic for free: applyOp is pure and the
+      // document only commits on ok, so returning an error leaves the live doc
+      // untouched. Thread each sub-op through applyOp; one document.apply() =>
+      // one undo step for the whole transaction.
+      let cur: Board = board;
+      for (const sub of op.ops) {
+        const r = applyOp(cur, sub);
+        if (!r.ok) return r;
+        cur = r.board;
+        createdIds.push(...r.createdIds);
+      }
+      return ok(cur, createdIds);
     }
 
     case 'unroute': {
