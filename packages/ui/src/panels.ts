@@ -68,6 +68,8 @@ export interface PanelEls {
 /** Actions the panels trigger that need canvas/view access (owned by main.ts). */
 export interface PanelActions {
   focusComponent(refdes: string): void;
+  /** Fit the view to everything on a net (its pins' pads plus routed tracks/vias). */
+  focusNet(netName: string): void;
   /** Called after /api/open succeeds: refetch the board and refit the view. */
   boardOpened(): void;
   /** Send a board-mutating op over the websocket (property edits). */
@@ -131,6 +133,7 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
   let lastToolOptionsTool: string | null = null;
   let lastSelection: AppState['selection'] = null;
   let lastPropsBoard: AppState['board'] = null;
+  let lastSelectedNet: string | null = null;
   const netRows = new Map<string, HTMLElement>();
   const bomRowsByRefdes = new Map<string, HTMLElement>();
   let measureReadoutEl: HTMLElement | null = null;
@@ -1634,6 +1637,12 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
     if (state.routeStatus !== lastRouteStatus) {
       lastRouteStatus = state.routeStatus;
       routeStatusHandler?.(state.routeStatus);
+    }
+    // Newly selecting a net (row click, canvas pick, or arrow nav) fits the
+    // view to that net. Only on transition, so manual pan/zoom afterward sticks.
+    if (state.selectedNet !== lastSelectedNet) {
+      lastSelectedNet = state.selectedNet;
+      if (state.selectedNet !== null) actions.focusNet(state.selectedNet);
     }
     updateSelection(state);
     updateStatusBar(state);
