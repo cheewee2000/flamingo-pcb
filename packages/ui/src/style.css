@@ -107,6 +107,13 @@ body {
   font-weight: 700;
   font-size: 14px;
   letter-spacing: 0.04em;
+  color: var(--ink);
+  text-decoration: none;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.wordmark:hover {
+  opacity: 0.55;
 }
 
 .header-app {
@@ -783,13 +790,35 @@ body {
 }
 
 .net-list-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   padding: 2px 4px;
   cursor: pointer;
   border-radius: 0;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
   transition: opacity var(--dur) var(--ease);
+}
+
+.net-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.net-width {
+  margin-left: auto;
+  flex: none;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.net-list-item.selected .net-width {
+  color: var(--paper);
 }
 
 .net-list-item:hover {
