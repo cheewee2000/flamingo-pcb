@@ -70,7 +70,7 @@ export { applyOp } from './ops.js';
 
 // Re-export connectivity
 export type { RatLine, NetIsland } from './connectivity.js';
-export { padAnchor, connectedGroups, netIslands, ratsnest, isFullyRouted } from './connectivity.js';
+export { padAnchor, connectedGroups, netIslands, ratsnest, isFullyRouted, tracksAtPoint, tracksAtPad } from './connectivity.js';
 
 // Re-export track widening
 export type { WidenResult } from './widen.js';

@@ -51,6 +51,54 @@ export function padAnchor(b: Board, pinRef: string): Point {
   return padWorld(comp, pad).at;
 }
 
+/**
+ * Line-track endpoints coincident with `p` on `layer`, within EPSILON_MM.
+ * Arc segments are excluded (Phase 1 rubber-band reshapes lines only).
+ * Optionally filtered to one net.
+ */
+export function tracksAtPoint(
+  b: Board,
+  p: Point,
+  layer: LayerId,
+  net?: string,
+): { trackId: string; end: 'start' | 'end' }[] {
+  const out: { trackId: string; end: 'start' | 'end' }[] = [];
+  for (const t of b.tracks) {
+    if (t.layer !== layer) continue;
+    if (net !== undefined && t.net !== net) continue;
+    if (t.seg.type !== 'line') continue;
+    if (dist(t.seg.start, p) <= EPSILON_MM) out.push({ trackId: t.id, end: 'start' });
+    else if (dist(t.seg.end, p) <= EPSILON_MM) out.push({ trackId: t.id, end: 'end' });
+  }
+  return out;
+}
+
+/**
+ * Line-track endpoints touching a component's pad — its world anchor, on each
+ * copper layer the pad occupies. Built on padWorld + padCopperLayers +
+ * tracksAtPoint. Filtered to the pad's net when the pad belongs to one.
+ */
+export function tracksAtPad(
+  b: Board,
+  refdes: string,
+  padNumber: string,
+): { trackId: string; end: 'start' | 'end'; layer: LayerId }[] {
+  const comp = b.components.find((c) => c.refdes === refdes);
+  if (!comp) return [];
+  const pad = comp.footprint.pads.find((p) => p.number === padNumber);
+  if (!pad) return [];
+  const at = padWorld(comp, pad).at;
+  const net = b.nets.find((n) => n.pins.includes(`${refdes}.${padNumber}`))?.name;
+  const layers = padCopperLayers(pad, comp.side, copperLayersOf(b));
+  const out: { trackId: string; end: 'start' | 'end'; layer: LayerId }[] = [];
+  for (const layer of layers) {
+    for (const hit of tracksAtPoint(b, at, layer, net)) {
+      out.push({ ...hit, layer });
+    }
+  }
+  return out;
+}
+
 
 interface PinNode {
   kind: 'pin';
