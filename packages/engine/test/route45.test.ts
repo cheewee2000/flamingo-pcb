@@ -35,4 +35,16 @@ describe('route45', () => {
       L(0, 0, -2, -2), L(-2, -2, -2, -5),
     ]);
   });
+  it('axis-first elbow: taller-than-wide goes vertical then diagonal', () => {
+    // dx=2, dy=5, diagFirst:false -> vertical covers 3, then diagonal covers 2
+    expect(route45({ x: 0, y: 0 }, { x: 2, y: 5 }, { diagFirst: false })).toEqual([
+      L(0, 0, 0, 3), L(0, 3, 2, 5),
+    ]);
+  });
+  it('axis-first elbow: taller-than-wide, negative directions', () => {
+    // dx=-2, dy=-5, diagFirst:false -> vertical covers -3, then diagonal covers -2
+    expect(route45({ x: 0, y: 0 }, { x: -2, y: -5 }, { diagFirst: false })).toEqual([
+      L(0, 0, 0, -3), L(0, -3, -2, -5),
+    ]);
+  });
 });
