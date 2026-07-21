@@ -137,7 +137,7 @@ function boardOpened(): void {
   })();
 }
 
-initPanels(
+const panels = initPanels(
   {
     layerList: document.getElementById('layer-list')!,
     netList: document.getElementById('net-list')!,
@@ -332,6 +332,14 @@ window.addEventListener('keydown', (ev) => {
     return;
   }
   if (isTypingTarget(ev)) return;
+
+  // Arrow keys walk the selected sidebar list (nets, or BOM components).
+  if ((ev.key === 'ArrowDown' || ev.key === 'ArrowUp') && !ev.metaKey && !ev.ctrlKey && !ev.altKey) {
+    if (panels.navigateList(ev.key === 'ArrowDown' ? 1 : -1)) {
+      ev.preventDefault();
+      return;
+    }
+  }
 
   if (ev.key === '/') {
     // Focus the header search box (Escape or a pick returns focus to the canvas).

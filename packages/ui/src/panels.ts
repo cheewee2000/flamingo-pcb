@@ -121,7 +121,12 @@ function hoverText(hit: HitInfo): string {
 }
 
 /** Wire the layer list, net list, BOM, properties, board-info panel, toolbar, and status bar to `store`. */
-export function initPanels(els: PanelEls, toolManager: ToolManager, actions: PanelActions): void {
+export interface PanelsApi {
+  /** Step the sidebar selection to the adjacent net / BOM item. dir: +1 down, -1 up. Returns true when handled. */
+  navigateList(dir: 1 | -1): boolean;
+}
+
+export function initPanels(els: PanelEls, toolManager: ToolManager, actions: PanelActions): PanelsApi {
   let lastBoard: AppState['board'] = null;
   let lastToolOptionsTool: string | null = null;
   let lastSelection: AppState['selection'] = null;
@@ -713,6 +718,40 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
     for (const [refdes, chip] of bomRowsByRefdes) {
       chip.classList.toggle('selected', refdes === selRefdes || multi.has(refdes));
     }
+  }
+
+  /**
+   * Keyboard navigation for the sidebar lists. With a net selected, Arrow
+   * Up/Down step to the adjacent net (alphabetical order, as rendered); with a
+   * component (BOM item) selected, they step to the adjacent refdes in BOM
+   * render order and recenter the view (same path as clicking a chip). Clamps
+   * at the ends. Returns true when it owns the key so the caller can preventDefault.
+   */
+  function navigateList(dir: 1 | -1): boolean {
+    const state = store.get();
+    if (state.selectedNet !== null && netRows.has(state.selectedNet)) {
+      const names = [...netRows.keys()];
+      const idx = names.indexOf(state.selectedNet);
+      const next = names[Math.max(0, Math.min(names.length - 1, idx + dir))];
+      if (next && next !== state.selectedNet) {
+        store.set({ selectedNet: next });
+        netRows.get(next)?.scrollIntoView({ block: 'nearest' });
+      }
+      return true;
+    }
+    if (state.selection?.kind === 'component') {
+      const refs = [...bomRowsByRefdes.keys()];
+      const idx = refs.indexOf(state.selection.refdes);
+      if (idx >= 0) {
+        const next = refs[Math.max(0, Math.min(refs.length - 1, idx + dir))];
+        if (next && next !== state.selection.refdes) {
+          actions.focusComponent(next);
+          bomRowsByRefdes.get(next)?.scrollIntoView({ block: 'nearest' });
+        }
+        return true;
+      }
+    }
+    return false;
   }
 
   function updateStatusBar(state: AppState): void {
@@ -1669,4 +1708,6 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
   wireExportStepControls();
   store.subscribe(onStateChange);
   onStateChange(store.get());
+
+  return { navigateList };
 }
