@@ -133,7 +133,6 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
   let lastToolOptionsTool: string | null = null;
   let lastSelection: AppState['selection'] = null;
   let lastPropsBoard: AppState['board'] = null;
-  let lastSelectedNet: string | null = null;
   const netRows = new Map<string, HTMLElement>();
   const bomRowsByRefdes = new Map<string, HTMLElement>();
   let measureReadoutEl: HTMLElement | null = null;
@@ -178,8 +177,21 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
     netRows.clear();
     const board = state.board;
     if (!board) return;
-    // Each net's "thickness" is the track width of its net class.
+    // A net's class track width — the fallback shown for unrouted nets.
     const widthByClass = new Map(board.netClasses.map((c) => [c.name, c.trackWidth]));
+    // The distinct widths actually present on each net's tracks. A routed net
+    // can carry several (thin escape spans at fine-pitch pads plus class-width
+    // runs elsewhere after the escape-width retry + widen passes), so list them.
+    const widthsByNet = new Map<string, Set<number>>();
+    for (const t of board.tracks) {
+      let s = widthsByNet.get(t.net);
+      if (!s) {
+        s = new Set();
+        widthsByNet.set(t.net, s);
+      }
+      s.add(Math.round(t.width * 1000) / 1000);
+    }
+    const fmt = (w: number): string => String(Math.round(w * 1000) / 1000);
     const nets = [...board.nets].sort((a, b) => a.name.localeCompare(b.name));
     for (const net of nets) {
       const row = document.createElement('div');
@@ -189,8 +201,13 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
       nameSpan.textContent = net.name;
       const widthSpan = document.createElement('span');
       widthSpan.className = 'net-width';
-      const w = widthByClass.get(net.class);
-      widthSpan.textContent = w != null ? `${w}mm` : '—';
+      const actual = widthsByNet.get(net.name);
+      if (actual && actual.size > 0) {
+        widthSpan.textContent = `${[...actual].sort((a, b) => a - b).map(fmt).join(', ')}mm`;
+      } else {
+        const w = widthByClass.get(net.class);
+        widthSpan.textContent = w != null ? `${fmt(w)}mm` : '—';
+      }
       row.append(nameSpan, widthSpan);
       row.addEventListener('click', () => {
         const cur = store.get().selectedNet;
@@ -1637,12 +1654,6 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
     if (state.routeStatus !== lastRouteStatus) {
       lastRouteStatus = state.routeStatus;
       routeStatusHandler?.(state.routeStatus);
-    }
-    // Newly selecting a net (row click, canvas pick, or arrow nav) fits the
-    // view to that net. Only on transition, so manual pan/zoom afterward sticks.
-    if (state.selectedNet !== lastSelectedNet) {
-      lastSelectedNet = state.selectedNet;
-      if (state.selectedNet !== null) actions.focusNet(state.selectedNet);
     }
     updateSelection(state);
     updateStatusBar(state);
