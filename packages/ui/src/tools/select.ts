@@ -27,8 +27,17 @@
  * Task 9's viewer did (via the narrower `hitTest`).
  */
 
-import type { ComponentInst, MountingHole, Op, Point, SilkText } from '@flamingo/engine';
-import { bboxOf, componentTransformPoints, dist, holeSlotCenterline, padOutline } from '@flamingo/engine';
+import type { Board, ComponentInst, MountingHole, Op, Point, SilkText } from '@flamingo/engine';
+import {
+  bboxOf,
+  componentTransformPoints,
+  dist,
+  holeSlotCenterline,
+  padOutline,
+  padWorld,
+  rubberBandReshape,
+  tracksAtPad,
+} from '@flamingo/engine';
 import { hitEditTarget, hitEditTargets, hitTest, sameEditTarget } from '../hit-test.js';
 import type { PointerEvt, Tool, ToolCtx } from './tool.js';
 import { fillOverlayPolygon, strokeOverlayPolygon } from './overlay-utils.js';
@@ -61,6 +70,46 @@ export function itemDropOp(item: ItemDrag, delta: Point): Op {
   return item.kind === 'silk'
     ? { op: 'editSilkText', id: item.id, text: { at } }
     : { op: 'editHole', id: item.id, hole: { at } };
+}
+
+/**
+ * Build the drop op for a component drag: a transaction that moves the
+ * component(s) AND rubber-bands their connected line traces, or a bare move
+ * when nothing is attached. Pure given the pre-drag board + drag delta --
+ * used both for the drop handler and the live drag ghost (drawOverlay), so
+ * the preview always matches what gets committed.
+ */
+export function componentDropOp(
+  board: Board,
+  drag: { refdes: string; startAt: Point }[],
+  delta: Point,
+): Op {
+  const moves = drag.map((d) => ({ refdes: d.refdes, at: { x: d.startAt.x + delta.x, y: d.startAt.y + delta.y } }));
+  const moved = new Set(moves.map((m) => m.refdes));
+  // Post-move anchors from a shadow board.
+  const shadow: Board = structuredClone(board);
+  for (const m of moves) {
+    const c = shadow.components.find((x) => x.refdes === m.refdes);
+    if (c) c.at = m.at;
+  }
+  const reshapeMoves: { trackId: string; end: 'start' | 'end'; newAt: Point }[] = [];
+  for (const refdes of moved) {
+    const c = shadow.components.find((x) => x.refdes === refdes);
+    if (!c) continue;
+    for (const pad of c.footprint.pads) {
+      const newAt = padWorld(c, pad).at;
+      for (const h of tracksAtPad(board, refdes, pad.number)) {
+        reshapeMoves.push({ trackId: h.trackId, end: h.end, newAt });
+      }
+    }
+  }
+  const { removeIds, add } = rubberBandReshape(board, reshapeMoves);
+  const moveOp: Op =
+    moves.length === 1
+      ? { op: 'moveComponent', refdes: moves[0].refdes, at: moves[0].at }
+      : { op: 'moveComponents', moves };
+  if (removeIds.length === 0 && add.length === 0) return moveOp;
+  return { op: 'transaction', ops: [moveOp, { op: 'reshapeTracks', remove: removeIds, add }] };
 }
 
 function componentWorldBBox(c: ComponentInst): { minX: number; minY: number; maxX: number; maxY: number } | null {
@@ -203,17 +252,10 @@ export function createSelectTool(): Tool {
       }
       const moved = downScreen !== null && dist(downScreen, ev.screen) > DRAG_THRESHOLD_PX;
 
-      // Drop a component drag (single or group).
+      // Drop a component drag (single or group): move + rubber-band any
+      // connected line traces in one transaction (single undo step).
       if (dragComps.length > 0 && dragDelta && moved) {
-        const moves = dragComps.map((d) => ({
-          refdes: d.refdes,
-          at: { x: d.startAt.x + dragDelta!.x, y: d.startAt.y + dragDelta!.y },
-        }));
-        if (moves.length === 1) {
-          ctx.sendOp({ op: 'moveComponent', refdes: moves[0].refdes, at: moves[0].at });
-        } else {
-          ctx.sendOp({ op: 'moveComponents', moves });
-        }
+        ctx.sendOp(componentDropOp(board, dragComps, dragDelta));
         if (dragGrabRefdes) ctx.setState({ selection: { kind: 'component', refdes: dragGrabRefdes } });
         reset();
         return;
@@ -349,6 +391,16 @@ export function createSelectTool(): Tool {
           if (ring.length < 2) continue;
           strokeOverlayPolygon(ctx2d, view, componentTransformPoints(ghost, ring), SELECT_COLOR, 1.5, true);
         }
+      }
+      // Ghost the rubber-banded traces (same geometry the drop will commit).
+      const dropOp = componentDropOp(state.board, dragComps, dragDelta);
+      const reshape =
+        dropOp.op === 'transaction'
+          ? dropOp.ops.find((o): o is Extract<Op, { op: 'reshapeTracks' }> => o.op === 'reshapeTracks')
+          : undefined;
+      for (const t of reshape?.add ?? []) {
+        if (t.seg.type !== 'line') continue;
+        strokeOverlayPolygon(ctx2d, view, [t.seg.start, t.seg.end], SELECT_COLOR, 1.5, false);
       }
     },
   };
