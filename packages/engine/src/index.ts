@@ -76,6 +76,9 @@ export { padAnchor, connectedGroups, netIslands, ratsnest, isFullyRouted, tracks
 export type { WidenResult } from './widen.js';
 export { widenTracks } from './widen.js';
 
+// Re-export reroute (45° path primitives)
+export { route45 } from './reroute.js';
+
 // Re-export renderer
 export type { RenderOpts, SplitLayers } from './render.js';
 export {
