@@ -23,7 +23,8 @@ running DRC, and exporting a
 - **Live browser editor** — WebSocket-synced canvas view with selection and
   drag editing, a via tool (hover copper to inherit its net), silk text/line
   editing, board search, zone & label layer toggles, copper island tints, a
-  one-click **Lock & Route** button, and **Run DRC** with red canvas markers.
+  nets panel showing each net's track width, a one-click **Lock & Route**
+  button, and **Run DRC** with red canvas markers.
 - **3D view + STEP export** — interactive 3D board with real vendor component
   models, 3D silkscreen, and STEP export in two flavours: light courtyard
   blocks or full detail (copper, silk, drilled barrels).
