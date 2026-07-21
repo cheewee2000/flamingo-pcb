@@ -170,17 +170,26 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
     netRows.clear();
     const board = state.board;
     if (!board) return;
-    const names = board.nets.map((n) => n.name).sort((a, b) => a.localeCompare(b));
-    for (const name of names) {
+    // Each net's "thickness" is the track width of its net class.
+    const widthByClass = new Map(board.netClasses.map((c) => [c.name, c.trackWidth]));
+    const nets = [...board.nets].sort((a, b) => a.name.localeCompare(b.name));
+    for (const net of nets) {
       const row = document.createElement('div');
       row.className = 'net-list-item';
-      row.textContent = name;
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'net-name';
+      nameSpan.textContent = net.name;
+      const widthSpan = document.createElement('span');
+      widthSpan.className = 'net-width';
+      const w = widthByClass.get(net.class);
+      widthSpan.textContent = w != null ? `${w}mm` : '—';
+      row.append(nameSpan, widthSpan);
       row.addEventListener('click', () => {
         const cur = store.get().selectedNet;
-        store.set({ selectedNet: cur === name ? null : name });
+        store.set({ selectedNet: cur === net.name ? null : net.name });
       });
       els.netList.appendChild(row);
-      netRows.set(name, row);
+      netRows.set(net.name, row);
     }
   }
 
@@ -694,8 +703,10 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
       const selected = state.selectedNet === name;
       row.classList.toggle('selected', selected);
       // Island count badge on the selected net (matches the renderer's tinting).
+      // Update only the name span so the trackWidth span (.net-width) survives.
       const count = selected && state.board ? islandsFor(state.board, name).length : 0;
-      row.textContent = count > 1 ? `${name} — ${count} islands` : name;
+      const nameSpan = row.querySelector('.net-name');
+      if (nameSpan) nameSpan.textContent = count > 1 ? `${name} — ${count} islands` : name;
     }
     const selRefdes = state.selection?.kind === 'component' ? state.selection.refdes : null;
     const multi = new Set(state.multiSelection);
