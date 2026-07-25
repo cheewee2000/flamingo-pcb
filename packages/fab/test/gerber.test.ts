@@ -3,7 +3,15 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createParser, GERBER, DRILL, UNIMPLEMENTED } from '@tracespace/parser';
-import { newBoard, parseBoard, fillZone, fillAllZones, pointInPolygon, componentLabelPlacement } from '@flamingo/engine';
+import {
+  newBoard,
+  parseBoard,
+  fillZone,
+  fillAllZones,
+  pointInPolygon,
+  componentLabelPlacement,
+  RULESETS,
+} from '@flamingo/engine';
 import type { Board, Point } from '@flamingo/engine';
 import { generateGerbers, buildDrills } from '../src/gerber.js';
 
@@ -346,6 +354,154 @@ describe('generateGerbers - slotted mounting hole annulus', () => {
     // And the plated slot still drills as a G85 routed slot.
     const drl = files.get('mh-PTH.DRL')!;
     expect(drl).toMatch(/X1\.000Y5\.000G85X9\.000Y5\.000/);
+  });
+});
+
+/** Every circle-aperture diameter (mm) defined in a Gerber file. */
+function apertureDiameters(gerber: string): number[] {
+  return [...gerber.matchAll(/%ADD\d+C,([\d.]+)\*%/g)].map((m) => Number(m[1]));
+}
+
+describe('generateGerbers - silk line width floor', () => {
+  /** Board + footprint silk, all authored below JLCPCB's 0.15mm legend minimum. */
+  function thinSilkBoard(): Board {
+    const b = newBoard('thin', 2);
+    b.silk.push({ id: 'S1', layer: 'F.Silk', at: { x: 5, y: 5 }, text: 'TP1', height: 0.8, rotation: 0 });
+    b.silkLines.push({ id: 'SL1', layer: 'F.Silk', start: { x: 0, y: 0 }, end: { x: 9, y: 0 }, width: 0.1 });
+    b.components.push({
+      refdes: 'R1',
+      lcsc: 'X',
+      at: { x: 2, y: 2 },
+      rotation: 0,
+      side: 'top',
+      fields: {},
+      footprint: {
+        name: 'P',
+        lcsc: 'X',
+        courtyard: [],
+        silk: [
+          { kind: 'line', start: { x: -1, y: 0 }, end: { x: 1, y: 0 }, width: 0.1 },
+          { kind: 'circle', center: { x: 0, y: 1 }, radius: 0.3, width: 0.08 },
+          { kind: 'text', at: { x: 0, y: 2 }, text: 'A', height: 0.6, rotation: 0 },
+        ],
+        pads: [
+          { number: '1', shape: 'rect', at: { x: 0, y: 0 }, rotation: 0, size: { w: 1, h: 0.6 }, layer: 'top' },
+        ],
+      },
+    });
+    return b;
+  }
+
+  it('never emits a legend aperture below the ruleset minSilkWidth (0.15mm)', () => {
+    const gto = generateGerbers(thinSilkBoard()).files.get('thin.GTO')!;
+    assertGerberParses(gto);
+    const diameters = apertureDiameters(gto);
+    expect(diameters.length).toBeGreaterThan(0);
+    for (const d of diameters) expect(d).toBeGreaterThanOrEqual(RULESETS['jlcpcb-2l'].minSilkWidth);
+    // Nothing at the old 0.12mm floor, or at the authored sub-minimum widths.
+    expect(gto).not.toMatch(/%ADD\d+C,0\.(0\d+|1[0-4]\d*)\*%/);
+  });
+
+  it('leaves silk already at or above the floor untouched', () => {
+    const b = newBoard('wide', 2);
+    // height 2.0 -> stroke 2.0 * 0.12 = 0.24mm, well over the floor
+    b.silk.push({ id: 'S1', layer: 'F.Silk', at: { x: 5, y: 5 }, text: 'X', height: 2, rotation: 0 });
+    b.silkLines.push({ id: 'SL1', layer: 'F.Silk', start: { x: 0, y: 0 }, end: { x: 9, y: 0 }, width: 0.3 });
+    const gto = generateGerbers(b).files.get('wide.GTO')!;
+    expect(apertureDiameters(gto).sort((x, y) => x - y)).toEqual([0.24, 0.3]);
+  });
+});
+
+describe('generateGerbers - board profile (GKO)', () => {
+  /** 60x30 rectangular outline, plus whatever holes the caller pushes. */
+  function outlineBoard(name = 'gko'): Board {
+    const b = newBoard(name, 2);
+    b.outline = [
+      { type: 'line', start: { x: 0, y: 0 }, end: { x: 60, y: 0 } },
+      { type: 'line', start: { x: 60, y: 0 }, end: { x: 60, y: 30 } },
+      { type: 'line', start: { x: 60, y: 30 }, end: { x: 0, y: 30 } },
+      { type: 'line', start: { x: 0, y: 30 }, end: { x: 0, y: 0 } },
+    ];
+    return b;
+  }
+
+  /** The 49x3mm display-FPC slot: centerline (7,15)..(53,15), radius 1.5. */
+  const fpcSlot = {
+    id: 'H1',
+    at: { x: 30, y: 15 },
+    drill: 3,
+    padDiameter: 3,
+    plated: false,
+    slotLength: 49,
+  } as const;
+
+  it('emits a closed contour for a non-plated milled slot, not just the outer profile', () => {
+    const bare = generateGerbers(outlineBoard()).files.get('gko.GKO')!;
+
+    const b = outlineBoard();
+    b.holes.push({ ...fpcSlot });
+    const gko = generateGerbers(b).files.get('gko.GKO')!;
+    assertGerberParses(gko);
+
+    // buildEdge emits the outline first, then each slot contour, so everything
+    // past the bare board's coordinate list is the slot.
+    const bareCoords = drawCoords(bare);
+    const coords = drawCoords(gko);
+    expect(coords.length).toBeGreaterThan(bareCoords.length);
+    expect(coords.slice(0, bareCoords.length)).toEqual(bareCoords);
+    const contour = coords.slice(bareCoords.length);
+
+    // The contour is closed (returns to its first point).
+    expect(contour.length).toBeGreaterThan(3);
+    expect(contour[contour.length - 1]).toEqual(contour[0]);
+
+    // ...and traces the capsule of the milled opening: centerline (7,15)..(53,15)
+    // swept by drill/2 = 1.5 -> x 5.5..54.5, y 13.5..16.5. The straight sides
+    // land the y extremes exactly; the end caps are tessellated, so x is close.
+    const xs = contour.map((p) => p[0] / 1e6);
+    const ys = contour.map((p) => p[1] / 1e6);
+    expect(Math.min(...ys)).toBe(13.5);
+    expect(Math.max(...ys)).toBe(16.5);
+    expect(Math.min(...xs)).toBeCloseTo(5.5, 2);
+    expect(Math.max(...xs)).toBeCloseTo(54.5, 2);
+
+    // Belt and braces: the G85 stays in the drill file too.
+    expect(generateGerbers(b).files.get('gko-NPTH.DRL')).toMatch(/X7\.000Y15\.000G85X53\.000Y15\.000/);
+  });
+
+  it('leaves plated slots and round holes to the drill file (no contour)', () => {
+    const bare = generateGerbers(outlineBoard()).files.get('gko.GKO')!;
+
+    // A plated slot would be routed (losing its plating) if drawn on the profile.
+    const plated = outlineBoard();
+    plated.holes.push({ ...fpcSlot, plated: true });
+    expect(generateGerbers(plated).files.get('gko.GKO')).toBe(bare);
+
+    // A round mounting hole is conveyed by the drill file alone.
+    const round = outlineBoard();
+    round.holes.push({ id: 'H2', at: { x: 5, y: 5 }, drill: 2.2, padDiameter: 2.2, plated: false });
+    expect(generateGerbers(round).files.get('gko.GKO')).toBe(bare);
+  });
+});
+
+describe('generateGerbers - filename sanitization', () => {
+  it('collapses spaces in the board name to underscores without touching board.name', () => {
+    const b = newBoard('Super Pager', 2);
+    const { files } = generateGerbers(b);
+    for (const name of files.keys()) expect(name).not.toMatch(/\s/);
+    expect(files.has('Super_Pager.GTL')).toBe(true);
+    expect(files.has('Super_Pager.GBL')).toBe(true);
+    expect(b.name).toBe('Super Pager'); // display name untouched
+  });
+
+  it('replaces each run of unsafe characters with a single underscore', () => {
+    const names = [...generateGerbers(newBoard('a b/c:d', 2)).files.keys()];
+    expect(names).toContain('a_b_c_d.GTL');
+  });
+
+  it('falls back to "board" for an unnamed board', () => {
+    const names = [...generateGerbers(newBoard('', 2)).files.keys()];
+    expect(names).toContain('board.GTL');
   });
 });
 

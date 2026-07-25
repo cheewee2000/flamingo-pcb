@@ -17,7 +17,10 @@
  *  - Soldermask openings = pads dilated 0.05mm; vias are TENTED (omitted from
  *    the mask). Mask files carry TF.FilePolarity Negative.
  *  - Paste = SMD pads exactly (no expansion), through-hole pads excluded.
- *  - Silk text is stroked with a local vector font (strokefont.ts).
+ *  - Silk text is stroked with a local vector font (strokefont.ts); every silk
+ *    aperture is floored at the ruleset's minSilkWidth (see buildSilk).
+ *  - The profile (.GKO) carries the outer outline plus a closed contour for
+ *    every non-plated milled slot (see buildEdge).
  */
 
 import type { Board, ComponentInst, LayerId, Pad, PathSeg, Point } from '@flamingo/engine';
@@ -34,6 +37,7 @@ import {
   isSlot,
   holeSlotCenterline,
   capsulePolygon,
+  RULESETS,
 } from '@flamingo/engine';
 import { strokeText } from './strokefont.js';
 import { buildDrills } from './excellon.js';
@@ -339,8 +343,16 @@ function buildSilk(b: Board, side: 'F' | 'B'): string {
   const compSide: 'top' | 'bottom' = side === 'F' ? 'top' : 'bottom';
   const g = new GerberBuilder();
 
+  // Every silk stroke is floored at the fab tier's minimum legend line width
+  // (RuleSet.minSilkWidth -- 0.15mm on all JLCPCB tiers). Below it the fab
+  // thins or drops the legend outright, which costs exactly the labels needed
+  // for bring-up. Applied at the aperture so it covers footprint lines/arcs/
+  // circles and board-level silk lines as well as stroked text.
+  const minSilk = RULESETS[b.rules].minSilkWidth;
+  const silkAperture = (width: number): number => g.aperture(`C,${ap(Math.max(minSilk, width))}`);
+
   const strokes = (polys: Point[][], width: number): void => {
-    g.select(g.aperture(`C,${ap(width)}`));
+    g.select(silkAperture(width));
     for (const poly of polys) g.drawPolyline(poly);
   };
 
@@ -351,26 +363,26 @@ function buildSilk(b: Board, side: 'F' | 'B'): string {
       switch (item.kind) {
         case 'line': {
           const [s, e] = componentTransformPoints(comp, [item.start, item.end]);
-          g.select(g.aperture(`C,${ap(item.width)}`));
+          g.select(silkAperture(item.width));
           g.drawSeg({ type: 'line', start: s, end: e });
           break;
         }
         case 'arc': {
           const [s, e, ctr] = componentTransformPoints(comp, [item.start, item.end, item.center]);
-          g.select(g.aperture(`C,${ap(item.width)}`));
+          g.select(silkAperture(item.width));
           g.drawSeg({ type: 'arc', start: s, end: e, center: ctr, cw: mirror ? !item.cw : item.cw });
           break;
         }
         case 'circle': {
           const [ctr] = componentTransformPoints(comp, [item.center]);
-          g.select(g.aperture(`C,${ap(item.width)}`));
+          g.select(silkAperture(item.width));
           g.drawCircle(ctr, item.radius);
           break;
         }
         case 'text': {
           const [at] = componentTransformPoints(comp, [item.at]);
           const rot = componentTransformRotation(comp, item.rotation);
-          strokes(strokeText(item.text, at, item.height, rot, mirror), Math.max(0.12, item.height * 0.12));
+          strokes(strokeText(item.text, at, item.height, rot, mirror), item.height * 0.12);
           break;
         }
       }
@@ -386,13 +398,13 @@ function buildSilk(b: Board, side: 'F' | 'B'): string {
   // fabbed board's underside — matching the 3D viewer's B.Silk convention.
   for (const s of b.silk) {
     if (s.layer !== silkLayer) continue;
-    strokes(strokeText(s.text, s.at, s.height, s.rotation, side === 'B'), Math.max(0.12, s.height * 0.12));
+    strokes(strokeText(s.text, s.at, s.height, s.rotation, side === 'B'), s.height * 0.12);
   }
 
   // Board-level silk lines (mechanical reference outlines) stroked at their width.
   for (const line of b.silkLines) {
     if (line.layer !== silkLayer) continue;
-    g.select(g.aperture(`C,${ap(line.width)}`));
+    g.select(silkAperture(line.width));
     g.drawSeg({ type: 'line', start: line.start, end: line.end });
   }
 
@@ -400,11 +412,37 @@ function buildSilk(b: Board, side: 'F' | 'B'): string {
   return g.assemble(fn, 'Positive');
 }
 
+/**
+ * Board profile (.GKO): the outer outline, plus a closed contour for every
+ * non-plated milled slot.
+ *
+ * JLCPCB's capabilities page asks for non-plated slots to be drawn on the
+ * mechanical layer ("please draw the slot outline in the mechanical layer (GM1
+ * or GKO)"). A slot delivered *only* as an Excellon G85 is at best a CAM query
+ * and at worst missed, so it is described twice and consistently: contour here,
+ * G85 still in the drill file (excellon.ts).
+ *
+ * Only non-plated, board-level slots are contoured:
+ *  - Plated slots (plated mounting holes, slotted through-hole pads) are
+ *    defined by the PTH drill file plus their copper annulus. Drawing one on
+ *    the profile layer tells the fab to rout it, which would lose the plating.
+ *  - Round holes are conveyed by the drill file alone, as every fab expects;
+ *    contouring a round mounting hole risks it being routed rather than drilled.
+ *
+ * The contour radius is `drill / 2` -- the milled opening, matching the Excellon
+ * tool diameter -- not `padDiameter / 2`, which is the copper annulus.
+ */
 function buildEdge(b: Board): string {
   const g = new GerberBuilder();
-  const code = g.aperture('C,0.1');
-  g.select(code);
+  g.select(g.aperture('C,0.1'));
   for (const seg of b.outline) g.drawSeg(seg);
+  for (const h of b.holes) {
+    if (h.plated || !isSlot(h)) continue;
+    const { start, end } = holeSlotCenterline(h);
+    const ring = capsulePolygon(start, end, h.drill / 2);
+    if (ring.length < 3) continue;
+    g.drawPolyline([...ring, ring[0]]); // closed contour
+  }
   return g.assemble('Profile,NP', 'Positive');
 }
 
@@ -419,10 +457,22 @@ function copperFilename(name: string, layer: LayerId, index: number): string {
   return `${name}.G${index}`; // In1.Cu -> .G1, In2.Cu -> .G2, ...
 }
 
+/**
+ * Filename stem for the fileset: the board name with every run of characters
+ * outside [A-Za-z0-9_.-] collapsed to '_' (so a board called "Super Pager"
+ * yields `Super_Pager.GTL`). Fabs generally accept spaces, but they are a
+ * gratuitous hazard for uploads and shell/CAM scripting. Same sanitizer the
+ * server uses for its .step / .zip downloads (packages/server/src/http.ts).
+ * `Board.name` itself -- the display name -- is left untouched.
+ */
+function fileStem(name: string): string {
+  return name.replace(/[^\w.-]+/g, '_') || 'board';
+}
+
 /** Render `b` to a complete Gerber X2 + Excellon fileset keyed by filename. */
 export function generateGerbers(b: Board): FabFiles {
   const filled = fillAllZones(b);
-  const name = b.name;
+  const name = fileStem(b.name);
   const files = new Map<string, string>();
 
   const cu = copperLayersOf(b);
