@@ -3,7 +3,7 @@
  * pads, and mounting holes alike.
  */
 import type { Board } from '../../types.js';
-import { padWorld } from '../../geometry.js';
+import { padWorld, allHoles } from '../../geometry.js';
 import { DRC_EPSILON } from '../rules.js';
 import type { RuleSet } from '../rules.js';
 import type { DrcViolation } from '../types.js';
@@ -37,7 +37,7 @@ export function check(b: Board, rules: RuleSet): DrcViolation[] {
     }
   }
 
-  for (const h of b.holes) {
+  for (const h of allHoles(b)) {
     if (h.drill < rules.minDrill - DRC_EPSILON) {
       violations.push({
         rule: 'drill',

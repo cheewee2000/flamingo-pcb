@@ -59,12 +59,33 @@ export type SilkItem =
   | { kind: 'circle'; center: Point; radius: number; width: number }
   | { kind: 'text'; at: Point; text: string; height: number; rotation: number };
 
+/**
+ * A bare hole belonging to a footprint: no copper, no net, no annulus. These
+ * are the NPTH pockets a part's own locating posts / bosses / pegs drop into
+ * (EasyEDA `HOLE` shapes). They are mechanically load-bearing — a part whose
+ * posts have nowhere to go stands proud and its pads will not reflow — so they
+ * must reach the drill file even though nothing electrical depends on them.
+ *
+ * Coordinates are footprint-local, like `Pad.at`; use `footprintHoles()` to get
+ * them in world space with the component transform applied.
+ */
+export interface FootprintHole {
+  at: Point; // relative to footprint origin
+  drill: number;
+  /** Slot length along the rotated long axis; see MountingHole.slotLength. */
+  slotLength?: number;
+  /** Slot long-axis orientation, deg CCW relative to the footprint. */
+  rotation?: number;
+}
+
 export interface Footprint {
   name: string;
   lcsc: string;
   pads: Pad[];
   silk: SilkItem[];
   courtyard: Point[][];
+  /** Non-plated mechanical holes (locating posts). Absent on older boards. */
+  holes?: FootprintHole[];
 }
 
 export interface ComponentInst {

@@ -244,7 +244,9 @@ store.subscribe((state) => {
   }
 });
 
+let currentView: '2d' | '3d' = '2d';
 function setView(view: '2d' | '3d'): void {
+  currentView = view;
   const is3d = view === '3d';
   document.querySelectorAll('.view-tab').forEach((tab) => {
     tab.classList.toggle('active', (tab as HTMLElement).dataset.view === view);
@@ -256,6 +258,20 @@ function setView(view: '2d' | '3d'): void {
 }
 document.getElementById('view-tab-2d')?.addEventListener('click', () => setView('2d'));
 document.getElementById('view-tab-3d')?.addEventListener('click', () => setView('3d'));
+
+// Zoom-to-all: fit the active view to the whole board. 2D re-fits the pan/zoom
+// (same as the Home shortcut); 3D re-frames the orbit camera.
+function zoomToAll(): void {
+  if (currentView === '3d') {
+    viewer3d.frame();
+    return;
+  }
+  const state = store.get();
+  if (!state.board) return;
+  const rect = canvas.getBoundingClientRect();
+  store.set({ view: fitToBoard(state.view, boardBBox(state.board), rect.width, rect.height) });
+}
+document.getElementById('zoom-all-btn')?.addEventListener('click', zoomToAll);
 
 // Flip-view button: view the board from the back. Reuses the existing
 // flipView mechanism (the same one the 'F' shortcut falls back to) — mirrors
@@ -401,8 +417,7 @@ window.addEventListener('keydown', (ev) => {
   const rect = canvas.getBoundingClientRect();
   if (ev.code === 'KeyF') {
     store.set({ view: flipView(state.view, rect.width, rect.height) });
-  } else if (ev.code === 'Home' && state.board) {
-    const bbox = boardBBox(state.board);
-    store.set({ view: fitToBoard(state.view, bbox, rect.width, rect.height) });
+  } else if (ev.code === 'Home') {
+    zoomToAll();
   }
 });

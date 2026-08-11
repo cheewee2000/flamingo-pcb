@@ -98,6 +98,26 @@ describe('parseEasyedaFootprint', () => {
     expect(footprint.pads.some((p) => p.shape === 'polygon' && p.polygon && p.polygon.length > 0)).toBe(true);
   });
 
+  it('C165948 (USB-C receptacle): HOLE shapes become footprint holes, not dropped', () => {
+    // Regression: HOLE was lumped in with cosmetic shapes and silently skipped,
+    // so the connector's two locating posts never reached the drill file and the
+    // part could not seat. Field [3] is a RADIUS: 1.4764*2*0.254 = 0.750 mm, and
+    // the pair sits 5.80 mm apart -- the datasheet's "2-Ø0.50" posts at 5.78 mm.
+    const { footprint } = parseEasyedaFootprint(fixture('C165948'));
+    expect(footprint.holes).toHaveLength(2);
+    for (const h of footprint.holes!) {
+      expect(h.drill).toBeCloseTo(0.75, 3);
+      expect(h.at.y).toBeCloseTo(1.2056, 3);
+    }
+    const xs = footprint.holes!.map((h) => h.at.x).sort((a, b) => a - b);
+    expect(xs[1]! - xs[0]!).toBeCloseTo(5.8, 3);
+  });
+
+  it('footprints with no HOLE shapes leave holes undefined', () => {
+    const { footprint } = parseEasyedaFootprint(fixture('C25804'));
+    expect(footprint.holes).toBeUndefined();
+  });
+
   it('C8734 (STM32 LQFP-48): 48 pads, silk arc present', () => {
     const { footprint } = parseEasyedaFootprint(fixture('C8734'));
     expect(footprint.pads).toHaveLength(48);

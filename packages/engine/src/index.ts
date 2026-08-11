@@ -6,6 +6,7 @@ export type {
   Pad,
   SilkItem,
   Footprint,
+  FootprintHole,
   ComponentInst,
   Net,
   NetClass,
@@ -48,6 +49,8 @@ export {
   componentTransformRotation,
   isSlot,
   holeSlotCenterline,
+  footprintHoles,
+  allHoles,
   capsulePolygon,
 } from './geometry.js';
 export type { PolyGroup } from './geometry.js';

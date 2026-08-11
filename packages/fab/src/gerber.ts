@@ -36,6 +36,7 @@ import {
   bufferPolygon,
   isSlot,
   holeSlotCenterline,
+  allHoles,
   capsulePolygon,
   RULESETS,
 } from '@flamingo/engine';
@@ -282,7 +283,7 @@ function buildCopper(b: Board, filled: Board, layer: LayerId, fileFunction: stri
     g.flash(v.at);
   }
 
-  for (const h of b.holes) {
+  for (const h of allHoles(b)) {
     if (!h.plated) continue;
     if (isSlot(h)) {
       const { start, end } = holeSlotCenterline(h);
@@ -308,7 +309,7 @@ function buildMask(b: Board, side: 'F' | 'B'): string {
     }
   }
   // Plated mounting holes keep a mask opening (exposed ring); vias are tented.
-  for (const h of b.holes) {
+  for (const h of allHoles(b)) {
     if (!h.plated) continue;
     if (isSlot(h)) {
       const { start, end } = holeSlotCenterline(h);
@@ -436,7 +437,7 @@ function buildEdge(b: Board): string {
   const g = new GerberBuilder();
   g.select(g.aperture('C,0.1'));
   for (const seg of b.outline) g.drawSeg(seg);
-  for (const h of b.holes) {
+  for (const h of allHoles(b)) {
     if (h.plated || !isSlot(h)) continue;
     const { start, end } = holeSlotCenterline(h);
     const ring = capsulePolygon(start, end, h.drill / 2);

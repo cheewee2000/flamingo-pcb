@@ -197,6 +197,30 @@ describe('buildDrills', () => {
     expect((d.unplated!.match(/^X/gm) ?? []).length).toBe(1);
   });
 
+  it('drills a footprint hole (locating post), transformed by the component', () => {
+    // A part's own NPTH pockets must reach the NPTH file or the part cannot
+    // seat. J1 sits at (6,6) rotated 90 deg, so a local (1,0) post lands at
+    // (6,7); the hole is unplated and has no annulus.
+    const b = drillBoard();
+    b.components[0]!.rotation = 90;
+    b.components[0]!.footprint.holes = [{ at: { x: 1, y: 0 }, drill: 0.75 }];
+    const d = buildDrills(b);
+    assertDrillParses(d.unplated!);
+    expect(d.unplated).toContain('T1C0.750');
+    expect(d.unplated).toContain('X6.000Y7.000');
+    expect((d.unplated!.match(/^X/gm) ?? []).length).toBe(2);
+    // and it must NOT leak into the plated file
+    expect(d.plated).not.toContain('C0.750');
+  });
+
+  it('mirrors a bottom-side footprint hole across the component Y axis', () => {
+    const b = drillBoard();
+    b.components[0]!.side = 'bottom';
+    b.components[0]!.footprint.holes = [{ at: { x: 1, y: 0 }, drill: 0.75 }];
+    const d = buildDrills(b);
+    expect(d.unplated).toContain('X5.000Y6.000');
+  });
+
   it('emits slotted pads as G85 routed slots', () => {
     const b = newBoard('s', 2);
     b.components.push({

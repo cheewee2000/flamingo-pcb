@@ -16,6 +16,7 @@ import {
   bboxOf,
   componentTransformPoints,
   holeSlotCenterline,
+  allHoles,
   padOutline,
 } from '@flamingo/engine';
 
@@ -181,7 +182,7 @@ function extractData(board: Board): Viewer3dData {
     pushSilkSeg(line.start, line.end, line.layer === 'B.Silk' ? -1 : 1, line.width);
   }
 
-  for (const h of board.holes) {
+  for (const h of allHoles(board)) {
     const { start, end } = holeSlotCenterline(h);
     cutouts.push(capsuleRing(start, end, h.drill / 2));
     if (h.plated && start.x === end.x && start.y === end.y) {
@@ -325,6 +326,9 @@ scene.add(board);
 
 const gold=new THREE.MeshStandardMaterial({color:0xd8b545,roughness:0.35,metalness:0.85});
 const goldDark=new THREE.MeshStandardMaterial({color:0xb5923a,roughness:0.4,metalness:0.8});
+// Traces: same copper family as zones/barrels (0xb5923a) but a touch lighter so
+// an individual track reads as a distinct line on top of a same-net pour.
+const trackCopper=new THREE.MeshStandardMaterial({color:0xcba441,roughness:0.4,metalness:0.8});
 
 // Pads: true outlines extruded as thin plates (through-pads plate both faces).
 const gPads=new THREE.Group(); scene.add(gPads);
@@ -348,7 +352,7 @@ for(const b of D.barrels){
 const gTracks=new THREE.Group(); scene.add(gTracks);
 {
   const geo=new THREE.BoxGeometry(1,1,0.04);
-  const inst=new THREE.InstancedMesh(geo,goldDark,D.tracks.length);
+  const inst=new THREE.InstancedMesh(geo,trackCopper,D.tracks.length);
   const m4=new THREE.Matrix4(), q=new THREE.Quaternion(), zAxis=new THREE.Vector3(0,0,1);
   D.tracks.forEach((t,i)=>{
     const w=Math.abs(t[4])/100, side=t[4]>=0?1:-1;

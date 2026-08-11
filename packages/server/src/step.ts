@@ -28,6 +28,7 @@ import {
   componentTransformRotation,
   fillAllZones,
   holeSlotCenterline,
+  allHoles,
   outlineToPolygon,
   padOutline,
   padWorld,
@@ -137,7 +138,7 @@ function prismFaces(outerIn: Point[], holesIn: Point[][], z0: number, z1: number
 /** All drill cutout rings: mounting holes/slots, TH pad drills (incl. pad slots), vias. */
 export function drillRings(board: Board): Point[][] {
   const rings: Point[][] = [];
-  for (const h of board.holes) {
+  for (const h of allHoles(board)) {
     const { start, end } = holeSlotCenterline(h);
     rings.push(capsulePolygon(start, end, h.drill / 2));
   }
@@ -252,7 +253,7 @@ function detailSolids(board: Board, models: Map<string, MeshGroup[]>): Solid[] {
 
   // Zone fills, with mounting holes punched where an island fully contains
   // them (same containment rule as the 3D viewer).
-  const holeCuts = board.holes.map((h) => {
+  const holeCuts = allHoles(board).map((h) => {
     const { start, end } = holeSlotCenterline(h);
     return { ring: capsulePolygon(start, end, h.drill / 2), at: h.at };
   });
@@ -289,7 +290,7 @@ function detailSolids(board: Board, models: Map<string, MeshGroup[]>): Solid[] {
       }
     }
   }
-  for (const h of board.holes) {
+  for (const h of allHoles(board)) {
     const { start, end } = holeSlotCenterline(h);
     if (h.plated && start.x === end.x && start.y === end.y) {
       barrels.push({ at: h.at, r: h.drill / 2 + 0.2, drill: h.drill / 2 });
