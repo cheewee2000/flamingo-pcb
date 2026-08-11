@@ -5,23 +5,10 @@ dist/
 *.log
 *.tsbuildinfo
 
-# --- Board working files ---
-# Manual save-point snapshots taken mid-session (`.bak-<label>-<date>`) and
-# throwaway variant boards. The committed `<board>.flamingo` is the record.
-*.flamingo.bak-*
-*-scratch.flamingo
-
-# Generated fab output. `boards/blinker/fab/` is committed on purpose as the
-# worked example, so it is negated back in below.
-boards/*/fab/
-!boards/blinker/fab/
-boards/*/fab-fresh/
-boards/*/archive-stale-*/
-boards/*/*.step
-boards/*/*-fab-JLC.zip
-boards/*/bom-jlc.csv
-boards/*/cpl-jlc.csv
-boards/*/open1.json
+# --- Board designs stay local ---
+# Everything under boards/ (designs, fab output, datasheet PDFs) is kept off
+# the remote. It was purged from history on 2026-08-11; do not re-add it.
+boards/
 
 # --- Session scratch (repo root only) ---
 /scratch-*/
