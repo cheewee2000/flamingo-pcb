@@ -4,3 +4,30 @@ dist/
 /fab/
 *.log
 *.tsbuildinfo
+
+# --- Board working files ---
+# Manual save-point snapshots taken mid-session (`.bak-<label>-<date>`) and
+# throwaway variant boards. The committed `<board>.flamingo` is the record.
+*.flamingo.bak-*
+*-scratch.flamingo
+
+# Generated fab output. `boards/blinker/fab/` is committed on purpose as the
+# worked example, so it is negated back in below.
+boards/*/fab/
+!boards/blinker/fab/
+boards/*/fab-fresh/
+boards/*/archive-stale-*/
+boards/*/*.step
+boards/*/*-fab-JLC.zip
+boards/*/bom-jlc.csv
+boards/*/cpl-jlc.csv
+boards/*/open1.json
+
+# --- Session scratch (repo root only) ---
+/scratch-*/
+/scratch-*.png
+/board.flamingo
+/Screenshot *.png
+/zoom_*.png
+/scripts/tmp-*
+/scripts/t11-*
