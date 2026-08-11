@@ -365,7 +365,7 @@ export function boardBBox(b: Board): { minX: number; minY: number; maxX: number;
   for (const k of b.keepouts) {
     pts.push(...k.polygon);
   }
-  for (const h of b.holes) {
+  for (const h of allHoles(b)) {
     const r = h.padDiameter / 2;
     const { start, end } = holeSlotCenterline(h);
     for (const c of [start, end]) {
@@ -594,6 +594,47 @@ export function holeSlotCenterline(h: MountingHole): { start: Point; end: Point 
     start: { x: h.at.x - dir.x * half, y: h.at.y - dir.y * half },
     end: { x: h.at.x + dir.x * half, y: h.at.y + dir.y * half },
   };
+}
+
+/**
+ * Footprint-owned mechanical holes (locating posts), lifted into world space as
+ * MountingHoles so every geometry consumer can treat them uniformly. They are
+ * always non-plated and carry no annulus, so `padDiameter === drill`.
+ *
+ * Ids are synthesized as `<refdes>#fh<index>` and are NOT in `board.holes`:
+ * these holes belong to the component and travel with it, so they must never be
+ * independently selected, dragged, or removed. Edit paths keep using
+ * `board.holes`; geometry paths (drill/gerber/DRC/pour/render/3D) use
+ * `allHoles()`.
+ */
+export function footprintHoles(b: Board): MountingHole[] {
+  const out: MountingHole[] = [];
+  for (const c of b.components) {
+    const holes = c.footprint.holes;
+    if (!holes) continue;
+    holes.forEach((h, i) => {
+      const [at] = componentTransformPoints(c, [h.at]);
+      out.push({
+        id: `${c.refdes}#fh${i}`,
+        at,
+        drill: h.drill,
+        padDiameter: h.drill,
+        plated: false,
+        ...(h.slotLength !== undefined
+          ? {
+              slotLength: h.slotLength,
+              rotation: componentTransformRotation(c, h.rotation ?? 0),
+            }
+          : {}),
+      });
+    });
+  }
+  return out;
+}
+
+/** Every hole in the board: standalone mounting holes plus footprint holes. */
+export function allHoles(b: Board): MountingHole[] {
+  return [...b.holes, ...footprintHoles(b)];
 }
 
 /**

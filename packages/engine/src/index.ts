@@ -6,6 +6,7 @@ export type {
   Pad,
   SilkItem,
   Footprint,
+  FootprintHole,
   ComponentInst,
   Net,
   NetClass,
@@ -48,6 +49,8 @@ export {
   componentTransformRotation,
   isSlot,
   holeSlotCenterline,
+  footprintHoles,
+  allHoles,
   capsulePolygon,
 } from './geometry.js';
 export type { PolyGroup } from './geometry.js';
@@ -70,11 +73,14 @@ export { applyOp } from './ops.js';
 
 // Re-export connectivity
 export type { RatLine, NetIsland } from './connectivity.js';
-export { padAnchor, connectedGroups, netIslands, ratsnest, isFullyRouted } from './connectivity.js';
+export { padAnchor, connectedGroups, netIslands, ratsnest, isFullyRouted, tracksAtPoint, tracksAtPad } from './connectivity.js';
 
 // Re-export track widening
 export type { WidenResult } from './widen.js';
 export { widenTracks } from './widen.js';
+
+// Re-export reroute (45° path primitives)
+export { route45, rubberBandReshape, dragSegmentReshape } from './reroute.js';
 
 // Re-export renderer
 export type { RenderOpts, SplitLayers } from './render.js';

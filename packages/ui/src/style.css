@@ -385,6 +385,29 @@ body {
   opacity: 0.85;
 }
 
+/* ---- Zoom-to-all button, pinned top-right of the viewport ---- */
+.zoom-all-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 4px 12px;
+  background: rgba(20, 22, 26, 0.8);
+  color: #cfcfcf;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 0;
+  cursor: pointer;
+  transition: opacity var(--dur) var(--ease);
+}
+.zoom-all-btn:hover {
+  opacity: 0.7;
+}
+
 .viewer3d-canvas {
   position: absolute;
   inset: 0;

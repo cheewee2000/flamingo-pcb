@@ -28,6 +28,8 @@ export interface Viewer3D {
   setActive(active: boolean): void;
   /** Feed the latest board; rebuilds (debounced) if currently active. */
   setBoard(board: Board | null): void;
+  /** Re-frame the camera to fit the whole board (zoom-to-all). */
+  frame(): void;
   setShowComponents(v: boolean): void;
   setShowSilk(v: boolean): void;
   dispose(): void;
@@ -65,6 +67,7 @@ export function createViewer3D(canvas: HTMLCanvasElement, viewport: HTMLElement)
   let active = false;
   let dirty = false;
   let hasFramedOnce = false;
+  let lastBBox: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
   let rafHandle = 0;
   let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
   const opts: Viewer3DOptions = { showComponents: true, showSilk: true };
@@ -96,6 +99,7 @@ export function createViewer3D(canvas: HTMLCanvasElement, viewport: HTMLElement)
     componentGroup.visible = opts.showComponents;
     scene.add(componentGroup);
 
+    lastBBox = built.bbox;
     if (!hasFramedOnce) {
       frameCamera(built.bbox);
       hasFramedOnce = true;
@@ -176,6 +180,10 @@ export function createViewer3D(canvas: HTMLCanvasElement, viewport: HTMLElement)
       } else {
         dirty = true;
       }
+    },
+    /** Re-frame the camera to fit the whole board (zoom-to-all). */
+    frame(): void {
+      if (lastBBox) frameCamera(lastBBox);
     },
     setShowComponents(v: boolean): void {
       opts.showComponents = v;

@@ -38,6 +38,7 @@ import {
   padCopperLayers,
   isSlot,
   holeSlotCenterline,
+  allHoles,
   capsulePolygon,
   componentLabelPlacement,
   labelFontMm,
@@ -581,7 +582,7 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
     fillCircle(ctx, view, v.at, v.diameter / 2, THROUGH_PAD_COLOR);
     fillCircle(ctx, view, v.at, v.drill / 2, HOLE_COLOR);
   }
-  for (const h of board.holes) {
+  for (const h of allHoles(board)) {
     if (isSlot(h)) {
       const { start, end } = holeSlotCenterline(h);
       if (h.plated) {

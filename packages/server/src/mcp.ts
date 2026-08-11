@@ -30,9 +30,12 @@ import {
   LABEL_NETS_LAYER,
   LABEL_PADS_LAYER,
   newBoard,
+  padWorld,
   parseBoard,
   ratsnest,
+  rubberBandReshape,
   runDRC,
+  tracksAtPad,
 } from '@flamingo/engine';
 import { exportFab } from '@flamingo/fab';
 import { getDatasheet } from '@flamingo/parts';
@@ -582,15 +585,49 @@ export function createMcpServer(ctx: McpContext): McpServer {
     },
     ({ refdes, x, y, rotation, side }) => {
       let at: Point | undefined;
+      const board = ctx.doc.board;
+      const comp = board.components.find((c) => c.refdes === refdes);
       if (x !== undefined || y !== undefined) {
-        const comp = ctx.doc.board.components.find((c) => c.refdes === refdes);
         if (!comp) return errorResult(`Unknown refdes "${refdes}"`);
         at = { x: x ?? comp.at.x, y: y ?? comp.at.y };
       }
-      const op: Op = { op: 'moveComponent', refdes, at, rotation, side };
-      return applyAndReport(ctx, op, (result) => {
-        const comp = result.board.components.find((c) => c.refdes === refdes)!;
-        return `Moved ${formatComponent(comp)}`;
+      const moveOp: Op = { op: 'moveComponent', refdes, at, rotation, side };
+
+      // Gather connected line-track endpoints on the PRE-move board so
+      // moving/rotating/flipping a component rubber-bands its traces along
+      // (parity with the UI drag), instead of silently detaching them --
+      // Track.seg is absolute world points and knows nothing about the pad
+      // it used to be anchored to.
+      const hits = comp
+        ? comp.footprint.pads.flatMap((pad) =>
+            tracksAtPad(board, refdes, pad.number).map((h) => ({ ...h, padNumber: pad.number })),
+          )
+        : [];
+      if (comp && hits.length > 0) {
+        // Post-move pad anchors: clone the board, apply the move, then read
+        // each pad's new world position off the shadow copy.
+        const after = structuredClone(board);
+        const ac = after.components.find((c) => c.refdes === refdes)!;
+        if (at !== undefined) ac.at = at;
+        if (rotation !== undefined) ac.rotation = rotation;
+        if (side !== undefined) ac.side = side;
+        const newAnchor = (padNumber: string): Point => {
+          const pad = ac.footprint.pads.find((p) => p.number === padNumber)!;
+          return padWorld(ac, pad).at;
+        };
+        const moves = hits.map((h) => ({ trackId: h.trackId, end: h.end, newAt: newAnchor(h.padNumber) }));
+        const { removeIds, add } = rubberBandReshape(board, moves);
+        if (removeIds.length > 0 || add.length > 0) {
+          const txOp: Op = { op: 'transaction', ops: [moveOp, { op: 'reshapeTracks', remove: removeIds, add }] };
+          return applyAndReport(ctx, txOp, (result) => {
+            const c = result.board.components.find((c2) => c2.refdes === refdes)!;
+            return `Moved ${formatComponent(c)}`;
+          });
+        }
+      }
+      return applyAndReport(ctx, moveOp, (result) => {
+        const c = result.board.components.find((c2) => c2.refdes === refdes)!;
+        return `Moved ${formatComponent(c)}`;
       });
     },
   );

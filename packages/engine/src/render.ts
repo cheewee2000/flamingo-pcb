@@ -17,6 +17,7 @@ import {
   componentTransformRotation,
   isSlot,
   holeSlotCenterline,
+  allHoles,
   capsulePolygon,
 } from './geometry.js';
 import { copperLayersOf, padCopperLayers } from './layers.js';
@@ -343,7 +344,7 @@ export function renderSVG(b: Board, opts: RenderOpts = {}): string {
   }
 
   // ---- mounting holes (round holes flash circles; milled slots draw stadiums) ----
-  for (const h of b.holes) {
+  for (const h of allHoles(b)) {
     const p = svg(h.at);
     if (isSlot(h)) {
       const { start, end } = holeSlotCenterline(h);

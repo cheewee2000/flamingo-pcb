@@ -19,7 +19,7 @@
  *   fixture's ground-truth POLYGON points exactly under this transform.
  */
 
-import type { Footprint, Pad, SilkItem, Point } from '@flamingo/engine';
+import type { Footprint, FootprintHole, Pad, SilkItem, Point } from '@flamingo/engine';
 
 export interface PartInfo {
   lcsc: string;
@@ -68,6 +68,21 @@ type Convert = (x: number, y: number) => Point;
 
 function makeConvert(ox: number, oy: number): Convert {
   return (x, y) => ({ x: (x - ox) * UNIT_MM, y: -(y - oy) * UNIT_MM });
+}
+
+/**
+ * HOLE shape string: [0]"HOLE" [1]cx [2]cy [3]radius [4]id [5]locked.
+ *
+ * This is a bare NPTH with no copper and no annulus — EasyEDA uses it for the
+ * pockets a part's locating posts drop into (USB-C shell posts, tact-switch
+ * bosses). Field [3] is a RADIUS, not a diameter: C165948's two posts parse to
+ * Ø0.750 mm at 5.80 mm centers, matching the connector drawing's "2-Ø0.50"
+ * posts at 5.78 mm with clearance.
+ */
+function parseHole(fields: string[], conv: Convert): FootprintHole {
+  const radius = num(fields[3]);
+  if (!(radius > 0)) throw new Error(`HOLE with non-positive radius: ${fields[3]}`);
+  return { at: conv(num(fields[1]), num(fields[2])), drill: 2 * radius * UNIT_MM };
 }
 
 /**
@@ -551,6 +566,7 @@ export function parseEasyedaFootprint(
   const pads: Pad[] = [];
   const silk: SilkItem[] = [];
   const courtyard: Point[][] = [];
+  const holes: FootprintHole[] = [];
   const warned = new Set<string>();
   const warnOnce = (type: string): void => {
     if (!warned.has(type)) {
@@ -587,8 +603,10 @@ export function parseEasyedaFootprint(
           if (poly) courtyard.push(poly);
           break;
         }
-        // Known-but-ignored cosmetic / mechanical / metadata shapes.
         case 'HOLE':
+          holes.push(parseHole(fields, conv));
+          break;
+        // Known-but-ignored cosmetic / metadata shapes.
         case 'SVGNODE':
         case 'TEXT':
         case 'VIA':
@@ -598,7 +616,9 @@ export function parseEasyedaFootprint(
           break;
       }
     } catch (err) {
-      if (type === 'PAD') throw err; // pad geometry is load-bearing
+      // Pad and hole geometry are both load-bearing: a part is unbuildable if
+      // either is silently dropped. Everything else is cosmetic.
+      if (type === 'PAD' || type === 'HOLE') throw err;
       warnOnce(type ?? '?'); // cosmetic parse failure: skip
     }
   }
@@ -616,6 +636,7 @@ export function parseEasyedaFootprint(
     pads,
     silk,
     courtyard,
+    ...(holes.length > 0 ? { holes } : {}),
   };
   return { footprint, info };
 }

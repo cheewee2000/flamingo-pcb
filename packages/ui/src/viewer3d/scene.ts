@@ -22,6 +22,7 @@ import {
   componentTransformPoints,
   fillAllZones,
   holeSlotCenterline,
+  allHoles,
   padOutline,
   pointInPolygon,
 } from '@flamingo/engine';
@@ -35,9 +36,13 @@ export const BOARD_T = 1.6;
 
 /** Solder-mask coat = the visible top/bottom face of the substrate. */
 const MAT_MASK = new THREE.MeshStandardMaterial({ color: 0x4a2340, roughness: 0.55, metalness: 0.12 });
-/** Copper (tracks + zone fills) seen *through* the mask: a warmer, lighter
+/** Copper (zone fills / pours) seen *through* the mask: a warmer, lighter
  * purple relief so the routing reads without exposing bare copper. */
 const MAT_MASK_COPPER = new THREE.MeshStandardMaterial({ color: 0x7c3a5e, roughness: 0.5, metalness: 0.35 });
+/** Trace copper: the same mask-relief hue a touch lighter, so an individual
+ * routed track reads as a distinct line on top of a same-net pour instead of
+ * blending into it. */
+const MAT_MASK_TRACE = new THREE.MeshStandardMaterial({ color: 0x9b4976, roughness: 0.5, metalness: 0.35 });
 /** Exposed pad finish (ENIG gold). */
 const MAT_GOLD = new THREE.MeshStandardMaterial({ color: 0xd8b545, roughness: 0.32, metalness: 0.9 });
 /** Plated barrels through drilled pads/holes. */
@@ -182,7 +187,7 @@ function trackPlate(a: Point, b: Point, width: number, z: number): THREE.Mesh {
   const dy = b.y - a.y;
   const len = Math.hypot(dx, dy) || 0.001;
   const geo = new THREE.BoxGeometry(len + width * 0.6, width, 0.03);
-  const m = new THREE.Mesh(geo, MAT_MASK_COPPER);
+  const m = new THREE.Mesh(geo, MAT_MASK_TRACE);
   m.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, z);
   m.rotation.z = Math.atan2(dy, dx);
   return m;
@@ -232,7 +237,7 @@ export function buildBoardGroup(board: Board): BoardGeometry {
   // would otherwise tent them shut). Kept separate so the copper loop can reuse
   // the same rings. `at` is the containment probe for which island to punch.
   const holeCuts: { ring: Point[]; at: Point }[] = [];
-  for (const h of board.holes) {
+  for (const h of allHoles(board)) {
     const { start, end } = holeSlotCenterline(h);
     holeCuts.push({ ring: capsuleRing(start, end, h.drill / 2), at: h.at });
     if (h.plated && start.x === end.x && start.y === end.y) barrels.push({ at: h.at, r: h.drill / 2 + 0.2 });

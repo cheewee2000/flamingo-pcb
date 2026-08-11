@@ -36,7 +36,7 @@
 import polygonClipping from 'polygon-clipping';
 import type { MultiPolygon, Polygon, Ring, Pair } from 'polygon-clipping';
 import type { Board, Point, Zone } from './types.js';
-import { expandTrack, padOutline, outlineToPolygon, isSlot, holeSlotCenterline, capsulePolygon } from './geometry.js';
+import { expandTrack, padOutline, outlineToPolygon, isSlot, holeSlotCenterline, capsulePolygon, allHoles } from './geometry.js';
 import { copperLayersOf, padCopperLayers } from './layers.js';
 
 // ---------------------------------------------------------------------------
@@ -385,7 +385,7 @@ export function fillZone(b: Board, zone: Zone): Point[][] {
   // flex through the board): a pour must clear the slot's annulus footprint on
   // every layer, buffered like any other obstacle. Round mounting holes keep
   // the existing behavior (not subtracted from the pour).
-  for (const h of b.holes) {
+  for (const h of allHoles(b)) {
     if (!isSlot(h)) continue;
     const { start, end } = holeSlotCenterline(h);
     obstacles.push(bufferPolygon(capsulePolygon(start, end, h.padDiameter / 2), zone.clearance));

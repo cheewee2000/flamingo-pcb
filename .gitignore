@@ -4,3 +4,17 @@ dist/
 /fab/
 *.log
 *.tsbuildinfo
+
+# --- Board designs stay local ---
+# Everything under boards/ (designs, fab output, datasheet PDFs) is kept off
+# the remote. It was purged from history on 2026-08-11; do not re-add it.
+boards/
+
+# --- Session scratch (repo root only) ---
+/scratch-*/
+/scratch-*.png
+/board.flamingo
+/Screenshot *.png
+/zoom_*.png
+/scripts/tmp-*
+/scripts/t11-*

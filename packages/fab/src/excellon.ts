@@ -3,7 +3,8 @@
  *
  * Two files: plated (`-PTH.DRL`) and non-plated (`-NPTH.DRL`). Plated holes are
  * vias, plated through-hole pad drills, and plated mounting holes; non-plated
- * are unplated mounting holes and unplated pad drills. Slotted pad drills
+ * are unplated mounting holes, unplated pad drills, and footprint holes
+ * (a part's own locating-post pockets, which are always NPTH). Slotted pad drills
  * (`drill.slotLength`) and slotted mounting holes (`MountingHole.slotLength`)
  * are emitted as routed slots (G85) along the rotated long axis; the two G85
  * endpoints are the slot centerline ends, separated by (slotLength - diameter)
@@ -15,7 +16,7 @@
  */
 
 import type { Board, Pad, Point } from '@flamingo/engine';
-import { padWorld, rotate, isSlot, holeSlotCenterline } from '@flamingo/engine';
+import { padWorld, rotate, isSlot, holeSlotCenterline, allHoles } from '@flamingo/engine';
 
 interface DrillHole {
   diameter: number;
@@ -71,7 +72,7 @@ function collectHoles(b: Board): { plated: DrillHole[]; unplated: DrillHole[] } 
     }
   }
 
-  for (const h of b.holes) {
+  for (const h of allHoles(b)) {
     // A slotted mounting hole mills a G85 slot along its rotated long axis; the
     // two endpoints are the drill centerline ends, so the swept width == drill.
     const hole: DrillHole = isSlot(h)
