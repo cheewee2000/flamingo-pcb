@@ -16,7 +16,7 @@ import { extractModel3d, fetchJlcStock, fetchPart, readCache, searchParts } from
 import { runAutorouteBroadcast } from './autoroute.js';
 import { Doc } from './document.js';
 import type { McpContext, PartsApi } from './mcp.js';
-import { createMcpServer, resolveFabOutDir } from './mcp.js';
+import { boardSearchRoots, createMcpServer, resolveFabOutDir } from './mcp.js';
 import type { RouteRunner } from './route.js';
 import { defaultRouteRunner } from './route.js';
 import type { ScreenshotOpts } from './screenshot.js';
@@ -130,11 +130,6 @@ async function serveStatic(pathname: string, res: ServerResponse, uiDistDir: str
       return false;
     }
   }
-}
-
-/** Directories /api/projects lists boards from (and /api/open may open from). */
-function boardSearchRoots(ctx: McpContext): string[] {
-  return [...new Set([resolve(ctx.projectDir), resolve(process.cwd())])];
 }
 
 const SCAN_SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'fab', 'fixtures']);

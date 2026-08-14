@@ -38,12 +38,22 @@ export function resolveWidthPx(widthPx?: number): number {
   return Math.min(widthPx, MAX_WIDTH_PX);
 }
 
+export interface RenderPNGDetail {
+  png: Buffer;
+  /** DRC violation count drawn on the image (0 when showDrc: false). */
+  drcCount: number;
+  /** Ratline count drawn on the image (0 when showRatsnest: false). */
+  ratlineCount: number;
+}
+
 /**
- * Render `b` to a PNG buffer. Always computes ratsnest when `showRatsnest`
- * (default true) and runs DRC when `showDrc` (default true), so Claude sees
- * unrouted nets and rule violations by default.
+ * Render `b` to a PNG buffer plus the overlay counts. Always computes
+ * ratsnest when `showRatsnest` (default true) and runs DRC when `showDrc`
+ * (default true), so Claude sees unrouted nets and rule violations by
+ * default. The counts are returned so callers building a summary line don't
+ * re-run DRC/ratsnest on top of the render.
  */
-export function renderPNG(b: Board, opts: ScreenshotOpts = {}): Buffer {
+export function renderPNGDetailed(b: Board, opts: ScreenshotOpts = {}): RenderPNGDetail {
   // The live board never carries zone fills (only the export path fills a
   // copy), so pour the zones here — screenshots should show real copper, and
   // ratsnest/DRC below then also see the filled board.
@@ -53,6 +63,8 @@ export function renderPNG(b: Board, opts: ScreenshotOpts = {}): Buffer {
   const showDrc = opts.showDrc !== false;
   const { layers, showPadLabels, showNetLabels } = splitLabelLayers(opts.layers);
 
+  const rats = showRatsnest ? ratsnest(b) : undefined;
+  const drc = showDrc ? runDRC(b) : undefined;
   const svg = renderSVG(b, {
     layers,
     region: opts.region,
@@ -61,12 +73,17 @@ export function renderPNG(b: Board, opts: ScreenshotOpts = {}): Buffer {
     showRatsnest,
     showPadLabels,
     showNetLabels,
-    ratsnest: showRatsnest ? ratsnest(b) : undefined,
-    drcMarkers: showDrc ? runDRC(b).map((v) => v.at) : undefined,
+    ratsnest: rats,
+    drcMarkers: drc?.map((v) => v.at),
   });
 
   const resvg = new Resvg(svg);
-  return resvg.render().asPng();
+  return { png: resvg.render().asPng(), drcCount: drc?.length ?? 0, ratlineCount: rats?.length ?? 0 };
+}
+
+/** Render `b` to a PNG buffer. See renderPNGDetailed. */
+export function renderPNG(b: Board, opts: ScreenshotOpts = {}): Buffer {
+  return renderPNGDetailed(b, opts).png;
 }
 
 /** Decode width/height from a PNG buffer's IHDR chunk (8-byte sig + 4-byte length + "IHDR" + 4-byte width + 4-byte height, big-endian). */

@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join } from 'node:path';
+import { dirname, extname, isAbsolute, join, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -43,7 +43,7 @@ import type { JlcStock, PartInfo, SearchOpts } from '@flamingo/parts';
 import type { Doc } from './document.js';
 import type { RouteRunner } from './route.js';
 import { formatAutorouteSummary, runAutorouteBroadcast } from './autoroute.js';
-import { pngDimensions, renderPNG } from './screenshot.js';
+import { pngDimensions, renderPNGDetailed } from './screenshot.js';
 import { checkStock, stockCheckEnabled } from './stock.js';
 import { exportStep } from './step.js';
 
@@ -208,6 +208,15 @@ export function resolveFabOutDir(ctx: McpContext, outDir?: string): string {
   if (outDir) return isAbsolute(outDir) ? outDir : join(ctx.projectDir, outDir);
   const base = ctx.doc.filePath ? dirname(ctx.doc.filePath) : ctx.projectDir;
   return join(base, 'fab');
+}
+
+/**
+ * Directories a board may be opened from (and /api/projects lists from).
+ * Shared by the open_board MCP tool and the /api/open + /api/projects HTTP
+ * routes so all three enforce the same containment boundary.
+ */
+export function boardSearchRoots(ctx: McpContext): string[] {
+  return [...new Set([resolve(ctx.projectDir), resolve(process.cwd())])];
 }
 
 // ---------------------------------------------------------------------------
@@ -376,7 +385,12 @@ export function createMcpServer(ctx: McpContext): McpServer {
       },
     },
     async ({ path }) => {
-      const abs = isAbsolute(path) ? path : join(ctx.projectDir, path);
+      const abs = resolve(isAbsolute(path) ? path : join(ctx.projectDir, path));
+      // Same containment rule as POST /api/open: a .flamingo file inside the
+      // project — never an arbitrary file elsewhere on disk.
+      if (extname(abs) !== '.flamingo' || !boardSearchRoots(ctx).some((r) => abs.startsWith(r + sep))) {
+        return errorResult(`path must be a .flamingo file inside the project (got "${abs}")`);
+      }
       let data: string;
       try {
         data = await readFile(abs, 'utf8');
@@ -1206,18 +1220,18 @@ export function createMcpServer(ctx: McpContext): McpServer {
       },
     },
     ({ layers, region, highlightNet, widthPx, showRatsnest, showDrc }): CallToolResult => {
-      // Fill zones (working copy) before counting: renderPNG fills internally
-      // for the overlay, so counting on the raw board would report phantom
-      // zone-outline violations/ratlines that the image doesn't show.
-      const board =
-        ctx.doc.board.zones.some((z) => !z.fill) ? fillAllZones(ctx.doc.board) : ctx.doc.board;
-      const png = renderPNG(board, { layers, region, highlightNet, widthPx, showRatsnest, showDrc });
+      const { png, drcCount, ratlineCount } = renderPNGDetailed(ctx.doc.board, {
+        layers,
+        region,
+        highlightNet,
+        widthPx,
+        showRatsnest,
+        showDrc,
+      });
       const { width, height } = pngDimensions(png);
 
-      const drcCount = showDrc === false ? 0 : runDRC(board).length;
-      const ratCount = showRatsnest === false ? 0 : ratsnest(board).length;
       const layerStr = layers && layers.length > 0 ? layers.join(',') : 'all layers';
-      const summary = `${width}x${height}px, layers: ${layerStr}, ${drcCount} DRC marker(s), ${ratCount} ratline(s)`;
+      const summary = `${width}x${height}px, layers: ${layerStr}, ${drcCount} DRC marker(s), ${ratlineCount} ratline(s)`;
 
       return {
         content: [

@@ -646,6 +646,27 @@ describe('MCP endpoint', () => {
     expect(doc.board.name).toBe('other');
   });
 
+  it('open_board refuses paths outside the project and non-.flamingo files', async () => {
+    const escape = await client.callTool({
+      name: 'open_board',
+      arguments: { path: join('..', '..', 'etc', 'passwd') },
+    });
+    expect(escape.isError).toBe(true);
+    expect(textOf(escape as any)).toContain('.flamingo file inside the project');
+
+    const absolute = await client.callTool({
+      name: 'open_board',
+      arguments: { path: '/etc/passwd' },
+    });
+    expect(absolute.isError).toBe(true);
+
+    const wrongExt = await client.callTool({
+      name: 'open_board',
+      arguments: { path: 'board.json' },
+    });
+    expect(wrongExt.isError).toBe(true);
+  });
+
   it('autoroute (mocked router) adds tracks and reports full routing', async () => {
     await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R1', x: 0, y: 0 } });
     await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R2', x: 5, y: 0 } });

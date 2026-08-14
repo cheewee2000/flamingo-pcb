@@ -36,7 +36,7 @@
 import polygonClipping from 'polygon-clipping';
 import type { MultiPolygon, Polygon, Ring, Pair } from 'polygon-clipping';
 import type { Board, Point, Zone } from './types.js';
-import { expandTrack, padOutline, outlineToPolygon, isSlot, holeSlotCenterline, capsulePolygon, allHoles } from './geometry.js';
+import { bboxOf, expandTrack, padOutline, outlineToPolygon, isSlot, holeSlotCenterline, capsulePolygon, allHoles } from './geometry.js';
 import { copperLayersOf, padCopperLayers } from './layers.js';
 
 // ---------------------------------------------------------------------------
@@ -343,6 +343,22 @@ export function fillZone(b: Board, zone: Zone): Point[][] {
   }
   if (base.length === 0) return [];
 
+  // Bbox prefilter: an obstacle can only carve the fill if its clearance-
+  // expanded shape reaches the zone polygon, so anything whose raw bbox lies
+  // outside the zone bbox grown by clearance is skipped before we pay for
+  // bufferPolygon (a full clip union) or add operands to the difference clip.
+  const zb = bboxOf(zone.polygon);
+  const reach = {
+    minX: zb.minX - zone.clearance,
+    minY: zb.minY - zone.clearance,
+    maxX: zb.maxX + zone.clearance,
+    maxY: zb.maxY + zone.clearance,
+  };
+  const nearZone = (pts: Point[]): boolean => {
+    const o = bboxOf(pts);
+    return o.minX <= reach.maxX && o.maxX >= reach.minX && o.minY <= reach.maxY && o.maxY >= reach.minY;
+  };
+
   // Obstacles: every other-net copper item on this layer, clearance-expanded.
   const obstacles: MultiPolygon[] = [];
 
@@ -350,12 +366,13 @@ export function fillZone(b: Board, zone: Zone): Point[][] {
     if (t.layer !== zone.layer || t.net === zone.net) continue;
     // Expand the capsule by widening the track by 2*clearance (cheap + exact).
     const cap = expandTrack({ ...t, width: t.width + 2 * zone.clearance });
-    obstacles.push([[toRing(cap)]]);
+    if (nearZone(cap)) obstacles.push([[toRing(cap)]]);
   }
 
   for (const v of b.vias) {
     if (v.net === zone.net) continue; // vias span every copper layer
-    obstacles.push([[toRing(disk(v.at, v.diameter / 2 + zone.clearance))]]);
+    const d = disk(v.at, v.diameter / 2 + zone.clearance);
+    if (nearZone(d)) obstacles.push([[toRing(d)]]);
   }
 
   const cu = copperLayersOf(b);
@@ -364,7 +381,8 @@ export function fillZone(b: Board, zone: Zone): Point[][] {
       if (!padCopperLayers(pad, c.side, cu).includes(zone.layer)) continue;
       const net = netOfPin(b, `${c.refdes}.${pad.number}`);
       if (net === zone.net) continue;
-      obstacles.push(bufferPolygon(padOutline(c, pad), zone.clearance));
+      const outline = padOutline(c, pad);
+      if (nearZone(outline)) obstacles.push(bufferPolygon(outline, zone.clearance));
     }
   }
 
@@ -378,7 +396,7 @@ export function fillZone(b: Board, zone: Zone): Point[][] {
   for (const k of b.keepouts) {
     if (!k.keepout.copper && !k.keepout.pour) continue;
     if (k.layers !== 'all' && !k.layers.includes(zone.layer)) continue;
-    obstacles.push(bufferPolygon(k.polygon, zone.clearance));
+    if (nearZone(k.polygon)) obstacles.push(bufferPolygon(k.polygon, zone.clearance));
   }
 
   // Slotted mounting holes are milled cutouts (e.g. a slot to pass a display
@@ -388,7 +406,8 @@ export function fillZone(b: Board, zone: Zone): Point[][] {
   for (const h of allHoles(b)) {
     if (!isSlot(h)) continue;
     const { start, end } = holeSlotCenterline(h);
-    obstacles.push(bufferPolygon(capsulePolygon(start, end, h.padDiameter / 2), zone.clearance));
+    const capsule = capsulePolygon(start, end, h.padDiameter / 2);
+    if (nearZone(capsule)) obstacles.push(bufferPolygon(capsule, zone.clearance));
   }
 
   const filled: MultiPolygon =
@@ -411,7 +430,19 @@ export function fillZone(b: Board, zone: Zone): Point[][] {
   return rings;
 }
 
+/**
+ * Identity-keyed memo for fillAllZones. Safe because boards are handled
+ * immutably everywhere that matters: applyOp structuredClone()s the board on
+ * every op, so any content change yields a new object (= a cache miss), and
+ * callers treat the returned filled copy as read-only.
+ */
+const fillCache = new WeakMap<Board, Board>();
+
 /** Return a copy of `b` with every zone's `fill` populated by `fillZone`. */
 export function fillAllZones(b: Board): Board {
-  return { ...b, zones: b.zones.map((z) => ({ ...z, fill: fillZone(b, z) })) };
+  const hit = fillCache.get(b);
+  if (hit) return hit;
+  const filled = { ...b, zones: b.zones.map((z) => ({ ...z, fill: fillZone(b, z) })) };
+  fillCache.set(b, filled);
+  return filled;
 }

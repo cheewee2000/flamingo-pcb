@@ -86,20 +86,20 @@ export function componentDropOp(
   delta: Point,
 ): Op {
   const moves = drag.map((d) => ({ refdes: d.refdes, at: { x: d.startAt.x + delta.x, y: d.startAt.y + delta.y } }));
-  const moved = new Set(moves.map((m) => m.refdes));
-  // Post-move anchors from a shadow board.
-  const shadow: Board = structuredClone(board);
-  for (const m of moves) {
-    const c = shadow.components.find((x) => x.refdes === m.refdes);
-    if (c) c.at = m.at;
-  }
+  // Post-move anchors: padWorld only reads at/rotation/side, so a shallow
+  // copy with the dropped `at` stands in for the moved component. (This runs
+  // per overlay frame while dragging — no board-sized clones here.)
+  const seen = new Set<string>();
   const reshapeMoves: { trackId: string; end: 'start' | 'end'; newAt: Point }[] = [];
-  for (const refdes of moved) {
-    const c = shadow.components.find((x) => x.refdes === refdes);
-    if (!c) continue;
+  for (const m of moves) {
+    if (seen.has(m.refdes)) continue;
+    seen.add(m.refdes);
+    const orig = board.components.find((x) => x.refdes === m.refdes);
+    if (!orig) continue;
+    const c = { ...orig, at: m.at };
     for (const pad of c.footprint.pads) {
       const newAt = padWorld(c, pad).at;
-      for (const h of tracksAtPad(board, refdes, pad.number)) {
+      for (const h of tracksAtPad(board, m.refdes, pad.number)) {
         reshapeMoves.push({ trackId: h.trackId, end: h.end, newAt });
       }
     }

@@ -66,12 +66,37 @@ export interface AutorouteResult {
   unstitchedIslands: { layer: string; net: string; area: number; at: { x: number; y: number } }[];
 }
 
+/** Docs with an autoroute pipeline currently in flight (rejects overlapping runs). */
+const activeRoutes = new WeakSet<Doc>();
+
 /**
  * Run the full autoroute pipeline against `doc` using `route`. Mutates the
  * document (unroute + addTracks). Throws an Error with a human-readable message
  * on any failure (bad unroute op, router error, SES parse error, apply error).
+ *
+ * Concurrency: freerouting can run for minutes and the pipeline interleaves
+ * doc.apply calls with those awaits, so only one run per Doc is allowed at a
+ * time, and any board edit that lands while freerouting is out (every
+ * doc.apply swaps in a new board object, so an identity check detects it)
+ * aborts the run instead of importing routes against stale geometry.
  */
 export async function runAutoroute(
+  doc: Doc,
+  route: RouteRunner,
+  opts: AutorouteOptions = {},
+): Promise<AutorouteResult> {
+  if (activeRoutes.has(doc)) {
+    throw new Error('an autoroute is already running for this board — wait for it to finish (or watch routeStatus)');
+  }
+  activeRoutes.add(doc);
+  try {
+    return await runAutoroutePipeline(doc, route, opts);
+  } finally {
+    activeRoutes.delete(doc);
+  }
+}
+
+async function runAutoroutePipeline(
   doc: Doc,
   route: RouteRunner,
   opts: AutorouteOptions = {},
@@ -93,6 +118,9 @@ export async function runAutoroute(
   const board: Board = doc.board;
   const dsn = exportDSN(board, netList ? { nets: netList } : {});
   const ses = await route.run(dsn, runOpts(opts, 'route'));
+  if (doc.board !== board) {
+    throw new Error('board was edited while freerouting was running — routes discarded, rerun autoroute');
+  }
   const { tracks, vias } = importSES(ses, board);
 
   // 5. Apply the routed geometry.
@@ -136,7 +164,11 @@ export async function runAutoroute(
       shadow.tracks = shadow.tracks.filter((t) => !thinNets.includes(t.net));
       shadow.vias = shadow.vias.filter((v) => !thinNets.includes(v.net));
       const dsn2 = exportDSN(shadow, { nets: thinNets });
+      const boardBeforeRetry = doc.board;
       const ses2 = await route.run(dsn2, runOpts(opts, 'retry'));
+      if (doc.board !== boardBeforeRetry) {
+        throw new Error('board was edited while freerouting was running — routes discarded, rerun autoroute');
+      }
       const imported = importSES(ses2, doc.board);
       const applyRes2 = doc.apply({ op: 'addTracks', tracks: imported.tracks, vias: imported.vias });
       if (!applyRes2.ok) throw new Error((applyRes2 as OpError).error);

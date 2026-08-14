@@ -472,7 +472,9 @@ function fileStem(name: string): string {
 
 /** Render `b` to a complete Gerber X2 + Excellon fileset keyed by filename. */
 export function generateGerbers(b: Board): FabFiles {
-  const filled = fillAllZones(b);
+  // An already-filled board (e.g. from exportFab) is used as-is; only refill
+  // when some zone lacks copper, matching the run_drc/screenshot convention.
+  const filled = b.zones.some((z) => !z.fill) ? fillAllZones(b) : b;
   const name = fileStem(b.name);
   const files = new Map<string, string>();
 
