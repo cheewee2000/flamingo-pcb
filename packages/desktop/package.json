@@ -1,0 +1,54 @@
+{
+  "name": "@flamingo/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.mjs",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --outfile=dist/main.mjs --external:electron --external:@resvg/resvg-js --external:bufferutil --external:utf-8-validate --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "start": "electron .",
+    "dist": "electron-builder --mac --dir",
+    "dist:dmg": "electron-builder --mac"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2"
+  },
+  "devDependencies": {
+    "@flamingo/engine": "*",
+    "@flamingo/server": "*",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.0"
+  },
+  "description": "Prompt-first PCB CAD",
+  "author": "CW&T",
+  "build": {
+    "appId": "com.cwandt.flamingo",
+    "electronVersion": "33.4.11",
+    "productName": "Flamingo",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../ui/dist",
+        "to": "ui"
+      }
+    ],
+    "fileAssociations": [
+      {
+        "ext": "flamingo",
+        "name": "Flamingo Board",
+        "role": "Editor"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.icns",
+      "identity": null
+    }
+  }
+}

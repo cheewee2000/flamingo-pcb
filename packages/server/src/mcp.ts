@@ -46,6 +46,7 @@ import { formatAutorouteSummary, runAutorouteBroadcast } from './autoroute.js';
 import { pngDimensions, renderPNGDetailed } from './screenshot.js';
 import { checkStock, stockCheckEnabled } from './stock.js';
 import { exportStep } from './step.js';
+import { importEpro } from './import/epro.js';
 
 /**
  * Parts API injected into the MCP context so tests can supply a mock (no
@@ -373,6 +374,48 @@ export function createMcpServer(ctx: McpContext): McpServer {
         return errorResult(`board created but failed to save: ${err instanceof Error ? err.message : String(err)}`);
       }
       return textResult(`Created new board "${name}" (${copperLayers}-layer) — saved to ${filePath}`);
+    },
+  );
+
+  server.registerTool(
+    'import_board',
+    {
+      description:
+        'Import an EasyEDA Pro project (.epro) as a new Flamingo board: outline, components with their original footprints, nets, tracks, vias, pours, and mounting holes. Writes a .flamingo file inside the project and opens it. 2-layer boards only so far.',
+      inputSchema: {
+        source: z.string().describe('Path to the .epro file (absolute, or relative to the project directory)'),
+        path: z
+          .string()
+          .describe('Destination .flamingo path inside the project directory for the imported board'),
+        pcb: z.string().optional().describe('PCB document name inside the project, when it has more than one'),
+      },
+    },
+    async ({ source, path, pcb }) => {
+      const src = resolve(isAbsolute(source) ? source : join(ctx.projectDir, source));
+      const abs = resolve(isAbsolute(path) ? path : join(ctx.projectDir, path));
+      if (extname(abs) !== '.flamingo' || !boardSearchRoots(ctx).some((r) => abs.startsWith(r + sep))) {
+        return errorResult(`path must be a .flamingo file inside the project (got "${abs}")`);
+      }
+      let board: Board;
+      let warnings: string[];
+      try {
+        ({ board, warnings } = importEpro(src, { pcbName: pcb }));
+      } catch (err) {
+        return errorResult(`import failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      await mkdir(dirname(abs), { recursive: true });
+      ctx.doc.resetBoard(board, abs, true);
+      try {
+        await ctx.doc.save();
+      } catch (err) {
+        return errorResult(`imported but failed to save: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      const summary =
+        `Imported "${board.name}" from ${src} -> ${abs}: ${board.components.length} component(s), ` +
+        `${board.nets.length} net(s), ${board.tracks.length} track(s), ${board.vias.length} via(s), ` +
+        `${board.zones.length} zone(s), ${board.holes.length} hole(s).`;
+      const warnText = warnings.length ? `\nWarnings:\n${warnings.map((w) => `- ${w}`).join('\n')}` : '';
+      return textResult(summary + warnText + '\nRun run_drc to check it against the Flamingo ruleset.');
     },
   );
 

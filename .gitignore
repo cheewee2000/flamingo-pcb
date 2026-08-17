@@ -18,3 +18,9 @@ boards/
 /zoom_*.png
 /scripts/tmp-*
 /scripts/t11-*
+
+# --- Desktop app build output ---
+packages/desktop/release/
+packages/desktop/build/icon.iconset/
+packages/desktop/build/icon_1024.png
+packages/desktop/build/icon_preview.png
