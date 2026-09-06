@@ -41,6 +41,8 @@ import {
   allHoles,
   capsulePolygon,
   componentLabelPlacement,
+  componentLabelHidden,
+  componentSilkHidden,
   labelFontMm,
   padLabelLayout,
   netIslands,
@@ -608,10 +610,11 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
       const color = silkColorFor(side);
       for (const c of board.components) {
         if (c.side !== side) continue;
-        for (const item of c.footprint.silk) drawFootprintSilkItem(ctx, view, c, item, color);
+        if (!componentSilkHidden(c)) for (const item of c.footprint.silk) drawFootprintSilkItem(ctx, view, c, item, color);
         // refdes label: adjacent to the component body (below/right/left/
         // above, pad-avoiding) — anchor from the shared engine helper. Mirrors
         // with its side just like footprint silk text.
+        if (componentLabelHidden(c)) continue;
         drawSilkText(ctx, view, componentLabelPlacement(board, c).at, 0, c.refdes, REFDES_HEIGHT_MM, color, c.side === 'bottom');
       }
       const silkLayer = side === 'top' ? 'F.Silk' : 'B.Silk';

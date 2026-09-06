@@ -721,6 +721,55 @@ export function createMcpServer(ctx: McpContext): McpServer {
     {
       description: 'Remove one or more pins from whatever net they belong to.',
       inputSchema: {
+  server.registerTool(
+    'set_component_label',
+    {
+      description:
+        "Override where a component's auto-placed refdes silk label sits: pin its centre at x/y (world mm; it then rides along with the part), hide it (JLCPCB assembly reads the CPL, not the legend), or pass auto: true to return to automatic placement. Use it to clear silk-over-pad DRC hits the automatic solver cannot resolve in dense areas.",
+      inputSchema: {
+        refdes: z.string().describe('Reference designator of the component'),
+        x: z.number().optional().describe('Label centre X in mm (pass with y to pin the label)'),
+        y: z.number().optional().describe('Label centre Y in mm (pass with x to pin the label)'),
+        hidden: z.boolean().optional().describe('true to drop the label from silk, DRC and export; false to show it again'),
+        auto: z.boolean().optional().describe('true to remove any override (position and hidden) and restore automatic placement'),
+      },
+    },
+    ({ refdes, x, y, hidden, auto }) => {
+      const comp = ctx.doc.board.components.find((c) => c.refdes === refdes);
+      if (!comp) return errorResult(`Unknown refdes "${refdes}"`);
+      if (auto) {
+        const op: Op = { op: 'setComponentLabel', refdes };
+        return applyAndReport(ctx, op, () => `${refdes} label: automatic placement`);
+      }
+      if ((x === undefined) !== (y === undefined)) return errorResult('Pass both x and y to pin the label');
+      if (x === undefined && hidden === undefined) return errorResult('Nothing to do: pass x/y, hidden, or auto: true');
+      const label: { offset?: Point; hidden?: boolean } = { ...comp.label };
+      if (x !== undefined && y !== undefined) label.offset = { x: x - comp.at.x, y: y - comp.at.y };
+      if (hidden !== undefined) label.hidden = hidden;
+      if (label.hidden !== true) delete label.hidden;
+      const op: Op = { op: 'setComponentLabel', refdes, label };
+      const what = label.hidden ? 'hidden' : label.offset ? `pinned at (${x ?? comp.at.x + label.offset.x}, ${y ?? comp.at.y + label.offset.y})` : 'automatic placement';
+      return applyAndReport(ctx, op, () => `${refdes} label: ${what}`);
+    },
+  );
+
+  server.registerTool(
+    'set_component_silk',
+    {
+      description:
+        "Hide or show a component's footprint silk items (the outline lines/arcs that come with the LCSC footprint). Use hidden: true for parts packed so tightly that their outline lands on a neighbour's pad (silk-over-pad DRC); the refdes label is unaffected (see set_component_label).",
+      inputSchema: {
+        refdes: z.string().describe('Reference designator of the component'),
+        hidden: z.boolean().describe('true to drop the footprint silk from render, DRC and export; false to restore it'),
+      },
+    },
+    ({ refdes, hidden }) => {
+      if (!ctx.doc.board.components.some((c) => c.refdes === refdes)) return errorResult(`Unknown refdes "${refdes}"`);
+      const op: Op = { op: 'setComponentSilk', refdes, hidden };
+      return applyAndReport(ctx, op, () => `${refdes} footprint silk: ${hidden ? 'hidden' : 'shown'}`);
+    },
+  );
+
         pins: z.array(z.string()).min(1).describe('Pin refs in "REFDES.PADNUMBER" form to disconnect'),
       },
     },

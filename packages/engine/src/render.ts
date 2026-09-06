@@ -21,7 +21,7 @@ import {
   capsulePolygon,
 } from './geometry.js';
 import { copperLayersOf, padCopperLayers } from './layers.js';
-import { componentLabelPlacement } from './labels.js';
+import { componentLabelHidden, componentLabelPlacement, componentSilkHidden } from './labels.js';
 import type { RatLine } from './connectivity.js';
 
 export interface RenderOpts {
@@ -379,11 +379,14 @@ export function renderSVG(b: Board, opts: RenderOpts = {}): string {
     for (const c of b.components) {
       if (c.side !== side) continue;
       const mirror = c.side === 'bottom';
-      for (const item of c.footprint.silk) {
-        parts.push(...renderSilkItem(item, c, mirror, color));
+      if (!componentSilkHidden(c)) {
+        for (const item of c.footprint.silk) {
+          parts.push(...renderSilkItem(item, c, mirror, color));
+        }
       }
       // refdes label: always rendered, adjacent to the component body
       // (below/right/left/above, pad-avoiding) per componentLabelPlacement.
+      if (componentLabelHidden(c)) continue;
       const lp = componentLabelPlacement(b, c);
       const at = svg(lp.at);
       parts.push(

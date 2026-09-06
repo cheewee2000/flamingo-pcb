@@ -18,7 +18,7 @@
  */
 import type { Board, ComponentInst, Point, SilkItem, SilkLine, SilkText } from '../../types.js';
 import { add, componentTransformPoints, polyIntersects, rotate } from '../../geometry.js';
-import { componentLabelRect } from '../../labels.js';
+import { componentLabelHidden, componentLabelRect, componentSilkHidden } from '../../labels.js';
 import { circlePolygon } from '../util.js';
 import type { RuleSet } from '../rules.js';
 import type { CopperItem, DrcViolation } from '../types.js';
@@ -58,13 +58,15 @@ function textRectLocal(at: Point, rotationDeg: number, text: string, height: num
 function footprintSilkShapes(b: Board, c: ComponentInst): SilkShape[] {
   const side = c.side;
   const shapes: SilkShape[] = [];
-  for (const item of c.footprint.silk) {
-    shapes.push(...footprintSilkItemShape(c, item, side));
+  if (!componentSilkHidden(c)) {
+    for (const item of c.footprint.silk) {
+      shapes.push(...footprintSilkItemShape(c, item, side));
+    }
   }
   // Auto-generated refdes label: its world-space box comes from the shared
   // board-aware placement helper (labels.ts), so DRC checks the label exactly
   // where the renderers and the Gerber legend draw it.
-  shapes.push({ poly: componentLabelRect(b, c), side, ref: c.refdes });
+  if (!componentLabelHidden(c)) shapes.push({ poly: componentLabelRect(b, c), side, ref: c.refdes });
   return shapes;
 }
 

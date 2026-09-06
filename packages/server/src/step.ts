@@ -24,6 +24,8 @@ import type { Board, ComponentInst, Point } from '@flamingo/engine';
 import {
   capsulePolygon,
   componentLabelPlacement,
+  componentLabelHidden,
+  componentSilkHidden,
   componentTransformPoints,
   componentTransformRotation,
   fillAllZones,
@@ -316,7 +318,7 @@ function detailSolids(board: Board, models: Map<string, MeshGroup[]>): Solid[] {
   for (const c of board.components) {
     const top = c.side !== 'bottom';
     const mirror = c.side === 'bottom';
-    for (const item of c.footprint.silk) {
+    for (const item of componentSilkHidden(c) ? [] : c.footprint.silk) {
       if (item.kind === 'line') {
         const [a, b] = componentTransformPoints(c, [item.start, item.end]);
         silkStroke(a, b, item.width, top);
@@ -335,6 +337,7 @@ function detailSolids(board: Board, models: Map<string, MeshGroup[]>): Solid[] {
       }
     }
     // Refdes label, same anchor + stroke width as the Gerber legend.
+    if (componentLabelHidden(c)) continue;
     const lp = componentLabelPlacement(board, c);
     silkPolys(strokeText(c.refdes, lp.at, lp.height, lp.rotation, mirror), 0.15, top);
   }

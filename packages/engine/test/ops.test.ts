@@ -916,3 +916,35 @@ describe('applyOp', () => {
     });
   });
 });
+
+describe('setComponentLabel', () => {
+  it('sets, survives a save/load round trip, and clears the label override', () => {
+    let b: Board = newBoard('t', 2);
+    const place: Op = {
+      op: 'placeComponent', refdes: 'R1', lcsc: 'C1', footprint: makeFootprint(['1', '2']),
+      at: { x: 5, y: 5 }, rotation: 0, side: 'top', fields: {},
+    };
+    b = applyOp(b, place).board!;
+    b = applyOp(b, { op: 'setComponentLabel', refdes: 'R1', label: { offset: { x: 0, y: -2 }, hidden: true } }).board!;
+    expect(b.components[0].label).toEqual({ offset: { x: 0, y: -2 }, hidden: true });
+    const back = parseBoard(serializeBoard(b));
+    expect(back.components[0].label).toEqual({ offset: { x: 0, y: -2 }, hidden: true });
+    b = applyOp(b, { op: 'setComponentLabel', refdes: 'R1' }).board!;
+    expect(b.components[0].label).toBeUndefined();
+    expect(applyOp(b, { op: 'setComponentLabel', refdes: 'ZZ9' }).error).toBeTruthy();
+  });
+});
+
+describe('setComponentSilk', () => {
+  it('hides and restores footprint silk', () => {
+    let b: Board = newBoard('t', 2);
+    b = applyOp(b, {
+      op: 'placeComponent', refdes: 'R1', lcsc: 'C1', footprint: makeFootprint(['1', '2']),
+      at: { x: 5, y: 5 }, rotation: 0, side: 'top', fields: {},
+    }).board!;
+    b = applyOp(b, { op: 'setComponentSilk', refdes: 'R1', hidden: true }).board!;
+    expect(b.components[0].silk).toEqual({ hidden: true });
+    b = applyOp(b, { op: 'setComponentSilk', refdes: 'R1', hidden: false }).board!;
+    expect(b.components[0].silk).toBeUndefined();
+  });
+});

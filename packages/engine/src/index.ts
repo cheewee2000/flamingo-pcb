@@ -64,6 +64,8 @@ export {
   COMPONENT_LABEL_HEIGHT_MM,
   COMPONENT_LABEL_GAP_MM,
   COMPONENT_LABEL_CHAR_ADVANCE,
+  componentLabelHidden,
+  componentSilkHidden,
 } from './labels.js';
 export type { ComponentLabelPlacement, ComponentLabelPosition } from './labels.js';
 

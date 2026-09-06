@@ -32,6 +32,8 @@ import {
   componentTransformPoints,
   componentTransformRotation,
   componentLabelPlacement,
+  componentLabelHidden,
+  componentSilkHidden,
   fillAllZones,
   bufferPolygon,
   isSlot,
@@ -360,7 +362,7 @@ function buildSilk(b: Board, side: 'F' | 'B'): string {
   for (const comp of b.components) {
     if (comp.side !== compSide) continue;
     const mirror = comp.side === 'bottom';
-    for (const item of comp.footprint.silk) {
+    for (const item of componentSilkHidden(comp) ? [] : comp.footprint.silk) {
       switch (item.kind) {
         case 'line': {
           const [s, e] = componentTransformPoints(comp, [item.start, item.end]);
@@ -390,6 +392,7 @@ function buildSilk(b: Board, side: 'F' | 'B'): string {
     }
     // refdes label (upright, adjacent to the component body, pad-avoiding —
     // anchor shared with the SVG/canvas renderers and DRC)
+    if (componentLabelHidden(comp)) continue;
     const lp = componentLabelPlacement(b, comp);
     strokes(strokeText(comp.refdes, lp.at, lp.height, lp.rotation, mirror), 0.15);
   }

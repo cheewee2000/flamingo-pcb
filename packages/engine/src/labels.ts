@@ -81,7 +81,9 @@ export type ComponentLabelPosition =
   | 'below-right'
   | 'below-left'
   | 'above-right'
-  | 'above-left';
+  | 'above-left'
+  // Explicit per-component override (ComponentInst.label.offset).
+  | 'pinned';
 
 export interface ComponentLabelPlacement {
   /** World-space CENTER of the label text (both axes). */
@@ -141,6 +143,25 @@ export function componentBodyBBox(c: ComponentInst): BBox {
   return bboxOf(pts);
 }
 
+/** True when the component's footprint silk items are suppressed (`silk.hidden`). */
+export function componentSilkHidden(c: ComponentInst): boolean {
+  return c.silk?.hidden === true;
+}
+
+/** True when the component's refdes label is suppressed (`label.hidden`). */
+export function componentLabelHidden(c: ComponentInst): boolean {
+  return c.label?.hidden === true;
+}
+
+/** The pinned placement from `label.offset`, or undefined when not pinned. */
+function pinnedPlacement(c: ComponentInst): ComponentLabelPlacement | undefined {
+  const off = c.label?.offset;
+  if (!off) return undefined;
+  const height = COMPONENT_LABEL_HEIGHT_MM;
+  const width = Math.max(1, c.refdes.length) * COMPONENT_LABEL_CHAR_ADVANCE * height;
+  return { at: { x: c.at.x + off.x, y: c.at.y + off.y }, rotation: 0, height, width, position: 'pinned' };
+}
+
 /** The placement for one named candidate position around `box`. */
 function placementAt(
   box: BBox,
@@ -174,6 +195,11 @@ function placementAt(
       break;
     case 'above-left':
       at = { x: box.minX - gap - width / 2, y: box.maxY + gap + height / 2 };
+      break;
+    case 'pinned':
+      // Never a solver candidate (pinned placements come from pinnedPlacement);
+      // fall back to 'below' so the switch stays total.
+      at = { x: (box.minX + box.maxX) / 2, y: box.minY - gap - height / 2 };
       break;
   }
   return { at, rotation: 0, height, width, position };
@@ -385,8 +411,23 @@ function solveBoard(board: Board): Map<string, ComponentLabelPlacement> {
     a.refdes < b.refdes ? -1 : a.refdes > b.refdes ? 1 : 0,
   );
   const result = new Map<string, ComponentLabelPlacement>();
+  // Pinned labels are fixed obstacles: commit them first so every auto label
+  // dodges them. Hidden labels never occupy space (they are still solved so
+  // callers get a placement, but are excluded from the obstacle set).
+  const occupies = (c: ComponentInst): boolean => !componentLabelHidden(c);
+  const pinned = new Set<string>();
   for (const c of ordered) {
-    const placedLabels = [...result.values()].map(labelBBox);
+    const p = pinnedPlacement(c);
+    if (p) {
+      result.set(c.refdes, p);
+      pinned.add(c.refdes);
+    }
+  }
+  for (const c of ordered) {
+    if (pinned.has(c.refdes)) continue;
+    const placedLabels = ordered
+      .filter((o) => o.refdes !== c.refdes && result.has(o.refdes) && occupies(o))
+      .map((o) => labelBBox(result.get(o.refdes)!));
     result.set(c.refdes, solveOne(c, ctx, placedLabels).placement);
   }
 
@@ -397,7 +438,10 @@ function solveBoard(board: Board): Map<string, ComponentLabelPlacement> {
   for (let sweep = 0; sweep < 3; sweep++) {
     let improved = false;
     for (const c of ordered) {
-      const others = ordered.filter((o) => o.refdes !== c.refdes).map((o) => labelBBox(result.get(o.refdes)!));
+      if (pinned.has(c.refdes)) continue;
+      const others = ordered
+        .filter((o) => o.refdes !== c.refdes && occupies(o))
+        .map((o) => labelBBox(result.get(o.refdes)!));
       const current = result.get(c.refdes)!;
       const currentCost = candidateCost(
         inflate(labelBBox(current), SCORE_PAD),
@@ -436,6 +480,9 @@ export function componentLabelPlacement(
 ): ComponentLabelPlacement {
   const c = maybeComp ?? (boardOrComp as ComponentInst);
   const board = maybeComp ? (boardOrComp as Board) : undefined;
+
+  const pinnedP = pinnedPlacement(c);
+  if (pinnedP) return pinnedP;
 
   if (!board) {
     const height = COMPONENT_LABEL_HEIGHT_MM;

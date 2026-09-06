@@ -5,6 +5,7 @@ import {
   componentBodyBBox,
   componentLabelPlacement,
   componentLabelRect,
+  componentLabelHidden,
   COMPONENT_LABEL_GAP_MM,
   COMPONENT_LABEL_HEIGHT_MM,
   COMPONENT_LABEL_CHAR_ADVANCE,
@@ -258,5 +259,44 @@ describe('componentLabelRect', () => {
     expect(Math.max(...rect.map((q) => q.x))).toBeCloseTo(p.at.x + w / 2);
     expect(Math.min(...rect.map((q) => q.y))).toBeCloseTo(p.at.y - COMPONENT_LABEL_HEIGHT_MM / 2);
     expect(Math.max(...rect.map((q) => q.y))).toBeCloseTo(p.at.y + COMPONENT_LABEL_HEIGHT_MM / 2);
+  });
+});
+
+describe('label overrides (ComponentInst.label)', () => {
+  it('a pinned label sits at at+offset, rides with the part, and is reported as pinned', () => {
+    const c = landscape('R1', { x: 10, y: 10 });
+    c.label = { offset: { x: 0, y: 3 } };
+    expect(componentLabelPlacement(c).at).toEqual({ x: 10, y: 13 });
+    expect(componentLabelPlacement(c).position).toBe('pinned');
+    const b = newBoard('t', 2);
+    b.components.push(c);
+    expect(componentLabelPlacement(b, c).at).toEqual({ x: 10, y: 13 });
+    c.at = { x: 20, y: 20 };
+    expect(componentLabelPlacement(c).at).toEqual({ x: 20, y: 23 });
+  });
+
+  it('auto labels dodge a pinned neighbour label', () => {
+    const b = newBoard('t', 2);
+    const a = landscape('R1', { x: 10, y: 10 });
+    const other = landscape('R2', { x: 30, y: 30 });
+    // Pin R2's label right where R1's default (below) label would go.
+    const def = componentLabelPlacement(a);
+    other.label = { offset: { x: def.at.x - other.at.x, y: def.at.y - other.at.y } };
+    b.components.push(a, other);
+    const p = componentLabelPlacement(b, a);
+    expect(p.position).not.toBe('pinned');
+    expect(Math.abs(p.at.y - def.at.y) > 0.5 || Math.abs(p.at.x - def.at.x) > 0.5).toBe(true);
+  });
+
+  it('hidden is reported and hidden labels do not block neighbours', () => {
+    const b = newBoard('t', 2);
+    const a = landscape('R1', { x: 10, y: 10 });
+    const other = landscape('R2', { x: 30, y: 30 });
+    const def = componentLabelPlacement(a);
+    other.label = { offset: { x: def.at.x - other.at.x, y: def.at.y - other.at.y }, hidden: true };
+    b.components.push(a, other);
+    expect(componentLabelHidden(other)).toBe(true);
+    expect(componentLabelHidden(a)).toBe(false);
+    expect(componentLabelPlacement(b, a).at).toEqual(def.at);
   });
 });

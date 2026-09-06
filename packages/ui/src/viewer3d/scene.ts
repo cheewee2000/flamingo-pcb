@@ -19,6 +19,8 @@ import type { Board, ComponentInst, PathSeg, Point } from '@flamingo/engine';
 import {
   bboxOf,
   componentLabelPlacement,
+  componentLabelHidden,
+  componentSilkHidden,
   componentTransformPoints,
   fillAllZones,
   holeSlotCenterline,
@@ -352,7 +354,7 @@ function buildSilkGroup(board: Board): THREE.Group {
   for (const c of board.components) {
     const top = c.side !== 'bottom';
     const mirror = c.side === 'bottom';
-    for (const item of c.footprint.silk) {
+    for (const item of componentSilkHidden(c) ? [] : c.footprint.silk) {
       if (item.kind === 'line') {
         const [a, b] = componentTransformPoints(c, [item.start, item.end]);
         stroke(a, b, item.width, top);
@@ -372,6 +374,7 @@ function buildSilkGroup(board: Board): THREE.Group {
     // Refdes label — same pad-avoiding anchor as the Gerber legend / 2D
     // renderer (most footprints carry no text silk of their own, so without
     // this caps/resistors show no text at all in 3D).
+    if (componentLabelHidden(c)) continue;
     const lp = componentLabelPlacement(board, c);
     const label = buildSilkTextMesh(
       { text: c.refdes, height: lp.height, at: lp.at, rotationDeg: lp.rotation, side: top ? 'top' : 'bottom' },
