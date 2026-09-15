@@ -24,11 +24,12 @@
  * back-side components, so the image itself stays side-independent.
  */
 
+import { createRequire } from 'node:module';
 import type { Board, ComponentInst, LayerId, Net, NetClass, Pad, Point, Track } from '@flamingo/engine';
-import { copperLayersOf, boardBBox, outlineToPolygon, padOutline } from '@flamingo/engine';
+import { copperLayersOf, boardBBox, outlineToPolygon, padOutline, RULESETS } from '@flamingo/engine';
 
 const HOST_CAD = 'flamingo';
-const HOST_VERSION = '0.1.0';
+const HOST_VERSION = createRequire(import.meta.url)('../package.json').version as string;
 
 export interface ExportDSNOptions {
   /**
@@ -39,6 +40,8 @@ export interface ExportDSNOptions {
    * route of everything).
    */
   nets?: string[];
+  /** With `nets`: also emit the listed nets' own existing tracks/vias as protected wiring (pre-routed fanout the router must keep and connect to). */
+  keep?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -284,14 +287,29 @@ export function exportDSN(b: Board, opts: ExportDSNOptions = {}): string {
   }
 
   // ---- Protect wiring (only when subsetting) ----
-  const protectTracks: Track[] = nets ? b.tracks.filter((t) => !includeNet(t.net)) : [];
-  const protectVias = nets ? b.vias.filter((v) => !includeNet(v.net)) : [];
+  const protectTracks: Track[] = nets ? b.tracks.filter((t) => opts.keep || !includeNet(t.net)) : [];
+  const protectVias = nets ? b.vias.filter((v) => opts.keep || !includeNet(v.net)) : [];
   for (const v of protectVias) {
     const vName = viaPadStackName(v.drill, v.diameter);
     if (!viaStacks.has(vName)) viaStacks.set(vName, viaPadStackForms(b, v.diameter));
   }
 
   const dnc = defaultNetClass(b);
+  // Specctra has no drill-to-drill rule, so derive via_via / via_pin copper clearances
+  // that satisfy the ruleset's holeToHole given the smallest annular rings on the board.
+  const holeToHole = RULESETS[b.rules]?.holeToHole ?? 0.5;
+  const ring = (dia: number, drill: number): number => Math.max(0, (dia - drill) / 2);
+  const minViaRing = Math.min(ring(dnc.viaDiameter, dnc.viaDrill), ...b.netClasses.map((c) => ring(c.viaDiameter, c.viaDrill)));
+  let minPinRing = Infinity;
+  for (const c of b.components)
+    for (const p of c.footprint.pads)
+      if (p.drill) minPinRing = Math.min(minPinRing, ring(Math.min(p.size.w, p.size.h), p.drill.diameter));
+  const drillRules = (nc: NetClass): string => {
+    const r = ring(nc.viaDiameter, nc.viaDrill);
+    let s = ` (clearance ${um(Math.max(nc.clearance, holeToHole - r - minViaRing))} (type via_via))`;
+    if (minPinRing < Infinity) s += ` (clearance ${um(Math.max(nc.clearance, holeToHole - r - minPinRing))} (type via_pin))`;
+    return s;
+  };
   const L = copperLayersOf(b);
 
   // ---- Assemble ----
@@ -326,7 +344,7 @@ export function exportDSN(b: Board, opts: ExportDSNOptions = {}): string {
   }
   const allViaNames = [...viaStacks.keys()];
   if (allViaNames.length > 0) out.push(`    (via ${allViaNames.join(' ')})`);
-  out.push(`    (rule (width ${um(dnc.trackWidth)}) (clearance ${um(dnc.clearance)}))`);
+  out.push(`    (rule (width ${um(dnc.trackWidth)}) (clearance ${um(dnc.clearance)})${drillRules(dnc)})`);
   out.push('  )');
 
   // placement
@@ -385,7 +403,7 @@ export function exportDSN(b: Board, opts: ExportDSNOptions = {}): string {
     const memberToks = members.map((m) => tok(m)).join(' ');
     const circuit = vName ? ` (circuit (use_via ${vName}))` : '';
     out.push(
-      `    (class ${tok(cname)} ${memberToks}${circuit} (rule (width ${um(nc.trackWidth)}) (clearance ${um(nc.clearance)})))`,
+      `    (class ${tok(cname)} ${memberToks}${circuit} (rule (width ${um(nc.trackWidth)}) (clearance ${um(nc.clearance)})${drillRules(nc)}))`,
     );
   }
   out.push('  )');

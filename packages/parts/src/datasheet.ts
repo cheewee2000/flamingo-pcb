@@ -20,7 +20,8 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { mkdir, readFile, writeFile, stat, copyFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, writeFile, copyFile } from 'node:fs/promises';
 import { fetchPart } from './fetch.js';
 import type { PartInfo } from './easyeda-parse.js';
 
@@ -30,10 +31,8 @@ const USER_AGENT =
   '(KHTML, like Gecko) Chrome/122.0 Safari/537.36';
 const TIMEOUT_MS = 30_000;
 
-/** Global datasheet cache dir: `~/.flamingo/datasheets` (override via FLAMINGO_CACHE_DIR's parent). */
+/** Global datasheet cache dir: `~/.flamingo/datasheets`. */
 export function datasheetsCacheDir(): string {
-  const override = process.env.FLAMINGO_DATASHEET_DIR;
-  if (override && override.length > 0) return override;
   return join(homedir(), '.flamingo', 'datasheets');
 }
 
@@ -197,7 +196,7 @@ export async function getDatasheet(
   if (opts.boardDir) {
     const name = `${sanitizeMpn(info.mpn || lcsc)}-${sanitizeMpn(lcsc)}.pdf`;
     projectPath = join(opts.boardDir, 'datasheets', name);
-    if (!(await fileExists(projectPath))) {
+    if (!existsSync(projectPath)) {
       await mkdir(join(opts.boardDir, 'datasheets'), { recursive: true });
       // Copy from cache when possible, else write the bytes we hold.
       if (fromCache) await copyFile(cachePath, projectPath);
@@ -276,15 +275,6 @@ async function readIfExists(path: string): Promise<Uint8Array | null> {
     return new Uint8Array(await readFile(path));
   } catch {
     return null;
-  }
-}
-
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await stat(path);
-    return true;
-  } catch {
-    return false;
   }
 }
 

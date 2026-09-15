@@ -3,7 +3,7 @@
  *
  * Writes, into `outDir` (created with mkdir -p):
  *   - gerbers.zip   -- every file generateGerbers() produces, zipped with
- *                      archiver (JLCPCB accepts a single zip of Gerber X2 +
+ *                      adm-zip (JLCPCB accepts a single zip of Gerber X2 +
  *                      Excellon drill files for its "Add gerber file" step)
  *   - bom.csv       -- generateBOM()
  *   - cpl.csv       -- generateCPL()
@@ -21,10 +21,9 @@
  * existing `z.fill`), so this doesn't change generateGerbers' output.
  */
 
-import { createWriteStream } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { ZipArchive } from 'archiver';
+import AdmZip from 'adm-zip';
 import type { Board } from '@flamingo/engine';
 import { fillAllZones, renderSVG } from '@flamingo/engine';
 import { generateGerbers } from './gerber.js';
@@ -37,18 +36,11 @@ export interface ExportFabResult {
   cplCsv: string;
 }
 
-/** Zip a filename->content map to `outPath` (deterministic order: Map insertion order). */
-function zipFiles(files: Map<string, string>, outPath: string): Promise<void> {
-  return new Promise((resolveP, reject) => {
-    const output = createWriteStream(outPath);
-    const archive = new ZipArchive({ zlib: { level: 9 } });
-    output.on('close', () => resolveP());
-    output.on('error', reject);
-    archive.on('error', reject);
-    archive.pipe(output);
-    for (const [name, content] of files) archive.append(content, { name });
-    void archive.finalize();
-  });
+/** Zip a filename->content map (deterministic order: Map insertion order). */
+export function zipFiles(files: Map<string, string>): Buffer {
+  const zip = new AdmZip();
+  for (const [name, content] of files) zip.addFile(name, Buffer.from(content, 'utf8'));
+  return zip.toBuffer();
 }
 
 /** Export the full JLCPCB fabrication fileset for `b` into `outDir`. Returns absolute paths. */
@@ -60,7 +52,7 @@ export async function exportFab(b: Board, outDir: string): Promise<ExportFabResu
 
   const { files } = generateGerbers(filled);
   const gerberZip = resolve(absOutDir, 'gerbers.zip');
-  await zipFiles(files, gerberZip);
+  await writeFile(gerberZip, zipFiles(files));
 
   const bomCsv = resolve(absOutDir, 'bom.csv');
   await writeFile(bomCsv, generateBOM(b), 'utf8');

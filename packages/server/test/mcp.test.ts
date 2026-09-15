@@ -83,6 +83,8 @@ const TOOL_NAMES = [
   'place_component',
   'move_component',
   'remove_component',
+  'set_component_label',
+  'set_component_silk',
   'connect_pins',
   'disconnect_pins',
   'create_net_class',
@@ -105,6 +107,7 @@ const TOOL_NAMES = [
   'autoroute',
   'export_fab',
   'export_step',
+  'import_board',
   'screenshot',
 ];
 
@@ -141,11 +144,11 @@ describe('MCP endpoint', () => {
     await rm(projectDir, { recursive: true, force: true });
   });
 
-  it('tools/list returns all 34 core tools', async () => {
+  it('tools/list returns all 37 core tools', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([...TOOL_NAMES].sort());
-    expect(tools).toHaveLength(34);
+    expect(tools).toHaveLength(37);
   });
 
   it('place_component (mocked part) then get_board_state reflects it', async () => {
@@ -721,6 +724,33 @@ describe('MCP endpoint', () => {
     });
     expect(openResult.isError).toBeFalsy();
     expect(doc.board.components).toHaveLength(1);
+  });
+
+  it('save_board with path saves as a new file and retargets future saves', async () => {
+    await client.callTool({ name: 'new_board', arguments: { name: 'original', copperLayers: 2 } });
+    const result = await client.callTool({
+      name: 'save_board',
+      arguments: { path: 'copies/renamed.flamingo' },
+    });
+    expect(result.isError).toBeFalsy();
+    expect(textOf(result as any)).toContain('renamed.flamingo');
+    expect(doc.filePath).toBe(join(projectDir, 'copies', 'renamed.flamingo'));
+
+    const openResult = await client.callTool({
+      name: 'open_board',
+      arguments: { path: join(projectDir, 'copies', 'renamed.flamingo') },
+    });
+    expect(openResult.isError).toBeFalsy();
+    expect(doc.board.name).toBe('original');
+  });
+
+  it('save_board rejects a path outside the project directory', async () => {
+    const result = await client.callTool({
+      name: 'save_board',
+      arguments: { path: '/tmp/escape.flamingo' },
+    });
+    expect(result.isError).toBe(true);
+    expect(textOf(result as any)).toContain('inside the project');
   });
 
   describe('export_fab', () => {

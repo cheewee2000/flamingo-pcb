@@ -219,14 +219,10 @@ function robustClip(op: ClipOp, ...geoms: MultiPolygon[]): MultiPolygon {
         op,
         geoms.map((g) => snapMulti(g, grid)),
       );
-    } catch (e) {
-      if (process.env.FLAMINGO_CLIP_DEBUG)
-        console.error(`[clipdebug] ${op} threw at grid ${grid}: ${(e as Error).message} (operands: ${geoms.length})`);
+    } catch {
       // escalate to the coarser grid
     }
   }
-  if (process.env.FLAMINGO_CLIP_DEBUG)
-    console.error(`[clipdebug] ${op} FALLBACK reached (operands: ${geoms.length})`);
   switch (op) {
     case 'difference': {
       // A single degenerate operand (e.g. two buffered obstacles exactly
@@ -252,8 +248,6 @@ function robustClip(op: ClipOp, ...geoms: MultiPolygon[]): MultiPolygon {
           }
         }
         if (!done) {
-          if (process.env.FLAMINGO_CLIP_DEBUG)
-            console.error(`[clipdebug] difference subtrahend #${idx} unclippable; substituting its bbox`);
           const bb = multiBBox(g);
           if (bb) {
             try {
@@ -263,8 +257,6 @@ function robustClip(op: ClipOp, ...geoms: MultiPolygon[]): MultiPolygon {
               // truly stuck: skip this subtrahend, DRC still gates the result
             }
           }
-          if (!done && process.env.FLAMINGO_CLIP_DEBUG)
-            console.error(`[clipdebug] difference SKIPPED subtrahend #${idx}: ${JSON.stringify(g)}`);
         }
       }
       return acc;

@@ -18,6 +18,7 @@
  * exports; they are observations, not a published spec.
  */
 
+import { randomUUID } from 'node:crypto';
 import AdmZip from 'adm-zip';
 import {
   newBoard,
@@ -50,10 +51,6 @@ function mm(v: number): number {
 
 function pt(x: number, y: number): Point {
   return { x: mm(x), y: mm(y) };
-}
-
-function uuid(): string {
-  return globalThis.crypto.randomUUID();
 }
 
 type Rec = unknown[];
@@ -609,7 +606,7 @@ export function importEpro(eproPath: string, opts: { pcbName?: string } = {}): E
       const silkLayer = SILK_LAYER[num(r[4])];
       if (silkLayer) {
         const sl: SilkLine = {
-          id: uuid(),
+          id: randomUUID(),
           layer: silkLayer,
           start: pt(num(r[5]), num(r[6])),
           end: pt(num(r[7]), num(r[8])),
@@ -624,7 +621,7 @@ export function importEpro(eproPath: string, opts: { pcbName?: string } = {}): E
     const netName = str(r[3]);
     if (netName) ensureNet(netName);
     const track: Track = {
-      id: uuid(),
+      id: randomUUID(),
       layer,
       width,
       net: netName,
@@ -646,7 +643,7 @@ export function importEpro(eproPath: string, opts: { pcbName?: string } = {}): E
         warn(`copper POLY circle on ${layer} not supported — skipped`);
         continue;
       }
-      board.tracks.push({ id: uuid(), layer, width, net: netName, seg: piece.seg });
+      board.tracks.push({ id: randomUUID(), layer, width, net: netName, seg: piece.seg });
     }
   }
 
@@ -655,7 +652,7 @@ export function importEpro(eproPath: string, opts: { pcbName?: string } = {}): E
     const netName = str(r[3]);
     if (netName) ensureNet(netName);
     const via: Via = {
-      id: uuid(),
+      id: randomUUID(),
       at: pt(num(r[5]), num(r[6])),
       drill: mm(num(r[7])),
       diameter: mm(num(r[8])),
@@ -672,7 +669,7 @@ export function importEpro(eproPath: string, opts: { pcbName?: string } = {}): E
     if (pad.drill && !pad.drill.slotLength) {
       if (pad.drill.diameter >= 1.5) {
         const hole: MountingHole = {
-          id: uuid(),
+          id: randomUUID(),
           at: pad.at,
           drill: pad.drill.diameter,
           padDiameter: Math.max(pad.size.w, pad.size.h),
@@ -684,7 +681,7 @@ export function importEpro(eproPath: string, opts: { pcbName?: string } = {}): E
       } else {
         if (netName) ensureNet(netName);
         board.vias.push({
-          id: uuid(),
+          id: randomUUID(),
           at: pad.at,
           drill: pad.drill.diameter,
           diameter: Math.max(pad.size.w, pad.size.h),
@@ -713,7 +710,7 @@ export function importEpro(eproPath: string, opts: { pcbName?: string } = {}): E
       continue;
     }
     const zone: Zone = {
-      id: uuid(),
+      id: randomUUID(),
       layer,
       net: netName,
       polygon,
@@ -731,7 +728,7 @@ export function importEpro(eproPath: string, opts: { pcbName?: string } = {}): E
     const polygon = piecesToPolygon(walkPoly(ptsRaw, warn));
     if (polygon.length < 3) continue;
     const keepout: Keepout = {
-      id: uuid(),
+      id: randomUUID(),
       layers: 'all',
       polygon,
       keepout: { copper: false, via: false, pour: true },
@@ -841,7 +838,7 @@ function normalizeImportedCopper(board: Board, warn: (m: string) => void): void 
         cuts.push(u);
         if (d > CONNECT_EPS) {
           connectors.push({
-            id: uuid(),
+            id: randomUUID(),
             layer: t.layer,
             width: Math.min(p.width, t.width),
             net: netName,
@@ -865,7 +862,7 @@ function normalizeImportedCopper(board: Board, warn: (m: string) => void): void 
       splits++;
       t.seg = { type: 'line', start: chain[0]!, end: chain[1]! };
       for (let i = 1; i + 1 < chain.length; i++) {
-        board.tracks.push({ id: uuid(), layer: t.layer, width: t.width, net: t.net, seg: { type: 'line', start: chain[i]!, end: chain[i + 1]! } });
+        board.tracks.push({ id: randomUUID(), layer: t.layer, width: t.width, net: t.net, seg: { type: 'line', start: chain[i]!, end: chain[i + 1]! } });
       }
     }
     board.tracks.push(...connectors);
@@ -906,7 +903,7 @@ function normalizeImportedCopper(board: Board, warn: (m: string) => void): void 
         stubKeys.add(key);
         stubs++;
         board.tracks.push({
-          id: uuid(),
+          id: randomUUID(),
           layer: sharedLayer as Track['layer'],
           width: Math.min(cp.width, pad.size.w, pad.size.h),
           net: netName,

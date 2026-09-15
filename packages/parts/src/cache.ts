@@ -1,6 +1,6 @@
 /**
  * On-disk cache of RAW EasyEDA API responses.
- * Location: `~/.flamingo/parts/<LCSC>.json` (override via FLAMINGO_CACHE_DIR).
+ * Location: `~/.flamingo/parts/<LCSC>.json`.
  * We store the raw response so parsing logic can improve without re-fetching.
  */
 
@@ -9,8 +9,6 @@ import { join } from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
 export function cacheDir(): string {
-  const override = process.env.FLAMINGO_CACHE_DIR;
-  if (override && override.length > 0) return override;
   return join(homedir(), '.flamingo', 'parts');
 }
 

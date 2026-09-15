@@ -7,7 +7,7 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { createWriteStream } from 'node:fs';
+import { createWriteStream, existsSync } from 'node:fs';
 import { mkdir, mkdtemp, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -199,15 +199,6 @@ async function writeFreeroutingConfig(dir: string): Promise<NodeJS.ProcessEnv> {
 // freerouting.jar acquisition
 // ---------------------------------------------------------------------------
 
-async function fileExists(p: string): Promise<boolean> {
-  try {
-    await stat(p);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 interface GithubAsset {
   name: string;
   browser_download_url: string;
@@ -218,7 +209,7 @@ interface GithubAsset {
  * the latest release asset from GitHub if missing. Returns the jar path.
  */
 export async function ensureFreerouting(jarPath: string = JAR_PATH): Promise<string> {
-  if (await fileExists(jarPath)) return jarPath;
+  if (existsSync(jarPath)) return jarPath;
 
   console.error('[flamingo] freerouting.jar not found — fetching latest release info...');
   const res = await fetch(RELEASES_API, {

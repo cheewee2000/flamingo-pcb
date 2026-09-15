@@ -35,6 +35,8 @@ export interface RouteStatus {
 export interface AutorouteOptions {
   /** Route only these nets (existing routes on other nets stay as obstacles). Omit to route the whole board. */
   nets?: string[];
+  /** Keep the listed nets' existing tracks/vias (hand fanout) as protected copper instead of unrouting them first. */
+  keepExisting?: boolean;
   /** Max autorouter passes (Freerouting default is used when omitted). */
   passes?: number;
   /** Live progress from freerouting, tagged with which run (route / retry) produced it. */
@@ -104,7 +106,9 @@ async function runAutoroutePipeline(
   const netList = opts.nets && opts.nets.length > 0 ? opts.nets : undefined;
 
   // 1. Unroute the nets we are about to (re)route so freerouting starts fresh.
-  if (netList) {
+  if (netList && opts.keepExisting) {
+    // keep hand-placed stubs; they go into the DSN as protected wiring
+  } else if (netList) {
     for (const n of netList) {
       const r = doc.apply({ op: 'unroute', net: n });
       if (!r.ok) throw new Error((r as OpError).error);
@@ -116,12 +120,21 @@ async function runAutoroutePipeline(
 
   // 2. Export DSN, 3. run freerouting, 4. import SES.
   const board: Board = doc.board;
-  const dsn = exportDSN(board, netList ? { nets: netList } : {});
+  const dsn = exportDSN(board, netList ? { nets: netList, keep: opts.keepExisting } : {});
   const ses = await route.run(dsn, runOpts(opts, 'route'));
   if (doc.board !== board) {
     throw new Error('board was edited while freerouting was running — routes discarded, rerun autoroute');
   }
-  const { tracks, vias } = importSES(ses, board);
+  let { tracks, vias } = importSES(ses, board);
+  if (opts.keepExisting) {
+    // The SES echoes the protected wiring back; drop anything we already have.
+    const r3 = (n: number) => Math.round(n * 1000) / 1000; // DSN is in integer µm, so match at 1 µm
+    const tKey = (t: { net: string; layer: string; width: number; seg: unknown }) => `${t.net}|${t.layer}|${r3(t.width)}|${JSON.stringify(t.seg, (_k, v) => (typeof v === 'number' ? r3(v) : v))}`;
+    const vKey = (v: { net: string; at: { x: number; y: number } }) => `${v.net}|${r3(v.at.x)}|${r3(v.at.y)}`;
+    const haveT = new Set(board.tracks.map(tKey)), haveV = new Set(board.vias.map(vKey));
+    tracks = tracks.filter((t) => !haveT.has(tKey(t)));
+    vias = vias.filter((v) => !haveV.has(vKey(v)));
+  }
 
   // 5. Apply the routed geometry.
   const applyRes = doc.apply({ op: 'addTracks', tracks, vias });
@@ -130,6 +143,22 @@ async function runAutoroutePipeline(
   let tracksAdded = tracks.length;
   let viasAdded = vias.length;
   let remaining = isFullyRouted(doc.board);
+  if (opts.keepExisting && netList) {
+    // Roll back partial routes of nets that stayed split, so they don't become
+    // dangling protected obstacles (and unreachable targets) on the next run.
+    // ponytail: only small nets are rolled back; a many-pin rail keeps its partial progress.
+    const pinsOf = new Map(doc.board.nets.map((n) => [n.name, n.pins.length]));
+    const split = new Set(remaining.map((r) => r.net).filter((n) => netList.includes(n) && (pinsOf.get(n) ?? 0) <= 3));
+    const created = new Set(applyRes.createdIds);
+    const junk = [...doc.board.tracks, ...doc.board.vias].filter((i) => created.has(i.id) && split.has(i.net));
+    for (const i of junk) {
+      const r = doc.apply({ op: 'removeItem', id: i.id });
+      if (!r.ok) throw new Error((r as OpError).error);
+    }
+    tracksAdded -= junk.filter((i) => 'seg' in i).length;
+    viasAdded -= junk.filter((i) => !('seg' in i)).length;
+    remaining = isFullyRouted(doc.board);
+  }
 
   // 6. Escape-width retry: nets whose class width physically can't pass their
   // fine-pitch pad escapes (0.5mm power tracks vs 0.5mm-pitch FPC pads) fail
@@ -138,9 +167,9 @@ async function runAutoroutePipeline(
   // width in the exported DSN; the widen pass below fattens the runs back to
   // class width wherever they clear, leaving thin copper only at the pads.
   let retriedThin: string[] = [];
-  if (remaining.length > 0) {
+  if (remaining.length > 0 && !opts.keepExisting) {
     const rules = RULESETS[doc.board.rules];
-    const thinNets = remaining.map((r) => r.net);
+    const thinNets = remaining.map((r) => r.net).filter((n) => !netList || netList.includes(n));
     const shadow: Board = structuredClone(doc.board);
     const classesToThin = new Set(
       shadow.nets.filter((n) => thinNets.includes(n.name)).map((n) => n.class),

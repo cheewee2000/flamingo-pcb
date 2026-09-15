@@ -22,6 +22,7 @@
 import earcut from 'earcut';
 import type { Board, ComponentInst, Point } from '@flamingo/engine';
 import {
+  bboxOf,
   capsulePolygon,
   componentLabelPlacement,
   componentLabelHidden,
@@ -37,8 +38,66 @@ import {
   pointInPolygon,
 } from '@flamingo/engine';
 import { strokeText } from '@flamingo/fab';
-import { arcPoints, BOARD_T, componentBox } from './viewer3d.js';
 import type { MeshGroup } from './objmesh.js';
+
+export const BOARD_T = 1.6;
+
+function componentHeight(c: ComponentInst): number {
+  const r = c.refdes;
+  const v = c.fields?.value ?? '';
+  const fp = c.footprint.name ?? '';
+  if (r.startsWith('H') && /2\.54|WALTER|HDR/i.test(fp + ' ' + v)) return 8.5;
+  if (/USB/i.test(fp + ' ' + v)) return 3.2;
+  if (/JST|SH-?1|BATT|LRA/i.test(fp + ' ' + v)) return 4.3;
+  if (/UFL|U\.FL|IPEX/i.test(fp + ' ' + v)) return 2.5;
+  if (/FPC/i.test(fp + ' ' + v)) return 2.0;
+  if (/^ANT/.test(r)) return 2.4;
+  if (/^BZ/.test(r) || /PIEZO/i.test(v)) return 3.0;
+  if (/^SW/.test(r)) return 3.75;
+  if (/^L\d/.test(r) && /uH/i.test(v)) return 3.0;
+  if (/^U\d/.test(r)) return 1.2;
+  if (/^Q\d/.test(r)) return 1.1;
+  if (/^LED/.test(r)) return 0.6;
+  if (/^C\d/.test(r) && /22u/i.test(v)) return 1.4;
+  if (/^[RD]\d/.test(r)) return 0.7;
+  return 0.9;
+}
+
+/**
+ * World-space axis-aligned body box for a component: courtyard rings (or pad
+ * outlines when the footprint has no courtyard) through the full component
+ * transform (mirror + rotation + translation), plus the height heuristic.
+ */
+function componentBox(c: ComponentInst): { x0: number; y0: number; x1: number; y1: number; h: number } | null {
+  // Bare-pad footprints (test points, fiducials) have no physical body — the
+  // pad itself is the whole part. No body box in STEP.
+  if (c.footprint.pads.length <= 1 && c.footprint.silk.length === 0) return null;
+  const pts: Point[] = [];
+  for (const ring of c.footprint.courtyard ?? []) pts.push(...componentTransformPoints(c, ring));
+  if (pts.length === 0) for (const pad of c.footprint.pads) pts.push(...padOutline(c, pad));
+  if (pts.length === 0) return null;
+  const bb = bboxOf(pts);
+  if (!(bb.maxX > bb.minX) || !(bb.maxY > bb.minY)) return null;
+  return { x0: bb.minX, y0: bb.minY, x1: bb.maxX, y1: bb.maxY, h: componentHeight(c) };
+}
+
+/** Tessellate a track/silk arc (world coords, cw = visually clockwise) into line pieces. */
+function arcPoints(start: Point, end: Point, center: Point, cw: boolean): Point[] {
+  const r = Math.hypot(start.x - center.x, start.y - center.y);
+  if (r < 1e-6) return [start, end];
+  const a0 = Math.atan2(start.y - center.y, start.x - center.x);
+  const a1 = Math.atan2(end.y - center.y, end.x - center.x);
+  const twoPi = 2 * Math.PI;
+  let sweep = cw ? (((a0 - a1) % twoPi) + twoPi) % twoPi : (((a1 - a0) % twoPi) + twoPi) % twoPi;
+  if (sweep < 1e-9) sweep = twoPi;
+  const steps = Math.max(4, Math.min(48, Math.ceil(sweep / (2 * Math.acos(Math.max(0.2, 1 - 0.05 / r))))));
+  const pts: Point[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const a = cw ? a0 - (sweep * i) / steps : a0 + (sweep * i) / steps;
+    pts.push({ x: center.x + r * Math.cos(a), y: center.y + r * Math.sin(a) });
+  }
+  return pts;
+}
 
 interface P3 {
   x: number;
@@ -138,7 +197,7 @@ function prismFaces(outerIn: Point[], holesIn: Point[][], z0: number, z1: number
 }
 
 /** All drill cutout rings: mounting holes/slots, TH pad drills (incl. pad slots), vias. */
-export function drillRings(board: Board): Point[][] {
+function drillRings(board: Board): Point[][] {
   const rings: Point[][] = [];
   for (const h of allHoles(board)) {
     const { start, end } = holeSlotCenterline(h);

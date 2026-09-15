@@ -19,7 +19,7 @@ import { hitTest } from './hit-test.js';
 import { createToolManager } from './tools/manager.js';
 import { snapPoint } from './tools/overlay-utils.js';
 import type { PointerEvt, ToolCtx } from './tools/tool.js';
-import { VERSION } from './version.js';
+import { version as VERSION } from '../package.json';
 import { createViewer3D } from './viewer3d/viewer.js';
 
 // Stamp the build version into the status bar (see index.html #status-version).

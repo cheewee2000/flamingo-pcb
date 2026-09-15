@@ -92,7 +92,7 @@ const BOX_MATS: Record<string, THREE.Material> = {
  * Bare-pad footprints (test points, fiducials): a single pad with no silk has
  * no physical body — its gold pad is the whole part, so no box is drawn.
  */
-export function isBarePad(c: ComponentInst): boolean {
+function isBarePad(c: ComponentInst): boolean {
   return c.footprint.pads.length <= 1 && c.footprint.silk.length === 0;
 }
 

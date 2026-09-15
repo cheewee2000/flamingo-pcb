@@ -4,7 +4,12 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "packages/*"
+    "packages/engine",
+    "packages/parts",
+    "packages/fab",
+    "packages/server",
+    "packages/ui",
+    "packages/desktop"
   ],
   "scripts": {
     "test": "npm test -ws --if-present",

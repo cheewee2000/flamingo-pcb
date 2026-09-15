@@ -18,8 +18,6 @@
     "@flamingo/parts": "*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@resvg/resvg-js": "^2.6.2",
-    "@types/earcut": "^3.0.0",
-    "archiver": "^8.0.0",
     "earcut": "^3.2.3",
     "ws": "^8.21.1",
     "zod": "^4.4.3",
@@ -28,7 +26,7 @@
   "devDependencies": {
     "@tracespace/parser": "^5.0.0-next.0",
     "@types/adm-zip": "^0.5.8",
-    "@types/archiver": "^8.0.0",
-    "@types/ws": "^8.18.1"
+    "@types/ws": "^8.18.1",
+    "@types/earcut": "^3.0.0"
   }
 }

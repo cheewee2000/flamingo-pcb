@@ -115,29 +115,6 @@ describe('HTTP API', () => {
     expect(redoAgainBody.ok).toBe(false);
   });
 
-  it('GET /api/ratsnest returns an array', async () => {
-    const res = await fetch(`${base}/api/ratsnest`);
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(Array.isArray(body)).toBe(true);
-  });
-
-  it('GET /api/render.svg returns an SVG document', async () => {
-    const res = await fetch(`${base}/api/render.svg`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toBe('image/svg+xml');
-    const text = await res.text();
-    expect(text).toContain('<svg');
-  });
-
-  it('GET /api/render.svg accepts layers and highlightNet query params', async () => {
-    const res = await fetch(`${base}/api/render.svg?layers=F.Cu,B.Cu&highlightNet=NET1`);
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toBe('image/svg+xml');
-    const text = await res.text();
-    expect(text).toContain('<svg');
-  });
-
   it('GET /api/render.png returns a PNG image', async () => {
     const res = await fetch(`${base}/api/render.png`);
     expect(res.status).toBe(200);
@@ -263,88 +240,6 @@ describe('HTTP API', () => {
         }
       } finally {
         await server.close();
-        await rm(dir, { recursive: true, force: true });
-      }
-    });
-  });
-
-  describe('POST /api/export', () => {
-    it('returns 400 with a violations report when the board has DRC violations (no outline)', async () => {
-      const res = await fetch(`${base}/api/export`, { method: 'POST' });
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.ok).toBe(false);
-      expect(Array.isArray(body.violations)).toBe(true);
-      expect(body.violations.length).toBeGreaterThan(0);
-      expect(body.violations.some((v: { rule: string }) => v.rule === 'missing-outline')).toBe(true);
-    });
-
-    it('exports to outDir and returns 200 with file paths when DRC-clean', async () => {
-      const dir = await mkdtemp(join(tmpdir(), 'flamingo-http-export-'));
-      const filePath = join(dir, 'board.flamingo');
-      const cleanDoc = new Doc(newBoard('exporttest', 2), filePath);
-      const cleanServer = await startServer(cleanDoc, 0, { uiDistDir: missingUiDistDir });
-      try {
-        const opRes = await fetch(`http://localhost:${cleanServer.port}/api/op`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            op: 'setOutline',
-            outline: [
-              { type: 'line', start: { x: 0, y: 0 }, end: { x: 10, y: 0 } },
-              { type: 'line', start: { x: 10, y: 0 }, end: { x: 10, y: 10 } },
-              { type: 'line', start: { x: 10, y: 10 }, end: { x: 0, y: 10 } },
-              { type: 'line', start: { x: 0, y: 10 }, end: { x: 0, y: 0 } },
-            ],
-          }),
-        });
-        expect(opRes.status).toBe(200);
-
-        const outDir = join(dir, 'exported-fab');
-        const res = await fetch(`http://localhost:${cleanServer.port}/api/export`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ outDir }),
-        });
-        expect(res.status).toBe(200);
-        const body = await res.json();
-        expect(body.ok).toBe(true);
-        expect(body.gerberZip).toBe(join(outDir, 'gerbers.zip'));
-        expect(body.bomCsv).toBe(join(outDir, 'bom.csv'));
-        expect(body.cplCsv).toBe(join(outDir, 'cpl.csv'));
-      } finally {
-        await cleanServer.close();
-        await rm(dir, { recursive: true, force: true });
-      }
-    });
-
-    it('defaults outDir to <dirname(board file)>/fab when the body omits outDir', async () => {
-      const dir = await mkdtemp(join(tmpdir(), 'flamingo-http-export-default-'));
-      const filePath = join(dir, 'board.flamingo');
-      const defDoc = new Doc(newBoard('exportdefault', 2), filePath);
-      const defServer = await startServer(defDoc, 0, { uiDistDir: missingUiDistDir });
-      try {
-        await fetch(`http://localhost:${defServer.port}/api/op`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            op: 'setOutline',
-            outline: [
-              { type: 'line', start: { x: 0, y: 0 }, end: { x: 10, y: 0 } },
-              { type: 'line', start: { x: 10, y: 0 }, end: { x: 10, y: 10 } },
-              { type: 'line', start: { x: 10, y: 10 }, end: { x: 0, y: 10 } },
-              { type: 'line', start: { x: 0, y: 10 }, end: { x: 0, y: 0 } },
-            ],
-          }),
-        });
-
-        const res = await fetch(`http://localhost:${defServer.port}/api/export`, { method: 'POST' });
-        expect(res.status).toBe(200);
-        const body = await res.json();
-        expect(body.ok).toBe(true);
-        expect(body.bomCsv).toBe(join(dir, 'fab', 'bom.csv'));
-      } finally {
-        await defServer.close();
         await rm(dir, { recursive: true, force: true });
       }
     });
@@ -502,15 +397,6 @@ describe('HTTP API', () => {
         await srv.close();
       }
     }
-
-    it('GET /api/render.svg renders zones filled (evenodd fill path, not the bare polygon)', async () => {
-      await withBoard(zoneBoard(), async (base) => {
-        const res = await fetch(`${base}/api/render.svg`);
-        expect(res.status).toBe(200);
-        const svg = await res.text();
-        expect(svg).toContain('fill-rule="evenodd"');
-      });
-    });
 
     it('GET /api/drc returns {ok:true, violations:[]} for a clean board', async () => {
       await withBoard(zoneBoard(), async (base) => {

@@ -170,12 +170,24 @@ export interface ModelManager {
 export function createModelManager(): ModelManager {
   let manifest: Record<string, ModelEntry> | null = null;
   let manifestState: 'idle' | 'loading' | 'ready' | 'absent' = 'idle';
+  let manifestKey = ''; // component set (refdes:lcsc) the manifest was fetched for
   const geomCache = new Map<string, THREE.Object3D>(); // uuid -> parsed OBJ (prototype)
   const loading = new Set<string>();
   let disposed = false;
 
-  function ensureManifest(onLoaded: () => void): void {
-    if (manifestState !== 'idle') return;
+  // The manifest maps refdes -> model, so it goes stale when a component's
+  // LCSC part changes under the same refdes (or parts are added/removed).
+  // Key it by the board's component set and refetch on mismatch.
+  function componentKey(board: Board): string {
+    return board.components
+      .map((c) => `${c.refdes}:${c.lcsc}`)
+      .sort()
+      .join('|');
+  }
+
+  function ensureManifest(key: string, onLoaded: () => void): void {
+    if (manifestState === 'loading' || manifestState === 'absent') return;
+    if (manifestState === 'ready' && key === manifestKey) return;
     manifestState = 'loading';
     void (async () => {
       try {
@@ -183,6 +195,7 @@ export function createModelManager(): ModelManager {
         if (!res.ok) throw new Error(String(res.status));
         const body = (await res.json()) as { models?: Record<string, ModelEntry> };
         manifest = body.models ?? {};
+        manifestKey = key;
         manifestState = 'ready';
         if (!disposed) onLoaded();
       } catch {
@@ -214,7 +227,7 @@ export function createModelManager(): ModelManager {
 
   function build(board: Board, onLoaded: () => void): THREE.Group {
     const root = new THREE.Group();
-    ensureManifest(onLoaded);
+    ensureManifest(componentKey(board), onLoaded);
 
     for (const comp of board.components) {
       const entry = manifest?.[comp.refdes];

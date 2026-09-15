@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, join, resolve, sep } from 'node:path';
 import { z } from 'zod';
@@ -350,7 +351,7 @@ const regionSchema = z.object({
  * `ctx`, no board state lives on the McpServer itself.
  */
 export function createMcpServer(ctx: McpContext): McpServer {
-  const server = new McpServer({ name: 'flamingo', version: '0.1.0' });
+  const server = new McpServer({ name: 'flamingo', version: createRequire(import.meta.url)('../package.json').version });
 
   server.registerTool(
     'new_board',
@@ -456,9 +457,29 @@ export function createMcpServer(ctx: McpContext): McpServer {
 
   server.registerTool(
     'save_board',
-    { description: 'Save the current board to disk immediately.', inputSchema: {} },
-    async () => {
+    {
+      description:
+        'Save the current board to disk immediately. Pass path to save it under a new name ("save as") — the board keeps working from the new file; the old file is left as last written.',
+      inputSchema: {
+        path: z
+          .string()
+          .optional()
+          .describe('New .flamingo path to save as, absolute or relative to the project directory. Omit to save in place.'),
+      },
+    },
+    async ({ path }) => {
       try {
+        if (path !== undefined) {
+          const abs = resolve(isAbsolute(path) ? path : join(ctx.projectDir, path));
+          // Same containment rule as open_board/import_board: a .flamingo
+          // file inside the project — never an arbitrary path elsewhere.
+          if (extname(abs) !== '.flamingo' || !boardSearchRoots(ctx).some((r) => abs.startsWith(r + sep))) {
+            return errorResult(`path must be a .flamingo file inside the project (got "${abs}")`);
+          }
+          await mkdir(dirname(abs), { recursive: true });
+          await ctx.doc.saveAs(abs);
+          return textResult(`Saved as "${abs}" — future saves target this file.`);
+        }
         await ctx.doc.save();
       } catch (err) {
         return errorResult(err instanceof Error ? err.message : String(err));
@@ -702,26 +723,6 @@ export function createMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
-    'connect_pins',
-    {
-      description: 'Connect one or more pins to a net (creating the net if it does not already exist).',
-      inputSchema: {
-        net: z.string().describe('Net name, e.g. "GND", "VCC" — created if it does not exist'),
-        pins: z.array(z.string()).min(1).describe('Pin refs in "REFDES.PADNUMBER" form, e.g. ["R1.1", "C1.2"]'),
-      },
-    },
-    ({ net, pins }) => {
-      const op: Op = { op: 'connectPins', net, pins };
-      return applyAndReport(ctx, op, () => `Connected ${pins.join(', ')} to net "${net}"`);
-    },
-  );
-
-  server.registerTool(
-    'disconnect_pins',
-    {
-      description: 'Remove one or more pins from whatever net they belong to.',
-      inputSchema: {
-  server.registerTool(
     'set_component_label',
     {
       description:
@@ -770,6 +771,26 @@ export function createMcpServer(ctx: McpContext): McpServer {
     },
   );
 
+  server.registerTool(
+    'connect_pins',
+    {
+      description: 'Connect one or more pins to a net (creating the net if it does not already exist).',
+      inputSchema: {
+        net: z.string().describe('Net name, e.g. "GND", "VCC" — created if it does not exist'),
+        pins: z.array(z.string()).min(1).describe('Pin refs in "REFDES.PADNUMBER" form, e.g. ["R1.1", "C1.2"]'),
+      },
+    },
+    ({ net, pins }) => {
+      const op: Op = { op: 'connectPins', net, pins };
+      return applyAndReport(ctx, op, () => `Connected ${pins.join(', ')} to net "${net}"`);
+    },
+  );
+
+  server.registerTool(
+    'disconnect_pins',
+    {
+      description: 'Remove one or more pins from whatever net they belong to.',
+      inputSchema: {
         pins: z.array(z.string()).min(1).describe('Pin refs in "REFDES.PADNUMBER" form to disconnect'),
       },
     },
@@ -1200,14 +1221,18 @@ export function createMcpServer(ctx: McpContext): McpServer {
           .positive()
           .optional()
           .describe('Max autorouter passes (default 20)'),
+        keepExisting: z
+          .boolean()
+          .optional()
+          .describe('With nets: keep those nets\' existing tracks/vias (hand-placed fanout) as protected copper instead of unrouting them first'),
       },
     },
-    async ({ nets, passes }) => {
+    async ({ nets, passes, keepExisting }) => {
       try {
         const result = await runAutorouteBroadcast(
           ctx.doc,
           ctx.route,
-          { nets, passes },
+          { nets, passes, keepExisting },
           (status) => ctx.doc.emitRouteStatus(status),
         );
         return textResult(formatAutorouteSummary(result));

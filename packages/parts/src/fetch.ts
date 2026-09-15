@@ -45,28 +45,8 @@ export async function fetchPart(
 }
 
 /** Fill required PartInfo fields, defaulting anything the source omitted. */
-function completeInfo(
-  partial: Partial<PartInfo>,
-  lcsc: string,
-  raw: unknown,
-): PartInfo {
-  const merged = { ...deriveInfo(unwrapResult(raw)), ...partial };
-  return {
-    lcsc: merged.lcsc || lcsc,
-    mfr: merged.mfr ?? '',
-    mpn: merged.mpn ?? '',
-    description: merged.description ?? '',
-    package: merged.package ?? '',
-    basic: merged.basic ?? false,
-    ...(merged.stock !== undefined ? { stock: merged.stock } : {}),
-    ...(merged.price !== undefined ? { price: merged.price } : {}),
-    ...(merged.datasheet !== undefined ? { datasheet: merged.datasheet } : {}),
-  };
-}
-
-function unwrapResult(raw: unknown): Parameters<typeof deriveInfo>[0] {
-  if (raw && typeof raw === 'object' && 'result' in raw) {
-    return (raw as { result: Parameters<typeof deriveInfo>[0] }).result;
-  }
-  return raw as Parameters<typeof deriveInfo>[0];
+function completeInfo(partial: Partial<PartInfo>, lcsc: string, raw: unknown): PartInfo {
+  const result = (raw as { result?: Parameters<typeof deriveInfo>[0] })?.result ?? (raw as Parameters<typeof deriveInfo>[0]);
+  const info = { lcsc, mfr: '', mpn: '', description: '', package: '', basic: false, ...deriveInfo(result), ...partial };
+  return { ...info, lcsc: info.lcsc || lcsc };
 }

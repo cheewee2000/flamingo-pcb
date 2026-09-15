@@ -219,7 +219,7 @@ function candidateOrder(c: ComponentInst, box: BBox): ComponentLabelPosition[] {
 /**
  * World-space axis-aligned body box of a component used as a label obstacle:
  * courtyard rings through the component transform, or pad outlines when the
- * footprint has no courtyard (mirrors viewer3d's `componentBox`). Returns null
+ * footprint has no courtyard (mirrors step.ts's `componentBox`). Returns null
  * for a footprint with no courtyard and no pads.
  */
 function componentObstacleBox(c: ComponentInst): BBox | null {

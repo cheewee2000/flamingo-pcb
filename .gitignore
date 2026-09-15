@@ -18,6 +18,9 @@ boards/
 /zoom_*.png
 /scripts/tmp-*
 /scripts/t11-*
+/scripts/wink-*
+/wink-*.flamingo
+/datasheets/
 
 # --- Desktop app build output ---
 packages/desktop/release/

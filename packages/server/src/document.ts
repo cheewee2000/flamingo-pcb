@@ -165,6 +165,17 @@ export class Doc extends EventEmitter {
   }
 
   /**
+   * Retarget the document at a new path and write there immediately ("save
+   * as"). The board and undo/redo history carry over untouched -- only the
+   * destination of this and all future saves changes. The old file is left
+   * as it was last written.
+   */
+  async saveAs(filePath: string): Promise<void> {
+    this._filePath = filePath;
+    await this.save();
+  }
+
+  /**
    * Cancel any pending debounced save and, if there are unsaved changes,
    * flush them synchronously with respect to the caller. Safe to call
    * multiple times or with nothing dirty (no-op write in that case). Only

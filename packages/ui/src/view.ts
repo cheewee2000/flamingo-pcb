@@ -41,7 +41,7 @@ export function screenToWorld(view: ViewTransform, p: Point): Point {
 }
 
 /** Zoom by `factor`, keeping the world point currently under `screenPt` fixed on screen. */
-export function zoomAt(view: ViewTransform, screenPt: Point, factor: number): ViewTransform {
+function zoomAt(view: ViewTransform, screenPt: Point, factor: number): ViewTransform {
   const world = screenToWorld(view, screenPt);
   const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, view.scale * factor));
   const s = view.flipped ? -1 : 1;

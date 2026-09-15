@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { basename, dirname, extname, resolve } from 'node:path';
 import { newBoard } from '@flamingo/engine';
 import { Doc } from './document.js';
 import { startServer } from './http.js';
 
-const VERSION = '0.1.0';
+const VERSION = createRequire(import.meta.url)('../package.json').version as string;
 
 async function serve(fileArg: string): Promise<void> {
   const filePath = resolve(process.cwd(), fileArg);
