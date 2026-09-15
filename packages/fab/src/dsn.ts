@@ -304,12 +304,11 @@ export function exportDSN(b: Board, opts: ExportDSNOptions = {}): string {
   for (const c of b.components)
     for (const p of c.footprint.pads)
       if (p.drill) minPinRing = Math.min(minPinRing, ring(Math.min(p.size.w, p.size.h), p.drill.diameter));
-  const drillRules = (nc: NetClass): string => {
-    const r = ring(nc.viaDiameter, nc.viaDrill);
-    let s = ` (clearance ${um(Math.max(nc.clearance, holeToHole - r - minViaRing))} (type via_via))`;
-    if (minPinRing < Infinity) s += ` (clearance ${um(Math.max(nc.clearance, holeToHole - r - minPinRing))} (type via_pin))`;
-    return s;
-  };
+  // Structure-level only: freerouting silently routes nothing when a typed
+  // clearance appears inside a (class ...) rule, so use the strictest value
+  // (smallest rings) for the whole board.
+  let drillRules = ` (clearance ${um(Math.max(dnc.clearance, holeToHole - 2 * minViaRing))} (type via_via))`;
+  if (minPinRing < Infinity) drillRules += ` (clearance ${um(Math.max(dnc.clearance, holeToHole - minViaRing - minPinRing))} (type via_pin))`;
   const L = copperLayersOf(b);
 
   // ---- Assemble ----
@@ -344,7 +343,7 @@ export function exportDSN(b: Board, opts: ExportDSNOptions = {}): string {
   }
   const allViaNames = [...viaStacks.keys()];
   if (allViaNames.length > 0) out.push(`    (via ${allViaNames.join(' ')})`);
-  out.push(`    (rule (width ${um(dnc.trackWidth)}) (clearance ${um(dnc.clearance)})${drillRules(dnc)})`);
+  out.push(`    (rule (width ${um(dnc.trackWidth)}) (clearance ${um(dnc.clearance)})${drillRules})`);
   out.push('  )');
 
   // placement
@@ -403,7 +402,7 @@ export function exportDSN(b: Board, opts: ExportDSNOptions = {}): string {
     const memberToks = members.map((m) => tok(m)).join(' ');
     const circuit = vName ? ` (circuit (use_via ${vName}))` : '';
     out.push(
-      `    (class ${tok(cname)} ${memberToks}${circuit} (rule (width ${um(nc.trackWidth)}) (clearance ${um(nc.clearance)})${drillRules(nc)}))`,
+      `    (class ${tok(cname)} ${memberToks}${circuit} (rule (width ${um(nc.trackWidth)}) (clearance ${um(nc.clearance)})))`,
     );
   }
   out.push('  )');

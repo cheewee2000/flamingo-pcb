@@ -87,7 +87,7 @@ const GOLDEN = `(pcb t
   )
   (network
     (net N1 (pins R1-2 R2-1))
-    (class default N1 (circuit (use_via V_300_600)) (rule (width 250) (clearance 200) (clearance 200 (type via_via))))
+    (class default N1 (circuit (use_via V_300_600)) (rule (width 250) (clearance 200)))
   )
 )
 `;
