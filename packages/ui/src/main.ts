@@ -33,7 +33,8 @@ const viewportEl = document.getElementById('viewport') as HTMLElement;
 // Live sync -- set up first so `ctx.sendOp` exists before tools are created.
 // ---------------------------------------------------------------------------
 
-function onBoard(rawBoard: Board): void {
+function onBoard(rawBoard: Board, file?: string): void {
+  document.title = file ? `${file} — Flamingo` : 'Flamingo';
   const board = prepareBoard(rawBoard);
   const state = store.get();
   const ratsnestLines = ratsnest(board);

@@ -68,6 +68,21 @@ describe('WebSocket API', () => {
     ws.close();
   });
 
+  it("names the board's file in each board message, following a switch of file", async () => {
+    const ws = new WebSocket(wsUrl);
+    const queue = messageQueue(ws);
+    await waitOpen(ws);
+
+    // An unsaved board has no file.
+    expect(((await queue.next()) as { file?: string }).file).toBeUndefined();
+
+    doc.resetBoard(newBoard('blinky', 2), '/some/dir/blinky.flamingo', false);
+    const msg = (await queue.next()) as { type: string; file?: string };
+    expect(msg.type).toBe('board');
+    expect(msg.file).toBe('blinky.flamingo');
+    ws.close();
+  });
+
   it('broadcasts a board change to both clients when one sends an op, and replies opResult to the sender', async () => {
     const clientA = new WebSocket(wsUrl);
     const queueA = messageQueue(clientA);

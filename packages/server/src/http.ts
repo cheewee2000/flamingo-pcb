@@ -773,8 +773,13 @@ function attachWebSocket(doc: Doc, server: http.Server): WebSocketServer {
   const wss = new WebSocketServer({ server, path: '/ws' });
   const clients = new Set<WebSocket>();
 
+  // `file` is the board file's name (e.g. "blinky.flamingo"), which the UI
+  // shows as the browser tab title. Read per message: new_board/open_board
+  // switch files.
+  const fileName = (): string | undefined => (doc.filePath ? basename(doc.filePath) : undefined);
+
   const onChange = (board: unknown): void => {
-    const msg = JSON.stringify({ type: 'board', board });
+    const msg = JSON.stringify({ type: 'board', board, file: fileName() });
     for (const ws of clients) {
       if (ws.readyState === WebSocket.OPEN) ws.send(msg);
     }
@@ -794,7 +799,7 @@ function attachWebSocket(doc: Doc, server: http.Server): WebSocketServer {
 
   wss.on('connection', (ws: WebSocket) => {
     clients.add(ws);
-    ws.send(JSON.stringify({ type: 'board', board: doc.board }));
+    ws.send(JSON.stringify({ type: 'board', board: doc.board, file: fileName() }));
 
     ws.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
       let msg: unknown;

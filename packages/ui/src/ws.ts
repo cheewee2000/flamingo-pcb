@@ -4,7 +4,7 @@
  * Connects to the same-origin `/ws` endpoint (no hardcoded host/port -- the
  * Vite dev proxy forwards it to the real server in dev, and in production
  * the UI is served by that same server). On connect, and again on every
- * board change, the server pushes `{type:'board', board}`; edits go out as
+ * board change, the server pushes `{type:'board', board, file}`; edits go out as
  * `{type:'op', op}`. If the connection drops, reconnect after a fixed 1s
  * delay.
  */
@@ -27,7 +27,8 @@ export interface RouteStatus {
 }
 
 export interface WsHandlers {
-  onBoard: (board: Board) => void;
+  /** `file` is the board file's name, when the board has been saved to one. */
+  onBoard: (board: Board, file?: string) => void;
   onConnectionChange: (connected: boolean) => void;
   /** Optional: surface op rejections (e.g. to a toast/log). */
   onOpResult?: (result: { ok: boolean; error?: string }) => void;
@@ -36,7 +37,7 @@ export interface WsHandlers {
 }
 
 type ServerMsg =
-  | { type: 'board'; board: Board }
+  | { type: 'board'; board: Board; file?: string }
   | { type: 'opResult'; result: { ok: boolean; error?: string } }
   | { type: 'routeStatus'; status: RouteStatus };
 
@@ -71,7 +72,7 @@ export function connectWs(handlers: WsHandlers): { sendOp: (op: Op) => void } {
         return;
       }
       if (msg.type === 'board') {
-        handlers.onBoard(msg.board);
+        handlers.onBoard(msg.board, msg.file);
       } else if (msg.type === 'opResult') {
         handlers.onOpResult?.(msg.result);
       } else if (msg.type === 'routeStatus') {
