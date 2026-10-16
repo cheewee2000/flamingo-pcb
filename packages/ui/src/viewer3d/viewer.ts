@@ -37,6 +37,10 @@ export interface Viewer3D {
   frame(): void;
   setShowComponents(v: boolean): void;
   setShowSilk(v: boolean): void;
+  /** Mirror the camera across the board plane so the 3D view follows the 2D
+   * Front/Back toggle: back view looks at the bottom with X mirrored, same as
+   * the flipped 2D render. Keeps the current zoom and tilt. */
+  setFlipped(v: boolean): void;
   dispose(): void;
 }
 
@@ -74,6 +78,7 @@ export function createViewer3D(canvas: HTMLCanvasElement, viewport: HTMLElement)
   let active = false;
   let dirty = false;
   let hasFramedOnce = false;
+  let flipped = false;
   let lastBBox: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
   let rafHandle = 0;
   let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
@@ -133,7 +138,9 @@ export function createViewer3D(canvas: HTMLCanvasElement, viewport: HTMLElement)
     const cx = (bbox.minX + bbox.maxX) / 2;
     const cy = (bbox.minY + bbox.maxY) / 2;
     const span = Math.max(w, h);
-    camera.position.set(cx - 8, cy - h * 0.75, span * 1.05 + 20);
+    const side = flipped ? -1 : 1;
+    camera.position.set(cx - 8 * side, cy - h * 0.75, (span * 1.05 + 20) * side);
+    camera.up.set(0, 0, side);
     controls.target.set(cx, cy, 0);
     controls.update();
   }
@@ -236,6 +243,15 @@ export function createViewer3D(canvas: HTMLCanvasElement, viewport: HTMLElement)
     setShowSilk(v: boolean): void {
       opts.showSilk = v;
       if (silkGroup) silkGroup.visible = v;
+    },
+    setFlipped(v: boolean): void {
+      if (v === flipped) return;
+      flipped = v;
+      camera.position.z *= -1;
+      camera.up.z *= -1;
+      controls.target.z *= -1;
+      camera.lookAt(controls.target);
+      camera.updateMatrix();
     },
     dispose(): void {
       active = false;
