@@ -18,6 +18,8 @@ import {
   RATSNEST_KEY,
   SILK_KEY,
   ZONES_KEY,
+  soloCopperLayer,
+  soloedCopperLayer,
   store,
   withLayerKeys,
   type AppState,
@@ -30,6 +32,7 @@ import { islandsFor } from './renderer.js';
 
 export interface PanelEls {
   layerList: HTMLElement;
+  overlayList: HTMLElement;
   netList: HTMLElement;
   boardInfo: HTMLElement;
   sideBadge: HTMLElement;
@@ -126,6 +129,8 @@ function hoverText(hit: HitInfo): string {
 export interface PanelsApi {
   /** Step the sidebar selection to the adjacent net / BOM item. dir: +1 down, -1 up. Returns true when handled. */
   navigateList(dir: 1 | -1): boolean;
+  /** Show only the copper layer at `index` in stack order (0 = F.Cu); null shows every layer again. Returns true when handled. */
+  soloLayerAt(index: number | null): boolean;
 }
 
 export function initPanels(els: PanelEls, toolManager: ToolManager, actions: PanelActions): PanelsApi {
@@ -144,32 +149,187 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
   // updates don't clobber the open input with the (still-old) name.
   let renamingName = false;
 
+  // Layers: one tile per copper layer (click = show only, shift-click = add or
+  // remove) plus All and the ghost/hide choice for hidden copper. Overlays
+  // (zones, silk, ratsnest, labels, dimensions) are toggle chips in their own
+  // section. Both write layerVisibility; syncLayerControls mirrors it back.
+  const copperTiles = new Map<string, HTMLButtonElement>();
+  const overlayChips = new Map<string, HTMLButtonElement>();
+  let allChip: HTMLButtonElement | null = null;
+  const hiddenModeBtns = new Map<AppState['hiddenCopper'], HTMLButtonElement>();
+  let layerCopper: string[] = [];
+  let lastLayerVis: AppState['layerVisibility'] | null = null;
+  let lastHiddenCopper: AppState['hiddenCopper'] | null = null;
+  // Visibility from before the first "show only", put back by All (or by
+  // clicking the shown layer's tile again).
+  let preSoloVis: AppState['layerVisibility'] | null = null;
+
+  function setVis(vis: AppState['layerVisibility']): void {
+    store.set({ layerVisibility: vis });
+  }
+
+  function showAllLayers(): void {
+    const base = preSoloVis ?? store.get().layerVisibility;
+    preSoloVis = null;
+    const next = { ...base };
+    for (const k of layerCopper) next[k] = true;
+    setVis(next);
+  }
+
+  function soloLayer(layer: string): void {
+    const vis = store.get().layerVisibility;
+    if (soloedCopperLayer(vis, layerCopper) === layer && preSoloVis) {
+      showAllLayers();
+      return;
+    }
+    if (!preSoloVis) preSoloVis = vis;
+    setVis(soloCopperLayer(vis, layerCopper, layer));
+  }
+
+  function soloLayerAt(index: number | null): boolean {
+    if (!store.get().board) return false;
+    if (index === null) {
+      showAllLayers();
+      return true;
+    }
+    const layer = layerCopper[index];
+    if (!layer) return false;
+    soloLayer(layer);
+    return true;
+  }
+
+  function syncLayerControls(state: AppState): void {
+    const vis = state.layerVisibility;
+    const solo = soloedCopperLayer(vis, layerCopper);
+    for (const [key, tile] of copperTiles) {
+      tile.classList.toggle('on', vis[key] !== false);
+      tile.classList.toggle('solo', key === solo);
+    }
+    allChip?.classList.toggle('on', layerCopper.every((k) => vis[k] !== false));
+    for (const [key, chip] of overlayChips) chip.classList.toggle('on', vis[key] !== false);
+    for (const [mode, btn] of hiddenModeBtns) btn.classList.toggle('on', state.hiddenCopper === mode);
+  }
+
+  /** Track count, track length and distinct nets on each copper layer. */
+  function copperStats(board: NonNullable<AppState['board']>): Map<string, { tracks: number; lengthMm: number; nets: number; pour: boolean }> {
+    const out = new Map<string, { tracks: number; lengthMm: number; nets: Set<string>; pour: boolean }>();
+    const get = (l: string) => {
+      let e = out.get(l);
+      if (!e) out.set(l, (e = { tracks: 0, lengthMm: 0, nets: new Set(), pour: false }));
+      return e;
+    };
+    for (const t of board.tracks) {
+      const e = get(t.layer);
+      e.tracks++;
+      e.lengthMm += Math.hypot(t.seg.end.x - t.seg.start.x, t.seg.end.y - t.seg.start.y); // chord for arcs: only drives a relative bar
+      e.nets.add(t.net);
+    }
+    for (const z of board.zones) {
+      const e = get(z.layer);
+      e.pour = true;
+      e.nets.add(z.net);
+    }
+    return new Map([...out].map(([k, e]) => [k, { tracks: e.tracks, lengthMm: e.lengthMm, nets: e.nets.size, pour: e.pour }]));
+  }
+
   function buildLayerList(state: AppState): void {
     els.layerList.replaceChildren();
+    els.overlayList.replaceChildren();
+    copperTiles.clear();
+    overlayChips.clear();
+    hiddenModeBtns.clear();
+    allChip = null;
     const board = state.board;
     if (!board) return;
-    const keys = [...copperLayersOf(board), ZONES_KEY, SILK_KEY, RATSNEST_KEY, LABEL_PADS_KEY, LABEL_NETS_KEY, DIMS_KEY];
-    store.set({ layerVisibility: withLayerKeys(state.layerVisibility, keys) });
-    const vis = store.get().layerVisibility;
+    layerCopper = copperLayersOf(board);
+    const overlays = [ZONES_KEY, SILK_KEY, RATSNEST_KEY, LABEL_PADS_KEY, LABEL_NETS_KEY, DIMS_KEY];
+    store.set({ layerVisibility: withLayerKeys(state.layerVisibility, [...layerCopper, ...overlays]) });
 
-    for (const key of keys) {
-      const label = document.createElement('label');
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = vis[key] !== false;
-      cb.addEventListener('change', () => {
-        store.set({ layerVisibility: { ...store.get().layerVisibility, [key]: cb.checked } });
+    const stats = copperStats(board);
+    const maxLen = Math.max(1e-9, ...layerCopper.map((l) => stats.get(l)?.lengthMm ?? 0));
+    const grid = document.createElement('div');
+    grid.className = 'layer-tiles';
+    layerCopper.forEach((layer, i) => {
+      const st = stats.get(layer) ?? { tracks: 0, lengthMm: 0, nets: 0, pour: false };
+      const tile = document.createElement('button');
+      tile.type = 'button';
+      tile.className = 'layer-tile';
+      tile.style.setProperty('--chip', layerSwatchColor(layer));
+      tile.title = `Show only ${layer} (${i + 1}) · shift-click to add or remove it\n${Math.round(st.lengthMm)}mm of track`;
+      const name = document.createElement('span');
+      name.className = 'layer-tile-name';
+      name.textContent = layer;
+      const key = document.createElement('kbd');
+      key.textContent = String(i + 1);
+      const nums = document.createElement('span');
+      nums.className = 'layer-tile-stats';
+      for (const part of [`${st.tracks} trk`, `${st.nets} net`, ...(st.pour ? ['pour'] : [])]) {
+        const span = document.createElement('span');
+        span.textContent = part;
+        nums.appendChild(span);
+      }
+      const bar = document.createElement('span');
+      bar.className = 'layer-tile-bar';
+      bar.style.width = `${(st.lengthMm / maxLen) * 100}%`;
+      tile.append(name, key, nums, bar);
+      tile.addEventListener('click', (ev) => {
+        if (ev.shiftKey || ev.metaKey) {
+          const cur = store.get().layerVisibility;
+          setVis({ ...cur, [layer]: cur[layer] === false });
+        } else {
+          soloLayer(layer);
+        }
       });
-      const swatch = document.createElement('span');
-      swatch.className = 'layer-swatch';
-      swatch.style.background =
-        LABEL_SWATCH[key] ??
-        (key === SILK_KEY || key === RATSNEST_KEY || key === ZONES_KEY || key === DIMS_KEY ? '#888' : layerSwatchColor(key));
-      const text = document.createElement('span');
-      text.textContent = key;
-      label.append(cb, swatch, text);
-      els.layerList.appendChild(label);
+      grid.appendChild(tile);
+      copperTiles.set(layer, tile);
+    });
+    els.layerList.appendChild(grid);
+
+    const row = document.createElement('div');
+    row.className = 'layer-row';
+    const all = document.createElement('button');
+    all.type = 'button';
+    all.className = 'layer-chip layer-chip-all';
+    all.append('All ');
+    const allKey = document.createElement('kbd');
+    allKey.textContent = '0';
+    all.append(allKey);
+    all.title = 'Show every copper layer (0)';
+    all.addEventListener('click', showAllLayers);
+    allChip = all;
+    const seg = document.createElement('div');
+    seg.className = 'layer-seg';
+    seg.title = 'How hidden copper layers draw';
+    const segLabel = document.createElement('span');
+    segLabel.textContent = 'hidden';
+    seg.appendChild(segLabel);
+    for (const [mode, label] of [['ghost', 'Ghost'], ['hide', 'Hide']] as const) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      b.addEventListener('click', () => store.set({ hiddenCopper: mode }));
+      seg.appendChild(b);
+      hiddenModeBtns.set(mode, b);
     }
+    row.append(all, seg);
+    els.layerList.appendChild(row);
+
+    for (const key of overlays) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'overlay-chip';
+      chip.style.setProperty('--chip', LABEL_SWATCH[key] ?? '#888');
+      chip.textContent = key;
+      chip.addEventListener('click', () => {
+        const cur = store.get().layerVisibility;
+        setVis({ ...cur, [key]: cur[key] === false });
+      });
+      els.overlayList.appendChild(chip);
+      overlayChips.set(key, chip);
+    }
+    lastLayerVis = store.get().layerVisibility;
+    lastHiddenCopper = store.get().hiddenCopper;
+    syncLayerControls(store.get());
   }
 
   function buildNetList(state: AppState): void {
@@ -1651,6 +1811,11 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
       lastPropsBoard = state.board;
       buildProps(state);
     }
+    if (state.layerVisibility !== lastLayerVis || state.hiddenCopper !== lastHiddenCopper) {
+      lastLayerVis = state.layerVisibility;
+      lastHiddenCopper = state.hiddenCopper;
+      syncLayerControls(state);
+    }
     if (state.routeStatus !== lastRouteStatus) {
       lastRouteStatus = state.routeStatus;
       routeStatusHandler?.(state.routeStatus);
@@ -1729,5 +1894,5 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
   store.subscribe(onStateChange);
   onStateChange(store.get());
 
-  return { navigateList };
+  return { navigateList, soloLayerAt };
 }

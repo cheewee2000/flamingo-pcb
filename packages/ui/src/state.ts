@@ -68,6 +68,10 @@ export interface AppState {
   hover: HitInfo | null;
   view: ViewTransform;
   layerVisibility: Record<LayerKey, boolean>;
+  /** How hidden copper layers draw: 'ghost' keeps them as a faint grey
+   * underlay so a layer shown on its own still has its surroundings;
+   * 'hide' leaves them out entirely. */
+  hiddenCopper: 'ghost' | 'hide';
   /** WebSocket connection status for the status bar. */
   connected: boolean;
   /** Violation locations from the last "Run DRC" (panels.ts); drawn as red
@@ -121,6 +125,7 @@ function initialState(): AppState {
     hover: null,
     view: { scale: 10, originPxX: 0, originPxY: 0, flipped: false },
     layerVisibility: { [SILK_KEY]: true, [RATSNEST_KEY]: true, [ZONES_KEY]: true, [LABEL_PADS_KEY]: true, [LABEL_NETS_KEY]: true, [DIMS_KEY]: true },
+    hiddenCopper: 'ghost',
     connected: false,
     drcMarkers: [],
     cursorMm: null,
@@ -156,6 +161,29 @@ export function withLayerKeys(current: Record<LayerKey, boolean>, keys: LayerKey
     if (!(k in next)) next[k] = true;
   }
   return next;
+}
+
+/**
+ * "Show only" for one copper layer: that layer and its zones stay visible;
+ * every other copper layer and every overlay (silk, ratsnest, labels,
+ * dimensions) is hidden, so the layer reads on its own.
+ */
+export function soloCopperLayer(
+  current: Record<LayerKey, boolean>,
+  copper: LayerKey[],
+  layer: LayerKey,
+): Record<LayerKey, boolean> {
+  const next: Record<LayerKey, boolean> = {};
+  for (const k of Object.keys(current)) next[k] = false;
+  for (const k of copper) next[k] = k === layer;
+  next[ZONES_KEY] = true;
+  return next;
+}
+
+/** The copper layer that is shown on its own, or null when none or several are. */
+export function soloedCopperLayer(vis: Record<LayerKey, boolean>, copper: LayerKey[]): LayerKey | null {
+  const shown = copper.filter((k) => vis[k] !== false);
+  return shown.length === 1 && copper.length > 1 ? shown[0] : null;
 }
 
 type Listener = (state: AppState) => void;

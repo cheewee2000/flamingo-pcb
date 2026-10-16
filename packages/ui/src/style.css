@@ -695,8 +695,7 @@ body {
   font-size: 11px;
 }
 
-.snap-toggle input,
-.layer-list input[type='checkbox'] {
+.snap-toggle input {
   accent-color: var(--ink);
 }
 
@@ -788,24 +787,7 @@ body {
   pointer-events: none;
 }
 
-/* ---- Layer / net lists ---- */
-
-.layer-list label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 0;
-  cursor: pointer;
-}
-
-.layer-swatch {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 0;
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  flex-shrink: 0;
-}
+/* ---- Net list ---- */
 
 .net-list {
   max-height: 200px;
@@ -1284,4 +1266,165 @@ input[type='text'].props-inline-input {
 }
 .toast-leaving {
   opacity: 0;
+}
+
+/* Layers: one tile per copper layer. Outlined = hidden, tinted = shown,
+   filled with an inked ring = the one layer shown on its own. The bar under
+   the stats is the layer's track length against the busiest layer. */
+.layer-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.layer-tile {
+  --chip: var(--ink-faint);
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  row-gap: 2px;
+  font: inherit;
+  text-align: left;
+  padding: 6px 7px 8px;
+  border: 1.5px solid var(--chip);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  overflow: hidden;
+  transition: background var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+
+.layer-tile-name {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.layer-tile-stats {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 8px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.layer-tile-bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--chip);
+}
+
+.layer-tile.on {
+  background: color-mix(in srgb, var(--chip) 18%, transparent);
+  color: var(--ink);
+}
+
+.layer-tile.solo {
+  background: var(--chip);
+  color: #fff;
+  box-shadow: 0 0 0 1.5px var(--paper), 0 0 0 3px var(--ink);
+}
+
+.layer-tile.solo .layer-tile-bar {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.layer-tile:hover,
+.layer-chip:hover,
+.overlay-chip:hover {
+  border-color: var(--ink);
+}
+
+.layer-tile kbd,
+.layer-chip kbd {
+  font: inherit;
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.layer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.layer-chip {
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 8px;
+  border: 1.5px solid var(--ink);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.layer-chip.on {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* Ghost / Hide: how hidden copper draws. */
+.layer-seg {
+  display: flex;
+  align-items: center;
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+.layer-seg span {
+  margin-right: 6px;
+}
+
+.layer-seg button {
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 7px;
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.layer-seg button + button {
+  border-left: none;
+}
+
+.layer-seg button.on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
+/* Overlays: toggle chips, swatch on the left edge in the overlay's colour. */
+.overlay-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.overlay-chip {
+  --chip: var(--ink-faint);
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 7px 3px 6px;
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  text-decoration: line-through;
+}
+
+.overlay-chip.on {
+  border-left-color: var(--chip);
+  color: var(--ink);
+  text-decoration: none;
 }

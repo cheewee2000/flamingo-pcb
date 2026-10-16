@@ -172,6 +172,7 @@ function boardOpened(): void {
 const panels = initPanels(
   {
     layerList: document.getElementById('layer-list')!,
+    overlayList: document.getElementById('overlay-list')!,
     netList: document.getElementById('net-list')!,
     boardInfo: document.getElementById('board-info')!,
     sideBadge: document.getElementById('side-badge')!,
@@ -413,6 +414,14 @@ window.addEventListener('keydown', (ev) => {
 
   // Modifier chords (⌘S, ⌘C, …) are never tool shortcuts.
   if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+
+  // 1..6 show only that copper layer (stack order, 1 = F.Cu); 0 shows them all.
+  const digit = /^Digit([0-9])$/.exec(ev.code);
+  if (digit && !ev.shiftKey) {
+    const n = Number(digit[1]);
+    if (panels.soloLayerAt(n === 0 ? null : n - 1)) ev.preventDefault();
+    return;
+  }
 
   const toolId = TOOL_SHORTCUTS[ev.code];
   if (toolId) {
