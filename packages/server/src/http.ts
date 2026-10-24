@@ -395,6 +395,11 @@ async function handleApi(
     }
     const netsRaw = typeof body === 'object' && body !== null ? (body as { nets?: unknown }).nets : undefined;
     const passesRaw = typeof body === 'object' && body !== null ? (body as { passes?: unknown }).passes : undefined;
+    const routerRaw = typeof body === 'object' && body !== null ? (body as { router?: unknown }).router : undefined;
+    if (routerRaw !== undefined && routerRaw !== 'freerouting' && routerRaw !== 'krt') {
+      sendJSON(res, 400, { ok: false, error: 'router must be "freerouting" or "krt"' });
+      return true;
+    }
     if (netsRaw !== undefined && !(Array.isArray(netsRaw) && netsRaw.every((n) => typeof n === 'string'))) {
       sendJSON(res, 400, { ok: false, error: 'nets must be an array of strings' });
       return true;
@@ -410,6 +415,7 @@ async function handleApi(
         {
           nets: netsRaw as string[] | undefined,
           passes: passesRaw as number | undefined,
+          router: routerRaw as 'freerouting' | 'krt' | undefined,
         },
         (status) => doc.emitRouteStatus(status),
       );

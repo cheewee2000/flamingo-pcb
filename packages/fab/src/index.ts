@@ -11,3 +11,6 @@ export { generateCPL } from './cpl.js';
 export type { ExportFabResult } from './exportFab.js';
 export { exportFab, zipFiles } from './exportFab.js';
 export { strokeText } from './strokefont.js';
+export type { ExportKiCadPcbOptions } from './kicadpcb.js';
+export type { ImportKiCadRoutesResult } from './kicadpcb.js';
+export { exportKiCadPcb, importKiCadRoutes } from './kicadpcb.js';

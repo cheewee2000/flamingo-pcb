@@ -10,7 +10,8 @@
 
 import type { Board, OpError } from '@flamingo/engine';
 import { isFullyRouted, planZoneStitching, RULESETS } from '@flamingo/engine';
-import { exportDSN, importSES } from '@flamingo/fab';
+import { exportDSN, exportKiCadPcb, importKiCadRoutes, importSES } from '@flamingo/fab';
+import { readFlamingoConfig, runKiCadRouter, snapRoutesToPads } from './krt.js';
 import type { Doc } from './document.js';
 import type { RouteProgress, RouteRunner } from './route.js';
 
@@ -39,8 +40,42 @@ export interface AutorouteOptions {
   keepExisting?: boolean;
   /** Max autorouter passes (Freerouting default is used when omitted). */
   passes?: number;
+  /** Which router does the work. Default: $FLAMINGO_ROUTER, else router in ~/.flamingo/config.json, else 'freerouting'. 'krt' = KiCadRoutingTools (needs FLAMINGO_KRT_DIR). */
+  router?: RouterKind;
   /** Live progress from freerouting, tagged with which run (route / retry) produced it. */
   onProgress?: (stage: RouteStage, ev: RouteProgress) => void;
+}
+
+export type RouterKind = 'freerouting' | 'krt';
+
+function routerOf(opts: AutorouteOptions): RouterKind {
+  if (opts.router) return opts.router;
+  const wanted = process.env.FLAMINGO_ROUTER ?? readFlamingoConfig().router;
+  return wanted === 'krt' ? 'krt' : 'freerouting';
+}
+
+/**
+ * One router invocation: hand `board` (with `nets` to route) to the selected
+ * backend and return the routed copper. Freerouting goes through DSN/SES and the
+ * injected RouteRunner; KiCadRoutingTools goes through a `.kicad_pcb` round trip.
+ */
+async function routeOnce(
+  board: Board,
+  route: RouteRunner,
+  opts: AutorouteOptions,
+  stage: RouteStage,
+  nets: string[] | undefined,
+  keep: boolean | undefined,
+): Promise<{ tracks: ReturnType<typeof importSES>['tracks']; vias: ReturnType<typeof importSES>['vias'] }> {
+  if (routerOf(opts) === 'krt') {
+    const pcb = exportKiCadPcb(board, nets ? { nets, keep, zones: false } : { zones: false });
+    const routed = await runKiCadRouter(pcb, board, nets ? { nets } : {});
+    const imported = importKiCadRoutes(routed);
+    return { tracks: [...imported.tracks, ...snapRoutesToPads(board, imported.tracks)], vias: imported.vias };
+  }
+  const dsn = exportDSN(board, nets ? { nets, keep } : {});
+  const ses = await route.run(dsn, runOpts(opts, stage));
+  return importSES(ses, board);
 }
 
 /** Build the per-run RouteRunner options, forwarding progress tagged with `stage`. */
@@ -152,12 +187,11 @@ async function runAutoroutePipelineBody(
 
   // 2. Export DSN, 3. run freerouting, 4. import SES.
   const board: Board = doc.board;
-  const dsn = exportDSN(board, netList ? { nets: netList, keep: opts.keepExisting } : {});
-  const ses = await route.run(dsn, runOpts(opts, 'route'));
+  const routed1 = await routeOnce(board, route, opts, 'route', netList, opts.keepExisting);
   if (doc.board !== board) {
-    throw new Error('board was edited while freerouting was running — routes discarded, rerun autoroute');
+    throw new Error('board was edited while the router was running — routes discarded, rerun autoroute');
   }
-  let { tracks, vias } = importSES(ses, board);
+  let { tracks, vias } = routed1;
   if (netList) {
     // Other nets' existing copper went into the DSN only as `(type protect)`
     // obstacles for the router to avoid -- freerouting can echo that wiring
@@ -213,7 +247,8 @@ async function runAutoroutePipelineBody(
   // width in the exported DSN; the widen pass below fattens the runs back to
   // class width wherever they clear, leaving thin copper only at the pads.
   let retriedThin: string[] = [];
-  if (remaining.length > 0 && !opts.keepExisting) {
+  // KiCadRoutingTools narrows widths/clearances itself (fab-floor escalation), so the retry is Freerouting-only.
+  if (remaining.length > 0 && !opts.keepExisting && routerOf(opts) !== 'krt') {
     const rules = RULESETS[doc.board.rules];
     const thinNets = remaining.map((r) => r.net).filter((n) => !netList || netList.includes(n));
     const shadow: Board = structuredClone(doc.board);
@@ -238,13 +273,11 @@ async function runAutoroutePipelineBody(
       // The shadow's copper must mirror the just-unrouted doc.
       shadow.tracks = shadow.tracks.filter((t) => !thinNets.includes(t.net));
       shadow.vias = shadow.vias.filter((v) => !thinNets.includes(v.net));
-      const dsn2 = exportDSN(shadow, { nets: thinNets });
       const boardBeforeRetry = doc.board;
-      const ses2 = await route.run(dsn2, runOpts(opts, 'retry'));
+      const imported = await routeOnce(shadow, route, opts, 'retry', thinNets, undefined);
       if (doc.board !== boardBeforeRetry) {
-        throw new Error('board was edited while freerouting was running — routes discarded, rerun autoroute');
+        throw new Error('board was edited while the router was running — routes discarded, rerun autoroute');
       }
-      const imported = importSES(ses2, doc.board);
       const thinWanted = new Set(thinNets);
       imported.tracks = imported.tracks.filter((t) => thinWanted.has(t.net));
       imported.vias = imported.vias.filter((v) => thinWanted.has(v.net));
