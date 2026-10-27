@@ -1,0 +1,1281 @@
+/*
+ * Flamingo panel view.
+ *
+ * Black on white. Structure comes from spacing, weight and line style; state
+ * is carried by line weight, dashes, hatching and labels.
+ *
+ * Colour is used for one thing only: telling designs apart. Anything that
+ * stands for a board takes its colour from --board, which the page sets to
+ * that board's colour (packages/panel/src/colors.ts).
+ *
+ * No shadows, no gradients, no transitions. Desktop only.
+ */
+
+@font-face {
+  font-family: 'Space Mono';
+  src: url('/fonts/SpaceMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'Space Mono';
+  src: url('/fonts/SpaceMono-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+}
+
+:root {
+  --ink: #000;
+  --paper: #fff;
+  --mono: 'Space Mono', 'Menlo', 'Courier New', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* `hidden` must win over any display set below. */
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow: hidden;
+}
+
+#panel-app {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 440px;
+  grid-template-rows: 32px minmax(0, 1fr) 24px;
+  grid-template-areas:
+    'bar bar'
+    'plate side'
+    'status status';
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- bars ---------------------------------------------------------------- */
+
+.bar {
+  grid-area: bar;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.bar-app {
+  font-weight: 700;
+}
+
+.bar-view {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.bar-name {
+  font-weight: 700;
+}
+
+.bar-spacer {
+  flex: 1;
+}
+
+/* Layout / Fabricated: two buttons, the one in force filled. */
+.look {
+  display: flex;
+}
+
+.look button {
+  padding: 1px 10px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.look button + button {
+  border-left: 0;
+}
+
+.look button[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 700;
+}
+
+.look button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.bar-link {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.status {
+  grid-area: status;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 12px;
+  border-top: 1px solid var(--ink);
+  white-space: nowrap;
+}
+
+/* ---- plate --------------------------------------------------------------- */
+
+.plate {
+  grid-area: plate;
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+
+#plate-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: default;
+}
+
+.plate-empty {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 520px;
+  padding: 16px;
+  border: 1px dashed var(--ink);
+  background: var(--paper);
+  white-space: pre-line;
+}
+
+/* The server is still checking boards: one bar per board, in its colour. */
+.plate-loading {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(520px, calc(100% - 32px));
+  padding: 12px 14px;
+  border: 2px solid var(--ink);
+  background: var(--paper);
+  z-index: 6;
+}
+
+/* Under a panel already drawn: out of the way, bottom left. */
+.plate-loading-docked {
+  left: 16px;
+  top: auto;
+  bottom: 16px;
+  transform: none;
+  width: min(440px, calc(100% - 32px));
+  padding: 8px 10px;
+  border-width: 1px;
+}
+
+.load-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.load-head strong {
+  flex: 1;
+  font-size: 13px;
+}
+
+.load-clock,
+.load-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.load-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.4fr);
+  grid-template-areas:
+    'chip name bar'
+    'chip status status';
+  align-items: center;
+  column-gap: 8px;
+  margin-top: 10px;
+}
+
+.load-row .chip {
+  grid-area: chip;
+  align-self: start;
+}
+
+.load-name {
+  grid-area: name;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.load-bar {
+  grid-area: bar;
+  display: block;
+  height: 10px;
+  border: 1px solid var(--ink);
+}
+
+.load-bar span {
+  display: block;
+  height: 100%;
+  background: var(--board, var(--ink));
+}
+
+.load-queued .load-bar {
+  border-style: dashed;
+}
+
+.load-status {
+  grid-area: status;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.load-note {
+  margin-top: 10px;
+  font-size: 11px;
+}
+
+/* A scenario is on show in place of the panel. */
+.banner {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 8px 8px 12px;
+  border: 2px solid var(--ink);
+  background: var(--paper);
+  z-index: 5;
+}
+
+.banner-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.banner-text strong {
+  display: block;
+  font-size: 13px;
+}
+
+.banner .btn {
+  width: auto;
+  white-space: nowrap;
+}
+
+.banner .btn kbd {
+  float: none;
+  margin-left: 10px;
+}
+
+/* ---- context menu -------------------------------------------------------- */
+
+.menu {
+  position: absolute;
+  min-width: 190px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  padding: 2px 0;
+  z-index: 10;
+}
+
+.menu-title {
+  padding: 3px 10px;
+  font-weight: 700;
+  border-bottom: 1px solid var(--ink);
+}
+
+.menu button {
+  display: block;
+  width: 100%;
+  padding: 4px 10px;
+  border: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu button:hover:not(:disabled),
+.menu button:focus-visible {
+  background: var(--ink);
+  color: var(--paper);
+  outline: none;
+}
+
+.menu button:disabled {
+  text-decoration: line-through;
+  cursor: default;
+}
+
+/* ---- sidebar ------------------------------------------------------------- */
+
+.side {
+  grid-area: side;
+  /* A scrollbar that takes room takes it always, so nothing moves when it appears. */
+  scrollbar-gutter: stable;
+  border-left: 1px solid var(--ink);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.block {
+  padding: 12px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.block h2 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.tag {
+  display: inline-block;
+  padding: 0 4px;
+  border: 1px dashed var(--ink);
+  font-size: 10px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  vertical-align: 1px;
+}
+
+.tag-btn {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.tag-btn:hover:not(:disabled),
+.tag-btn:focus-visible {
+  border-style: solid;
+}
+
+.count {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.hint {
+  white-space: pre-line;
+}
+
+.btn {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 2px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled),
+.btn:focus-visible {
+  background: var(--ink);
+  color: var(--paper);
+  outline: none;
+}
+
+.btn:disabled {
+  border-style: dashed;
+  font-weight: 400;
+  cursor: default;
+}
+
+.btn kbd {
+  float: right;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  font: inherit;
+  font-weight: 400;
+}
+
+.msg {
+  margin-top: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--ink);
+  white-space: pre-line;
+}
+
+.msg-problem {
+  border-width: 2px;
+}
+
+.msg a {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* ---- boards -------------------------------------------------------------- */
+
+.board {
+  padding: 8px 0;
+  border-top: 1px dotted var(--ink);
+}
+
+.board:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.board-head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.swatch {
+  min-width: 22px;
+  padding: 0 4px;
+  border: 2px solid var(--board);
+  background: color-mix(in srgb, var(--board) 18%, white);
+  font-weight: 700;
+  text-align: center;
+}
+
+.board-add {
+  margin-top: 10px;
+}
+
+.board-list:empty + .board-add,
+#board-list:empty + .board-add {
+  margin-top: 0;
+}
+
+.add-title {
+  margin-bottom: 4px;
+  font-weight: 700;
+}
+
+.add-board {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 4px 8px;
+  border: 1px dashed var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add-board:hover:not(:disabled),
+.add-board:focus-visible {
+  border-style: solid;
+  background: var(--ink);
+  color: var(--paper);
+  outline: none;
+}
+
+.add-board:disabled {
+  cursor: default;
+}
+
+.add-board .plus {
+  display: inline-block;
+  width: 18px;
+  font-weight: 700;
+}
+
+.board-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-meta {
+  flex: none;
+  max-width: 60%;
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  margin: 6px 0 0 34px;
+}
+
+.board-controls label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--ink);
+}
+
+.stepper button {
+  width: 22px;
+  border: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.stepper button:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.stepper button:disabled {
+  text-decoration: line-through;
+  cursor: default;
+}
+
+.stepper output {
+  min-width: 28px;
+  padding: 0 4px;
+  border-left: 1px solid var(--ink);
+  border-right: 1px solid var(--ink);
+  text-align: center;
+}
+
+input.qty {
+  width: 52px;
+  padding: 1px 4px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+
+input.qty:focus {
+  outline: 2px solid var(--ink);
+  outline-offset: 0;
+}
+
+/* ---- shared marks --------------------------------------------------------- */
+
+/* A board, by name, in its colour. Hollow when it ships bare. */
+.chip {
+  display: inline-block;
+  padding: 0 5px;
+  border: 1.5px solid var(--board, var(--ink));
+  background: color-mix(in srgb, var(--board, var(--ink)) 18%, white);
+  color: var(--ink);
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.chip-bare {
+  border-style: dashed;
+  background: var(--paper);
+}
+
+.chip-key {
+  --board: var(--ink);
+}
+
+button.chip-instance {
+  cursor: pointer;
+}
+
+button.chip-instance:hover,
+button.chip-instance:focus-visible {
+  background: var(--board, var(--ink));
+  color: var(--paper);
+  outline: none;
+}
+
+/* Boards received: one mark per board. Solid = needed, hollow = extra. */
+.got {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 12px;
+  white-space: nowrap;
+}
+
+.got-n {
+  min-width: 10px;
+  text-align: right;
+}
+
+.pips {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.pip {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--board, var(--ink));
+}
+
+.pip-met {
+  background: var(--board, var(--ink));
+}
+
+.pip-short {
+  border-style: dotted;
+  border-color: var(--ink);
+}
+
+.pips-text {
+  padding: 0 4px;
+  border: 1.5px solid var(--board, var(--ink));
+  font-size: 11px;
+  line-height: 14px;
+}
+
+/* A share of something, as a length. */
+.meter {
+  display: block;
+  height: 5px;
+}
+
+.meter i {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+}
+
+.est {
+  font-size: 10px;
+  border-bottom: 1px dotted var(--ink);
+  cursor: help;
+}
+
+details > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+details > summary::-webkit-details-marker {
+  display: none;
+}
+
+details > summary::before {
+  content: '+';
+  display: inline-block;
+  width: 12px;
+  font-weight: 700;
+}
+
+details[open] > summary::before {
+  content: '−';
+}
+
+.notes {
+  margin: 4px 0 0;
+  padding: 0 0 0 12px;
+  list-style: none;
+}
+
+.notes li {
+  padding: 1px 0 1px 10px;
+  text-indent: -10px;
+}
+
+.notes li::before {
+  content: '· ';
+}
+
+.notes-block {
+  margin-top: 8px;
+}
+
+/* ---- cost ---------------------------------------------------------------- */
+
+.total {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.total-amount {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.order-line {
+  display: flex;
+  gap: 6px;
+  margin: 2px 0 10px;
+}
+
+.order-line span {
+  padding: 0 5px;
+  border: 1px solid var(--ink);
+  font-size: 11px;
+}
+
+.order-line .qty-made {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.cost-group > summary,
+.cost-total {
+  display: grid;
+  grid-template-columns: 12px 78px minmax(0, 1fr) 70px 30px;
+  align-items: center;
+  column-gap: 6px;
+  padding: 2px 0;
+}
+
+.cost-group > summary::before {
+  grid-column: 1;
+}
+
+.cost-total {
+  margin-top: 3px;
+  padding-top: 4px;
+  border-top: 1px solid var(--ink);
+  font-weight: 700;
+}
+
+.cost-total .cost-name {
+  grid-column: 2;
+}
+
+.cost-group .amount,
+.cost-total .amount {
+  text-align: right;
+  white-space: nowrap;
+}
+
+table.lines {
+  width: 100%;
+  margin: 2px 0 6px;
+  border-collapse: collapse;
+  border-left: 1px solid var(--ink);
+  font-size: 11px;
+}
+
+table.lines td {
+  padding: 1px 0 1px 8px;
+  vertical-align: top;
+}
+
+table.lines td.amount {
+  text-align: right;
+  white-space: nowrap;
+}
+
+table.lines td.flag {
+  width: 36px;
+  padding-left: 6px;
+  white-space: nowrap;
+}
+
+table.lines tr.order td {
+  padding-top: 4px;
+  font-weight: 700;
+}
+
+.received {
+  margin-top: 10px;
+}
+
+.legend {
+  margin-top: 8px;
+  font-size: 10px;
+  cursor: help;
+}
+
+/* ---- scenarios ----------------------------------------------------------- */
+
+.sc-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  margin-bottom: 6px;
+  font-size: 10px;
+}
+
+.sc-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sc-legend .chip {
+  font-size: 10px;
+  line-height: 13px;
+}
+
+.scenario {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) max-content;
+  gap: 0 6px;
+  padding: 8px 6px 8px 4px;
+  border: 1px solid transparent;
+  border-top: 1px dotted var(--ink);
+  cursor: pointer;
+}
+
+.scenario:first-child {
+  border-top-color: transparent;
+}
+
+.scenario:hover,
+.scenario:focus-visible {
+  border: 1px solid var(--ink);
+  outline: none;
+}
+
+.scenario.selected {
+  border: 2px solid var(--ink);
+  padding: 7px 5px 7px 3px;
+}
+
+.scenario.selected + .scenario,
+.scenario:hover + .scenario {
+  border-top-color: transparent;
+}
+
+.sc-rank {
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.sc-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 7px;
+  font-weight: 700;
+}
+
+.sc-name > span {
+  white-space: nowrap;
+}
+
+.sc-icon {
+  flex: none;
+}
+
+/* Label on the left, fact on the right: each panel / order / you get. */
+.sc-facts {
+  grid-column: 2 / -1;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 4px 6px;
+  align-items: center;
+  margin: 6px 0 0;
+}
+
+.sc-facts dt {
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.sc-facts dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  margin: 0;
+  min-width: 0;
+}
+
+/* Running text, so the punctuation sits where punctuation sits. */
+.sc-facts dd.sc-qty {
+  display: block;
+  font-size: 11px;
+}
+
+/* A quantity that is what it is because no smaller order exists. */
+.min {
+  padding: 0 3px;
+  border: 1px dashed var(--ink);
+  font-size: 10px;
+  line-height: 13px;
+  cursor: help;
+}
+
+.got-bare {
+  font-size: 11px;
+}
+
+/* Cost as a length, then the same per board, then the notes. */
+.sc-foot {
+  grid-column: 2 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.sc-foot .meter {
+  flex: 1;
+  min-width: 40px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.sc-qty .chip {
+  margin-right: 5px;
+}
+
+.sc-total {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.sc-total .est {
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.sc-per {
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.sc-warn {
+  flex: none;
+  padding: 0 4px;
+  border: 1px solid var(--ink);
+  font-size: 10px;
+  line-height: 14px;
+  cursor: help;
+}
+
+/* ---- steps --------------------------------------------------------------- */
+
+.step h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.step-n {
+  flex: none;
+  width: 18px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  line-height: 16px;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+.step .meaning {
+  margin: 0 0 8px;
+}
+
+.sub {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dotted var(--ink);
+}
+
+.sub h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sub .msg {
+  margin: 8px 0 0;
+}
+
+.plate-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-bottom: 8px;
+}
+
+.plate-counts:empty {
+  display: none;
+}
+
+.count-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bare-n {
+  font-size: 10px;
+}
+
+/* Where an option is: it is the panel on the plate, or it is shown there. */
+.where {
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.where-plate {
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.where-shown {
+  border: 1px solid var(--ink);
+}
+
+/* ---- checks -------------------------------------------------------------- */
+
+.level {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.level-error {
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.level-warning {
+  border: 1px solid var(--ink);
+}
+
+.level-info {
+  border: 1px dotted var(--ink);
+  font-weight: 400;
+}
+
+.level-none {
+  border-style: dotted;
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 400;
+}
+
+.count .level {
+  margin-left: 3px;
+}
+
+.issue {
+  padding: 4px 0;
+  border-top: 1px dotted var(--ink);
+}
+
+.issue:first-child {
+  border-top: 0;
+}
+
+.issue > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.issue > summary::before {
+  order: 9;
+  margin-left: auto;
+  width: auto;
+}
+
+.issue-error .issue-title {
+  font-weight: 700;
+}
+
+.issue-n {
+  font-size: 11px;
+}
+
+.issue-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.issue-text {
+  margin: 4px 0 2px 24px;
+  padding: 0 0 0 8px;
+  border-left: 1px solid var(--ink);
+  font-size: 11px;
+}
+
+/* A quote on its way: the previous ways stay readable but step back. */
+#option-list.pending > :not(.pending-bar) {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.pending-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border: 2px solid var(--ink);
+}
+.pending-bar .btn-small {
+  width: auto;
+  margin-left: auto;
+  padding: 3px 8px;
+}
+.pending-bar .spin {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--ink);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: pending-spin 0.8s linear infinite;
+}
+@keyframes pending-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Cost by quantity: two small charts on one axis, ink on paper. */
+.cost-curve {
+  position: relative;
+}
+.cost-curve .curve-ask .btn {
+  width: auto;
+  margin-bottom: 6px;
+}
+.cost-curve .curve-pricing {
+  margin-bottom: 4px;
+}
+.cost-curve .progress {
+  height: 6px;
+  margin-bottom: 10px;
+  border: 1px solid var(--ink);
+}
+.cost-curve .progress i {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+  transition: width 0.2s;
+}
+.cost-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.cost-chart.pickable {
+  cursor: pointer;
+}
+.cost-chart .line {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.cost-chart .pt {
+  fill: var(--paper, #fff);
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+.cost-chart .pt.entered {
+  fill: var(--ink);
+}
+.cost-chart .pt.hot {
+  fill: var(--ink);
+  r: 5;
+}
+.cost-chart .grid {
+  stroke: var(--ink);
+  stroke-opacity: 0.15;
+  stroke-width: 1;
+}
+.cost-chart .axis {
+  stroke: var(--ink);
+  stroke-opacity: 0.4;
+  stroke-width: 1;
+}
+.cost-chart .now {
+  stroke: var(--ink);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+.cost-chart .cursor {
+  stroke: var(--ink);
+  stroke-opacity: 0.5;
+  stroke-width: 1;
+}
+.cost-chart .tick,
+.cost-chart .title,
+.cost-chart .value {
+  font-family: inherit;
+  font-size: 9px;
+  fill: var(--ink);
+}
+.cost-chart .title {
+  font-size: 10px;
+  font-weight: 700;
+}
+.cost-chart .value {
+  font-weight: 700;
+}
+.chart-note {
+  min-height: 2.6em;
+  font-size: 11px;
+  opacity: 0.7;
+}
+.chart-note.chart-tip {
+  opacity: 1;
+}

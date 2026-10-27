@@ -48,6 +48,8 @@ import { formatAutorouteSummary, runAutorouteBroadcast } from './autoroute.js';
 import { pngDimensions, renderPNGDetailed } from './screenshot.js';
 import { checkStock, stockCheckEnabled } from './stock.js';
 import { exportStep } from './step.js';
+import { registerPanelTools } from './panel/mcp.js';
+import type { PanelSession } from './panel/session.js';
 import { importEpro } from './import/epro.js';
 
 /**
@@ -63,7 +65,8 @@ export interface PartsApi {
 }
 
 export interface McpContext {
-  doc: Doc;
+  /** The board being edited. Absent on a server started on a panel file: there is no board there. */
+  doc?: Doc;
   projectDir: string;
   partsApi: PartsApi;
   /**
@@ -71,7 +74,16 @@ export interface McpContext {
    * jar in the unit suite). Production wires up the real runner from route.ts.
    */
   route: RouteRunner;
+  /**
+   * Panel session. When present, the panel tools (panel_*, quote_order,
+   * export_panel_fab) are served next to the board tools; when absent the
+   * tool list is exactly the board tools.
+   */
+  panel?: PanelSession;
 }
+
+/** A context that has a board: what the board tools and routes work on. */
+export type BoardMcpContext = McpContext & { doc: Doc };
 
 // ---------------------------------------------------------------------------
 // Small formatting / result helpers
@@ -92,7 +104,7 @@ function errorResult(error: string): CallToolResult {
 
 /** Apply an Op via ctx.doc and turn the OpResult/OpError into a CallToolResult. */
 function applyAndReport(
-  ctx: McpContext,
+  ctx: BoardMcpContext,
   op: Op,
   onOk: (result: OpResult) => string,
 ): CallToolResult {
@@ -208,7 +220,7 @@ function formatStockAdvisories(advisories: DrcViolation[]): string {
  * been saved (no filePath yet). Shared between the export_fab MCP tool and
  * the POST /api/export HTTP route so both pick the same default.
  */
-export function resolveFabOutDir(ctx: McpContext, outDir?: string): string {
+export function resolveFabOutDir(ctx: BoardMcpContext, outDir?: string): string {
   if (outDir) return isAbsolute(outDir) ? outDir : join(ctx.projectDir, outDir);
   const base = ctx.doc.filePath ? dirname(ctx.doc.filePath) : ctx.projectDir;
   return join(base, 'fab');
@@ -352,8 +364,16 @@ const regionSchema = z.object({
  * stateless mode (see http.ts) -- cheap since it just registers closures over
  * `ctx`, no board state lives on the McpServer itself.
  */
-export function createMcpServer(ctx: McpContext): McpServer {
+export function createMcpServer(context: McpContext): McpServer {
   const server = new McpServer({ name: 'flamingo', version: createRequire(import.meta.url)('../package.json').version });
+
+  // A server started on a panel file has no board of its own to work on.
+  const doc = context.doc;
+  if (!doc) {
+    if (context.panel) registerPanelTools(server, context.panel);
+    return server;
+  }
+  const ctx: BoardMcpContext = { ...context, doc };
 
   server.registerTool(
     'new_board',
@@ -1394,6 +1414,8 @@ export function createMcpServer(ctx: McpContext): McpServer {
       };
     },
   );
+
+  if (ctx.panel) registerPanelTools(server, ctx.panel);
 
   return server;
 }

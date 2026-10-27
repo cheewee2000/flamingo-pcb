@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flamingo — Panel</title>
+  </head>
+  <body>
+    <div id="panel-app">
+      <header class="bar">
+        <span class="bar-app">Flamingo</span>
+        <span class="bar-view">Panel</span>
+        <span id="panel-name" class="bar-name"></span>
+        <span id="panel-file" class="bar-file"></span>
+        <span class="bar-spacer"></span>
+        <div id="look-toggle" class="look" role="group" aria-label="How the panel is drawn">
+          <button type="button" data-look="layout" aria-pressed="true">Layout</button>
+          <button type="button" data-look="fab" aria-pressed="false">Fabricated</button>
+        </div>
+        <a class="bar-link" href="/">Board editor</a>
+      </header>
+
+      <main id="plate" class="plate">
+        <canvas id="plate-canvas"></canvas>
+        <div id="plate-empty" class="plate-empty" hidden></div>
+        <div id="plate-loading" class="plate-loading" role="status" aria-live="polite"></div>
+        <div id="plate-banner" class="banner" hidden>
+          <div class="banner-text">
+            <strong id="banner-title"></strong>
+            <span id="banner-note"></span>
+          </div>
+          <button id="banner-back" class="btn" type="button">Back to my panel <kbd>Esc</kbd></button>
+        </div>
+        <div id="context-menu" class="menu" hidden role="menu"></div>
+      </main>
+
+      <aside class="side">
+        <section class="block step" id="step-need">
+          <h2><span class="step-n">1</span>Boards you need</h2>
+          <div id="board-list"></div>
+          <div id="board-add" class="board-add"></div>
+          <div id="board-msg" class="msg" hidden></div>
+        </section>
+
+        <section class="block step" id="step-ways">
+          <h2><span class="step-n">2</span>Ways to order them</h2>
+          <div id="option-list"></div>
+          <div class="sub">
+            <h3>Cost by quantity</h3>
+            <div id="cost-curve" class="cost-curve"></div>
+          </div>
+        </section>
+
+        <section class="block step" id="step-plate">
+          <h2><span class="step-n">3</span><span id="plate-title">On the plate</span></h2>
+          <p id="plate-meaning" class="meaning"></p>
+
+          <div id="plate-edit" class="sub">
+            <h3>Change it</h3>
+            <div id="plate-counts" class="plate-counts"></div>
+            <button id="arrange-btn" class="btn" type="button">Arrange <kbd>A</kbd></button>
+            <div id="arrange-msg" class="msg" hidden></div>
+          </div>
+
+          <div class="sub">
+            <h3>Cost <span id="cost-flag" class="tag" hidden>estimate</span></h3>
+            <div id="cost-summary"></div>
+          </div>
+
+          <div id="checks" class="sub">
+            <h3>Checks <span id="issue-count" class="count"></span></h3>
+            <div id="issue-list"></div>
+          </div>
+
+          <div class="sub">
+            <button id="export-btn" class="btn" type="button">Export fab files</button>
+            <div id="export-msg" class="msg" hidden></div>
+          </div>
+        </section>
+      </aside>
+
+      <footer class="status">
+        <span id="status-cursor">x: -- y: --</span>
+        <span id="status-zoom">zoom: --</span>
+        <span id="status-size"></span>
+        <span id="status-selection"></span>
+        <span class="bar-spacer"></span>
+        <span id="status-conn">connecting…</span>
+      </footer>
+    </div>
+    <script type="module" src="/src/panel/main.ts"></script>
+  </body>
+</html>

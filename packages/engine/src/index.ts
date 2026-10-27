@@ -108,5 +108,7 @@ export { planZoneStitching } from './stitch.js';
 // Re-export DRC
 export type { RuleSet } from './drc/rules.js';
 export { RULESETS } from './drc/rules.js';
+export { isAssembled } from './assembly.js';
 export type { DrcViolation, CopperItem } from './drc/types.js';
+export type { DrcProgress } from './drc/drc.js';
 export { runDRC, buildCopperItems, groupFillRings } from './drc/drc.js';

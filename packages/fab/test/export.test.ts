@@ -6,7 +6,7 @@ import AdmZip from 'adm-zip';
 import { newBoard } from '@flamingo/engine';
 import type { Board } from '@flamingo/engine';
 import { generateGerbers } from '../src/gerber.js';
-import { exportFab } from '../src/exportFab.js';
+import { exportFab, zipFiles } from '../src/exportFab.js';
 
 function boardWithOnePad(): Board {
   const b = newBoard('exporttest', 2);
@@ -97,5 +97,22 @@ describe('exportFab', () => {
     expect(result.gerberZip.startsWith('/')).toBe(true);
     expect(result.bomCsv.startsWith('/')).toBe(true);
     expect(result.cplCsv.startsWith('/')).toBe(true);
+  });
+});
+
+describe('zipFiles', () => {
+  it('writes strings as UTF-8 and Buffers as they are, so a zip can hold a zip', () => {
+    const inner = zipFiles(new Map([['a.gbr', 'G04 µ*']]));
+    const outer = new AdmZip(
+      zipFiles(
+        new Map<string, string | Buffer>([
+          ['x/gerbers.zip', inner],
+          ['note.txt', 'ok'],
+        ]),
+      ),
+    );
+    expect(outer.getEntries().map((e) => e.entryName).sort()).toEqual(['note.txt', 'x/gerbers.zip']);
+    const back = new AdmZip(outer.getEntry('x/gerbers.zip')!.getData());
+    expect(back.getEntry('a.gbr')!.getData().toString('utf8')).toBe('G04 µ*');
   });
 });

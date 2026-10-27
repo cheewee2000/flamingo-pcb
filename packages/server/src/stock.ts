@@ -14,6 +14,7 @@
  */
 
 import type { Board, DrcViolation } from '@flamingo/engine';
+import { isAssembled } from '@flamingo/engine';
 import type { JlcStock } from '@flamingo/parts';
 
 export type StockLookup = (lcsc: string) => Promise<JlcStock>;
@@ -35,7 +36,6 @@ export function stockCheckEnabled(): boolean {
   return process.env.FLAMINGO_STOCK_CHECK !== 'off';
 }
 
-const LCSC_ID = /^C\d+$/i;
 
 export async function checkStock(
   board: Board,
@@ -47,7 +47,7 @@ export async function checkStock(
   // Group placed components by LCSC id (skip TPs and anything without one).
   const byLcsc = new Map<string, { refdes: string[]; at: { x: number; y: number } }>();
   for (const c of board.components) {
-    if (!LCSC_ID.test(c.lcsc)) continue;
+    if (!isAssembled(c)) continue; // no LCSC number, or do not place
     const entry = byLcsc.get(c.lcsc);
     if (entry) entry.refdes.push(c.refdes);
     else byLcsc.set(c.lcsc, { refdes: [c.refdes], at: { x: c.at.x, y: c.at.y } });

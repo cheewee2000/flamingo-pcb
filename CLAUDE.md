@@ -51,6 +51,58 @@ node packages/server/dist/cli.js serve board.flamingo   # prints "Flamingo v0.1.
 `screenshot` renders a PNG whenever you want to see the board. `get_board_state`
 / `describe_connections` give text summaries. `undo` / `redo` walk the op log.
 
+## Panels (several boards fabricated as one piece)
+
+A **panel** is a `.flamboyance` file next to the boards that places copies
+("instances") of one or more board files on one fabrication panel. See "Panels
+and order cost" in `README.md` for every tool and the matching `flamingo panel`
+CLI commands. It is served in one of two ways:
+
+- `flamingo serve combo.flamboyance`: like a board file, on its own. The panel
+  view is at `http://localhost:4242`, and `/mcp` has the 24 panel tools and
+  **no board tools**. The file is created if it is missing.
+- `flamingo serve board.flamingo --panel combo.flamboyance`: the board's server
+  with the panel added. All 61 tools at one `/mcp`; the panel view is at
+  `/panel`. Use this when one session designs boards and panelizes them.
+
+Two servers on one machine need two ports (`FLAMINGO_PORT`); `.mcp.json` points
+at 4242.
+
+`boards + quantities → quote_order → panel_apply_scenario → panel_check → export_panel_fab`
+
+1. `panel_new`, then `panel_add_board` per board with `needed` (assembled
+   boards that must be delivered).
+2. `quote_order` ranks the ways to order them and itemizes every fee.
+   `panel_apply_scenario id=...` loads a scenario's panel. Or build the panel
+   by hand: `panel_add_instance`, then `panel_arrange`.
+3. `panel_check` returns findings as data. Errors gate `export_panel_fab`
+   (`waive: true` overrides).
+4. `panel_screenshot` to look at it; `export_panel_fab` to write the fileset.
+5. `panel_cost_curve` for the cost at each quantity. Every `needed` a board
+   has been set to joins the curve; the points live in the panel file under
+   `curve` (a cache, dropped when a board, setting or fee changes) so a
+   quantity priced once is free to come back to. The panel view charts it
+   only for a panel of one design, and only when asked (a button).
+
+Conventions:
+
+- **Instance ids** are `<board key><n>`: `S1`, `M3`. Merged BOM/CPL designators
+  are `<instance>_<refdes>`: `S1_U2`. Positions are the bottom-left corner of
+  the instance's bounding box, mm, y-up; rotations are degrees CCW, any angle
+  (`panel_arrange` turns boards in steps of `settings.rotationStep`, 90 by default).
+- **Every amount marked `~` is an estimate.** Say so when you quote it. Fees
+  and limits live in `packages/panel/config/*.json` with a source URL and a
+  `verified` flag each; bare-board prices are always estimates.
+- **Never call JLCPCB's quote or order endpoints**, and never place an order.
+  The cost model works from the local fee table plus JLCPCB's parts library
+  (prices, attrition, Standard-only: the lookup the stock check makes).
+- A panel refers to boards by path + content hash. After editing a board that
+  is on a panel, `panel_check` reports it stale until `panel_refresh_boards`.
+- Panel support is opt-in in `startServer({ panel: true })`; the CLI turns it
+  on. `panelOnly: true` is the server of a panel file.
+- The panel server polls its boards' file times, so a board saved by another
+  server shows up as stale within about two seconds.
+
 ## Conventions
 
 - **Units & axes:** millimetres, **y-up**. Rotations are degrees CCW.
@@ -119,6 +171,8 @@ minute or more — be patient and don't assume a hang.
 npm run build   # tsc per package + vite build for the ui
 npm test        # vitest run across all packages
 npx tsx packages/server/scripts/e2e-esp32.ts   # real end-to-end pipeline check
+npx tsx packages/server/scripts/e2e-panel.ts   # panel pipeline: two boards, 1 + 5, quote, export
+npx tsx packages/server/scripts/verify-panel-ui.ts   # panel view in headless Chromium
 ```
 
 The E2E script drives only the public MCP tools against a real server with live

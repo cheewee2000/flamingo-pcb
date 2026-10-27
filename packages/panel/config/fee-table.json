@@ -1,0 +1,387 @@
+{
+  "$comment": "JLCPCB fee table for the Flamingo cost model. Every entry is {value, source, verified, date?, note?}. verified:true means the value was read from the cited JLCPCB help page with WebFetch on the given date. verified:false means it is an ESTIMATE: JLCPCB publishes no figure, or the figure was not confirmed on a help page. Estimates are flagged wherever they surface. Bare-board prices in particular come only from JLCPCB's quote calculator, which Flamingo never calls, so every bare-board number here is an estimate. Shipping, tax, duties and coupons are not modelled.",
+  "currency": "USD",
+  "asOf": "2026-09-28",
+  "pcb": {
+    "qtySteps": {
+      "value": [
+        5,
+        10,
+        15,
+        20,
+        25,
+        30,
+        50,
+        75,
+        100,
+        125,
+        150,
+        200,
+        250,
+        300,
+        400,
+        500
+      ],
+      "source": "https://cart.jlcpcb.com/quote",
+      "verified": false,
+      "note": "Order quantities the quote form offers, from memory. The form itself was not opened."
+    },
+    "promo": {
+      "maxSize": {
+        "value": {
+          "width": 100,
+          "height": 100
+        },
+        "source": "https://jlcpcb.com/blog/custom-pcb-cost",
+        "verified": false,
+        "note": "'Keeping individual PCB dimensions within 100mm x 100mm qualifies orders for standard low-cost prototyping rates'. Seen in a search-result summary of a blog post, not fetched from a help page."
+      },
+      "prices": {
+        "2": {
+          "value": [
+            {
+              "qty": 5,
+              "price": 2.0
+            },
+            {
+              "qty": 10,
+              "price": 5.0
+            }
+          ],
+          "source": "https://jlcpcb.com/blog/custom-pcb-cost",
+          "verified": false,
+          "note": "'A 2-layer FR-4 board at 100 x 100 mm starts at $2.00 for 5 pieces' (search-result summary). The 10-piece price is from memory."
+        },
+        "4": {
+          "value": [
+            {
+              "qty": 5,
+              "price": 7.0
+            }
+          ],
+          "source": "https://jlcpcb.com/blog/special-discount-on-quality-4-layers-pcbs",
+          "verified": false,
+          "note": "'4-layer PCBs (10x10cm) start at just $7' (search-result summary)."
+        },
+        "6": {
+          "value": [],
+          "source": "https://cart.jlcpcb.com/quote",
+          "verified": false,
+          "note": "No special offer assumed for 6-layer boards."
+        }
+      }
+    },
+    "engineeringFee": {
+      "2": {
+        "value": 8.0,
+        "source": "https://cart.jlcpcb.com/quote",
+        "verified": false,
+        "note": "ESTIMATE. Fixed part of a non-promotional order, chosen so that 5 boards of 100 x 150 mm come to about $10."
+      },
+      "4": {
+        "value": 20.0,
+        "source": "https://jlcpcb.com/blog/special-discount-on-quality-4-layers-pcbs",
+        "verified": false,
+        "note": "ESTIMATE, fitted with the area rate to one published data point: 100 pcs of 100 x 100 mm 4-layer = $70.60 (search-result summary)."
+      },
+      "6": {
+        "value": 50.0,
+        "source": "https://cart.jlcpcb.com/quote",
+        "verified": false,
+        "note": "ESTIMATE with no data point behind it."
+      }
+    },
+    "areaRate": {
+      "2": {
+        "value": [
+          {
+            "upToM2": 0.5,
+            "perM2": 45.0
+          },
+          {
+            "upToM2": 3,
+            "perM2": 35.0
+          },
+          {
+            "upToM2": null,
+            "perM2": 30.0
+          }
+        ],
+        "source": "https://cart.jlcpcb.com/quote",
+        "verified": false,
+        "note": "ESTIMATE. USD per square metre of ordered board, by total order area."
+      },
+      "4": {
+        "value": [
+          {
+            "upToM2": 0.5,
+            "perM2": 65.0
+          },
+          {
+            "upToM2": 3,
+            "perM2": 50.0
+          },
+          {
+            "upToM2": null,
+            "perM2": 45.0
+          }
+        ],
+        "source": "https://jlcpcb.com/blog/special-discount-on-quality-4-layers-pcbs",
+        "verified": false,
+        "note": "ESTIMATE, fitted to 100 pcs of 100 x 100 mm 4-layer = $70.60 (1 m2 at $50 plus the $20 fee)."
+      },
+      "6": {
+        "value": [
+          {
+            "upToM2": 0.5,
+            "perM2": 160.0
+          },
+          {
+            "upToM2": 3,
+            "perM2": 130.0
+          },
+          {
+            "upToM2": null,
+            "perM2": 120.0
+          }
+        ],
+        "source": "https://cart.jlcpcb.com/quote",
+        "verified": false,
+        "note": "ESTIMATE with no data point behind it."
+      }
+    },
+    "differentDesigns": {
+      "perExtraDesign": {
+        "value": 8.0,
+        "source": "https://jlcpcb.com/help/article/in-what-cases-will-there-be-charged-extra",
+        "verified": false,
+        "note": "ESTIMATE. The help page confirms the charge exists ('If there is more than 1 design in your file, an extra cost will be applied') but gives no amount; the amount appears only in the quote calculator."
+      },
+      "rule": {
+        "value": "separable",
+        "source": "https://jlcpcb.com/help/article/different-design-in-your-pcb-files",
+        "verified": true,
+        "date": "2026-09-28",
+        "note": "'if the traces/silkscreen/solder mask in your PCB is different, as long as it can be separated, no matter by v-cut, millings, or drill holes, it will be regarded as different designs'. Designs divided only by silkscreen lines inside one rectangular outline are not charged."
+      },
+      "maxDesigns": {
+        "value": 10,
+        "source": "https://jlcpcb.com/help/article/pcb-panelization",
+        "verified": true,
+        "date": "2026-09-28"
+      }
+    },
+    "smallBoardDeburring": {
+      "value": [
+        {
+          "underMm": 15,
+          "perPiece": 0.05
+        },
+        {
+          "underMm": 30,
+          "perPiece": 0.02
+        }
+      ],
+      "source": "https://jlcpcb.com/help/article/in-what-cases-will-there-be-charged-extra",
+      "verified": true,
+      "date": "2026-09-28",
+      "note": "'1.5cm-3cm on one side: the extra fee is $0.02/pcs'; 'smaller than 1.5cm on one side: the extra fee is $0.05/pcs'. Applied per ordered piece."
+    },
+    "vcutSmallBoard": {
+      "value": null,
+      "source": "https://jlcpcb.com/help/article/in-what-cases-will-there-be-charged-extra",
+      "verified": false,
+      "date": "2026-10-26",
+      "note": "V-cut adds no fee of its own in any help article read on 2026-10-26. The one V-cut surcharge: 'For orders where the dimensions of single boards in the panel are less than 15mm on either side ... an extra charge for V-cut will be applied.' The amount appears only in an image on that page, so it is not modelled; panel_check warns instead (limits vcut.smallBoardSide)."
+    }
+  },
+  "assembly": {
+    "economic": {
+      "setupFee": {
+        "value": {
+          "single": 8.18,
+          "double": null
+        },
+        "source": "https://jlcpcb.com/help/article/pcb-assembly-price",
+        "verified": true,
+        "date": "2026-09-28",
+        "note": "Economic PCBA places one side only."
+      },
+      "stencil": {
+        "value": {
+          "single": 1.53,
+          "double": null
+        },
+        "source": "https://jlcpcb.com/help/article/pcb-assembly-price",
+        "verified": true,
+        "date": "2026-09-28"
+      },
+      "smtJoint": {
+        "value": [
+          {
+            "upTo": 100000,
+            "price": 0.0016
+          }
+        ],
+        "source": "https://jlcpcb.com/help/article/pcb-assembly-price",
+        "verified": true,
+        "date": "2026-09-28"
+      },
+      "feederLoading": {
+        "value": {
+          "basic": 0,
+          "extended": 3.07
+        },
+        "source": "https://jlcpcb.com/help/article/pcb-assembly-price",
+        "verified": true,
+        "date": "2026-09-28",
+        "note": "'Feeder Loading $3.07 Extend'. Charged once per unique extended part. The FAQ rounds it to '$3 per extended component'."
+      },
+      "qtySteps": {
+        "value": [
+          2,
+          5,
+          10,
+          15,
+          20,
+          25,
+          30,
+          50
+        ],
+        "source": "https://jlcpcb.com/capabilities/pcb-assembly-capabilities",
+        "verified": false,
+        "note": "The range 2-50 is published (capabilities page); the steps inside it are from memory of the order form."
+      }
+    },
+    "standard": {
+      "setupFee": {
+        "value": {
+          "single": 25.56,
+          "double": 51.12
+        },
+        "source": "https://jlcpcb.com/help/article/pcb-assembly-price",
+        "verified": true,
+        "date": "2026-09-28"
+      },
+      "stencil": {
+        "value": {
+          "single": 8.21,
+          "double": 16.42
+        },
+        "source": "https://jlcpcb.com/help/article/pcb-assembly-price",
+        "verified": true,
+        "date": "2026-09-28"
+      },
+      "smtJoint": {
+        "value": [
+          {
+            "upTo": 50000,
+            "price": 0.0016
+          },
+          {
+            "upTo": 100000,
+            "price": 0.0013
+          },
+          {
+            "upTo": 1000000,
+            "price": 0.0012
+          }
+        ],
+        "source": "https://jlcpcb.com/help/article/pcb-assembly-price",
+        "verified": true,
+        "date": "2026-09-28"
+      },
+      "feederLoading": {
+        "value": {
+          "basic": 1.53,
+          "extended": 1.53
+        },
+        "source": "https://jlcpcb.com/help/article/pcb-assembly-price",
+        "verified": true,
+        "date": "2026-09-28",
+        "note": "'Feeder Loading $1.53 Basic/Extend': on Standard PCBA every unique part is charged, basic or extended."
+      },
+      "qtySteps": {
+        "value": [
+          2,
+          5,
+          10,
+          15,
+          20,
+          25,
+          30,
+          50,
+          75,
+          100,
+          125,
+          150,
+          200,
+          250,
+          300,
+          400,
+          500
+        ],
+        "source": "https://jlcpcb.com/capabilities/pcb-assembly-capabilities",
+        "verified": false,
+        "note": "The range 2-80000 is published (capabilities page); the steps are from memory of the order form."
+      }
+    },
+    "manualJoint": {
+      "value": 0.0164,
+      "source": "https://jlcpcb.com/help/article/pcb-assembly-price",
+      "verified": true,
+      "date": "2026-09-28",
+      "note": "Manual assembly, 1-10,000 joints. Applied to through-hole joints."
+    },
+    "handSolderLabor": {
+      "value": 3.58,
+      "source": "https://jlcpcb.com/help/article/pcb-assembly-price",
+      "verified": true,
+      "date": "2026-09-28",
+      "note": "'Hand-soldering Labor: $3.58 per order'. Applied once when the order has through-hole parts."
+    },
+    "panelFee": {
+      "value": 8.21,
+      "source": "https://jlcpcb.com/help/article/pcb-assembly-price",
+      "verified": true,
+      "date": "2026-09-28",
+      "note": "'Panel (Applicable when the number of panelized designs > 1) $8.21'. Applied once to an assembly order whose piece is a panel of more than one board."
+    },
+    "largePcb": {
+      "value": {
+        "overCm2": 650,
+        "fee": 57.46
+      },
+      "source": "https://jlcpcb.com/help/article/pcb-assembly-price",
+      "verified": true,
+      "date": "2026-09-28"
+    }
+  },
+  "parts": {
+    "attrition": {
+      "value": [
+        {
+          "maxJoints": 2,
+          "extra": 8,
+          "minimum": 20,
+          "kind": "two-pad passives"
+        },
+        {
+          "maxJoints": 8,
+          "extra": 3,
+          "minimum": 5,
+          "kind": "small parts, up to 8 joints"
+        },
+        {
+          "maxJoints": null,
+          "extra": 1,
+          "minimum": 1,
+          "kind": "everything else"
+        }
+      ],
+      "source": "https://jlcpcb.com/help/answers/detail/92-What-are-the-MOQ-and-attrition",
+      "verified": false,
+      "note": "ESTIMATE, used only for a part JLCPCB's parts library does not list. The library gives each listed part its own attrition (lossNumber, leastPatchNumber), which the cost model takes first. These three classes are the stand-in; 'extra' is added to the quantity used, and the billed quantity is never below 'minimum'."
+    }
+  }
+}

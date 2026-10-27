@@ -9,10 +9,10 @@
  * fields.value || fields.description || lcsc. Keep the two in sync.
  */
 import type { Board, ComponentInst } from '../../types.js';
+import { isAssembled } from '../../assembly.js';
 import type { RuleSet } from '../rules.js';
 import type { DrcViolation } from '../types.js';
 
-const LCSC_ID = /^C\d+$/i;
 
 function commentOf(c: ComponentInst): string {
   return c.fields.value || c.fields.description || c.lcsc;
@@ -21,7 +21,7 @@ function commentOf(c: ComponentInst): string {
 export function check(b: Board, _rules: RuleSet): DrcViolation[] {
   const byLcsc = new Map<string, ComponentInst[]>();
   for (const c of b.components) {
-    if (!LCSC_ID.test(c.lcsc)) continue;
+    if (!isAssembled(c)) continue; // not in the BOM
     const group = byLcsc.get(c.lcsc);
     if (group) group.push(c);
     else byLcsc.set(c.lcsc, [c]);

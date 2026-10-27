@@ -101,3 +101,12 @@ describe('generateCPL', () => {
     expect(csv).toBe('Designator,Mid X,Mid Y,Layer,Rotation\r\n');
   });
 });
+
+describe('do-not-place parts', () => {
+  it('are left out of the CPL, matching the BOM', () => {
+    const csv = generateCPL(boardWith([comp('R1'), comp('R2', { fields: { value: '10k', dnp: true } })]));
+    const lines = csv.trim().split('\r\n');
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toMatch(/^R1,/);
+  });
+});

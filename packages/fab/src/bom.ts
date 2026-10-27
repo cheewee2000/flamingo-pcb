@@ -18,12 +18,22 @@
  * Designators within a group are joined with a bare comma ("R1,R2,R5"), no
  * space, sorted in natural order (numeric run compared as a number, so
  * R2 < R10) since plain lexicographic sort would put R10 before R2.
+ *
+ * JLCPCB's upload rejects a Designator cell over 2048 characters ("The
+ * 'Designator' characters in each cell should not exceed 2048"), which a
+ * panel reaches easily (eight boards of 144 LEDs, each named like F1_D100).
+ * A group whose joined designators would pass that limit is written as
+ * several rows with the same Comment, Footprint and LCSC Part #; JLCPCB
+ * merges them back into one line item.
  */
 
 import type { Board, ComponentInst } from '@flamingo/engine';
+import { isAssembled } from '@flamingo/engine';
 
 const CRLF = '\r\n';
 const GROUP_SEP = ' ';
+/** JLCPCB's limit on the Designator cell, in characters (observed 2026-10-26). */
+export const MAX_DESIGNATOR_CELL = 2048;
 
 /** Split a designator into alternating non-digit/digit runs for natural sort. */
 function naturalChunks(s: string): string[] {
@@ -66,6 +76,26 @@ function footprintOf(c: ComponentInst): string {
   return c.fields.package || c.footprint.name;
 }
 
+/**
+ * Join sorted designators with commas into cells of at most `max` characters.
+ * A single designator longer than `max` still gets its own cell: there is
+ * nothing shorter to write.
+ */
+export function designatorCells(designators: string[], max = MAX_DESIGNATOR_CELL): string[] {
+  const cells: string[] = [];
+  let cell = '';
+  for (const d of designators) {
+    if (cell === '') cell = d;
+    else if (cell.length + 1 + d.length <= max) cell += ',' + d;
+    else {
+      cells.push(cell);
+      cell = d;
+    }
+  }
+  if (cell !== '') cells.push(cell);
+  return cells;
+}
+
 interface BomGroup {
   comment: string;
   footprint: string;
@@ -78,6 +108,7 @@ export function generateBOM(b: Board): string {
   const groups = new Map<string, BomGroup>();
 
   for (const c of b.components) {
+    if (!isAssembled(c)) continue; // no LCSC number, or do not place
     const comment = commentOf(c);
     const key = c.lcsc + GROUP_SEP + comment;
     let g = groups.get(key);
@@ -94,10 +125,11 @@ export function generateBOM(b: Board): string {
 
   const lines = ['Comment,Designator,Footprint,LCSC Part #'];
   for (const g of rows) {
-    const designators = [...g.designators].sort(naturalCompare).join(',');
-    lines.push(
-      [csvField(g.comment), csvField(designators), csvField(g.footprint), csvField(g.lcsc)].join(','),
-    );
+    for (const designators of designatorCells([...g.designators].sort(naturalCompare))) {
+      lines.push(
+        [csvField(g.comment), csvField(designators), csvField(g.footprint), csvField(g.lcsc)].join(','),
+      );
+    }
   }
   return lines.join(CRLF) + CRLF;
 }

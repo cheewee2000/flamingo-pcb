@@ -108,6 +108,8 @@ export interface ComponentInst {
     mfr?: string;
     package?: string;
     basic?: boolean;
+    /** Do not place: left out of the BOM and the placement list (CPL), and of a panel's quote. */
+    dnp?: boolean;
   };
   /**
    * Optional refdes silk label override. Absent = the board-aware automatic

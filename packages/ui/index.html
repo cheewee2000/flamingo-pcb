@@ -27,7 +27,7 @@
           <span
             id="tool-help"
             class="tool-help"
-            title="S select · O outline · K keepout · Z zone · H hole · T silk · X ripup · M measure · D dimension&#10;Esc = select · Del/Backspace = remove · R = rotate · F = flip side · Ctrl/Cmd = bypass snap"
+            title="S select · O outline · K keepout · Z zone · H hole · T silk · X ripup · M measure · D dimension&#10;Esc = select · Del/Backspace = remove · R = rotate · F = flip side · E = export · Ctrl/Cmd = bypass snap"
             >?</span
           >
         </div>
@@ -65,12 +65,7 @@
         <div id="viewer3d-hud" class="viewer3d-hud" hidden>
           <label><input type="checkbox" id="v3d-components" checked /> components</label>
           <label><input type="checkbox" id="v3d-silk" checked /> silk</label>
-          <div class="v3d-step">
-            <button id="v3d-step-btn" class="v3d-step-btn" type="button" title="Board + component blocks (enclosure work)">STEP</button>
-            <button id="v3d-step-detail-btn" class="v3d-step-btn" type="button" title="Board + real component models, copper, silk">STEP HD</button>
-            <div id="v3d-step-bar" class="v3d-step-bar"><div id="v3d-step-fill" class="v3d-step-fill"></div></div>
-          </div>
-          <span id="v3d-step-err" class="v3d-step-err"></span>
+          <button id="v3d-export-btn" class="v3d-export-btn" type="button" title="STEP, STEP HD, DXF or SVG (E)">Export…</button>
           <span class="viewer3d-hint">drag orbit · wheel zoom · shift-drag pan</span>
         </div>
         <div id="side-badge" class="side-badge" hidden>BOTTOM</div>

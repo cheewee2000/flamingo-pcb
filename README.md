@@ -65,6 +65,12 @@ node packages/server/dist/cli.js serve board.flamingo
 open http://localhost:4242
 ```
 
+The server accepts edits and the live WebSocket only from pages opened on
+`localhost` (a guard against other sites driving your open session). To open it
+from another machine by name, list that name:
+`FLAMINGO_ALLOWED_HOSTS=myhost node packages/server/dist/cli.js serve board.flamingo`,
+then browse to `http://myhost:4242`. Comma-separate several names.
+
 Point Claude Code at the running server by dropping this `.mcp.json` in your
 project (it's already at the repo root):
 
@@ -134,6 +140,224 @@ doing.
 | **History** | `undo`, `redo` |
 | **Output** | `export_fab`, `export_step`, `screenshot` |
 
+## Panels and order cost
+
+Several boards, of the same or of different designs, can be fabricated and
+assembled as one **panel**. Flamingo lays the panel out, checks it against
+JLCPCB's limits, estimates what it costs against the alternatives, and exports
+one fileset for the whole panel.
+
+```bash
+node packages/server/dist/cli.js serve combo.flamboyance    # prints "Flamingo v0.1.0 serving …"
+```
+
+A panel file is served the way a board file is: one file, one server, its view
+at `http://localhost:4242` (`FLAMINGO_PORT` to change the port), the file
+created if it is missing. The server has the 24 panel tools at `/mcp` and no
+board tools; boards are edited in servers of their own, and the panel notices
+when one of its boards changes on disk.
+
+To have the board tools and the panel tools at one MCP endpoint, serve a board
+and name the panel. The panel view is then at `/panel`:
+
+```bash
+node packages/server/dist/cli.js serve board.flamingo --panel combo.flamboyance
+```
+
+A panel is a `.flamboyance` file stored next to the boards. It refers to each
+source board by relative path plus a content hash and never copies it, so a
+board edited after it was added marks the panel **stale** until
+`panel_refresh_boards` accepts the change. Every edit is an operation with
+undo/redo, as for boards. The file also carries the last priced cost-by-quantity
+curve (`curve`): a cache, not part of the design, so the chart is there the
+moment the panel opens and a quantity you have entered before costs nothing to
+go back to.
+
+```
+boards + quantities → quote_order → panel_apply_scenario → panel_check → export_panel_fab
+```
+
+### Panel MCP tools
+
+24 tools, served at the same `/mcp` endpoint as the 37 board tools:
+
+| Group | Tool | What it does |
+| --- | --- | --- |
+| **File** | `panel_new` | Create an empty panel and save it as `<name>.flamboyance`. |
+| | `panel_open` | Open a panel file. |
+| | `panel_save` | Save now (edits also autosave). |
+| | `panel_get_state` | Text summary: size, settings, boards and quantities, every instance, check and cost totals. |
+| **Boards** | `panel_add_board` | Add a board file as a source, with a short key (`S`, `M`) and its quantity. |
+| | `panel_remove_board` | Remove a board and all of its instances. |
+| | `panel_refresh_boards` | Accept source boards as they are on disk now; clears `stale`. |
+| | `panel_set_quantity` | Set `needed`: the assembled boards you must get. |
+| **Instances** | `panel_add_instance` | Put one more copy of a board on the panel. |
+| | `panel_remove_instance` | Remove one instance. |
+| | `panel_move_instance` | Move an instance; pins it unless `pin:false`. |
+| | `panel_rotate_instance` | Rotate by any angle about the instance's centre (default: 90° steps). |
+| | `panel_set_populate` | `true` = assemble; `false` = ship bare (all its parts become do-not-place). |
+| | `panel_pin` | Pin or unpin. Pinned instances are never moved by arrange. |
+| **Layout** | `panel_set_settings` | Separation, spacing, rails, tabs, fiducials, tooling holes, layer count (promotion). |
+| | `panel_arrange` | Pack every unpinned instance into the smallest panel that fits the limits; nests non-rectangular boards at any angle step. |
+| | `panel_check` | Report everything wrong with the panel, as data. |
+| | `panel_screenshot` | Render the panel to a PNG. |
+| **History** | `panel_undo`, `panel_redo` | Walk the panel's op log. |
+| **Cost** | `quote_order` | Ranked order scenarios with itemized fees, plus the cost of the panel as it stands. |
+| | `panel_cost_curve` | Total and cost per board of the cheapest way at a standard set of quantities from 1 to 100 plus every quantity the boards have been set to; the panel view charts it when the panel has one design (with several, a quantity is one number per design and the cost is a surface, which one chart cannot show). Pricing waits for a press; the points are kept in the panel file (`curve`) and reused until a board, a setting or a fee table changes. |
+| | `panel_apply_scenario` | Load the panel a scenario implies onto the panel. |
+| **Output** | `export_panel_fab` | Write `gerbers.zip`, merged `bom.csv` and `cpl.csv`, and `panel.render.svg`. |
+
+Instances are named after their board: `S1`, `M1`, `M2`, ... In the merged BOM
+and CPL every designator is prefixed with its instance (`S1_U2`, `M3_R5`) and
+every position is in panel coordinates. Positions are the bottom-left corner of
+the instance's bounding box, in mm, y-up, like everything else in Flamingo.
+
+### Separating the boards
+
+`panel_set_settings separation=...` picks how the boards come apart:
+
+- **`mouse-bite`** (default): routed gaps bridged by tabs, each perforated with a
+  row of 0.6 mm holes. Snap the boards out by hand. Both assembly services take
+  it, and any board shape works.
+- **`silk-divider`**: no routing. The boards sit inside one rectangle with
+  silkscreen lines between them, which JLCPCB counts as one design. You cut
+  them apart yourself.
+- **`v-cut`**: the boards abut, and JLCPCB scores a straight V-groove along
+  every shared edge so they snap apart cleanly. JLCPCB only scores straight
+  lines that run edge to edge across the whole panel. So every board must be a
+  plain rectangle (no rounded corners), boards in a row must share their top
+  and bottom edges, and boards in a column their left and right edges. The panel
+  must measure 70 x 70 mm to 475 x 475 mm, parallel cuts must be at least 2 mm
+  apart, and only Standard PCBA takes V-cut panels. The score lines go on the
+  profile (`.GKO`) layer, each labelled `V-CUT`. Run `panel_arrange` after you
+  switch, so the boards close up. Flamingo never proposes V-cut in `quote_order`.
+  On a panel set to V-cut, its panel scenarios keep V-cut.
+
+### Arranging boards of any shape
+
+`panel_arrange` packs rectangular boards as rectangles, trying each as it is
+and turned a quarter turn. A board that is not a rectangle, or a panel whose
+`rotationStep` setting is not 90, is nested by its real outline instead: each
+board is tried at every multiple of the step (plus the quarter turns) and
+dropped where its grown outline overlaps nothing, so pentagons interlock and
+an L-shaped board tucks into a corner. Set the step to match the shape:
+`panel_set_settings rotationStep=36` for pentagons, 60 for hexagons, 30 or 15
+for a finer search (slower). Tabs follow the outline edges, so two boards whose
+slanted edges face each other within the tab length are joined there, and a
+nested board that would be left without tabs is dropped again where it has
+them. Any instance can also be turned by hand to any angle with
+`panel_rotate_instance`.
+
+### What the check looks for
+
+- **Source boards**: unreadable, stale, or with DRC violations of their own.
+- **Stackup**: all boards on a panel must share a layer count and rules set. A
+  mismatch is reported with the option to **promote** the panel
+  (`panel_set_settings copperLayers=4`): boards with fewer layers are then made
+  at the higher count.
+- **Blocked edges**: an edge where a component courtyard overhangs the outline
+  (a USB-C connector) or a keepout reaches the edge (an antenna region) carries
+  no tabs and keeps extra clearance from its neighbour.
+- **Placement**: overlaps, spacing, overhanging parts that would hit a
+  neighbour or a rail, instances that nothing holds.
+- **Size**: the fab's largest board and the assembly services' panel limits.
+- **V-cut** (on a V-cut panel only): rectangular boards, cuts that run between
+  boards and never through one, panel size, the spacing and count of the cuts,
+  and copper too close to a cut.
+
+Errors stop `export_panel_fab` unless `waive:true`. Limits and panel geometry
+defaults live in `packages/panel/config/panel-limits.json`.
+
+### Cost model
+
+`quote_order` compares, from each design's `needed` quantity:
+
+- separate orders, one per design
+- each design on a panel of its own
+- one merged mouse-bite panel (pays JLCPCB's different-designs fee)
+- one board with the designs divided by silkscreen lines (counts as one design;
+  you cut the boards apart yourself)
+- different panel counts and quantity steps
+- for boards with different layer counts: split into one order per layer
+  count, or promote
+
+Rank by `total` (default), `per-board` or `overage`.
+
+Fees live in `packages/panel/config/fee-table.json`. Each value records its
+source URL and whether it was verified on a JLCPCB help page. **Anything built
+on an unverified value is an estimate** and is marked `~` in every report and
+in the browser. Assembly fees are verified; bare-board prices are estimates,
+because JLCPCB publishes them only through its quote calculator, which
+Flamingo never calls. Shipping, tax and coupons are not included. Nothing is
+ever sent to JLCPCB and nothing is ordered.
+
+Parts are priced from JLCPCB's parts library, the same lookup the stock check
+makes: the price tier for the quantity billed, JLCPCB's own attrition for the
+part (spares added, least billed), basic or extended, and whether the part is
+**Standard only**. A part only Standard PCBA places rejects Economic PCBA for
+every order that carries it, with the part named, and `panel_check` lists such
+parts as an info finding. A part the library does not list falls back to the
+EasyEDA price and the fee table's attrition classes, as an estimate; with no
+price anywhere it is listed at zero and named in the notes.
+
+Set `FLAMINGO_PANEL_CONFIG_DIR` to use your own copies of the two config files,
+and `FLAMINGO_PANEL_PRICES=off` to skip the part lookups.
+
+### Panel CLI
+
+Every tool has a command that works on a panel file directly, no server needed:
+
+```bash
+flamingo panel new combo.flamboyance --name combo
+flamingo panel add-board combo.flamboyance esp32.flamingo --key S --needed 1
+flamingo panel add-board combo.flamboyance breakout.flamingo --key M --needed 5
+flamingo panel quote combo.flamboyance
+flamingo panel apply-scenario combo.flamboyance merged-needed-x2
+flamingo panel check combo.flamboyance        # exit status 1 on errors
+flamingo panel screenshot combo.flamboyance --out combo.png
+flamingo panel export combo.flamboyance --out fab/combo
+```
+
+| Command | MCP tool |
+| --- | --- |
+| `new <file> [--name N]` | `panel_new` |
+| `show <file>` | `panel_get_state` |
+| `add-board <file> <board> [--key K] [--needed N]` | `panel_add_board` |
+| `remove-board <file> <key>` | `panel_remove_board` |
+| `refresh <file> [key ...]` | `panel_refresh_boards` |
+| `set-quantity <file> <key> --needed N` | `panel_set_quantity` |
+| `add-instance <file> <key> [--x X --y Y] [--rotation R] [--bare] [--count N]` | `panel_add_instance` |
+| `remove-instance <file> <id>` | `panel_remove_instance` |
+| `move-instance <file> <id> --x X --y Y [--no-pin]` | `panel_move_instance` |
+| `rotate-instance <file> <id> [--rotation R \| --by DEG]` | `panel_rotate_instance` |
+| `set-populate <file> <id> <true\|false>` | `panel_set_populate` |
+| `pin <file> <id> [--unpin]` | `panel_pin` |
+| `set <file> [--separation S] [--spacing MM] [--rail-top MM] ... [--layers auto\|2\|4\|6]` | `panel_set_settings` |
+| `arrange <file> [--no-rotate] [--rotation-step DEG]` | `panel_arrange` |
+| `check <file>` | `panel_check` |
+| `screenshot <file> [--out F] [--width PX]` | `panel_screenshot` |
+| `quote <file> [--objective O] [--brief] [--json] [--offline]` | `quote_order` |
+| `apply-scenario <file> <id>` | `panel_apply_scenario` |
+| `export <file> [--out DIR] [--waive]` | `export_panel_fab` |
+
+`panel_undo` and `panel_redo` have no command: the op log is kept in memory, as
+it is for boards, and each command is a process of its own.
+
+### Panel view
+
+The page of a panel server (`/`, or `/panel` on a board server) is a
+slicer-style view: the panel as the build plate, board instances as objects you
+select, drag, rotate and duplicate. The sidebar is three steps: the boards you
+need and how many; the ways to order them, cheapest first, the panel on the
+plate among them; and what is on the plate, with its counts, **Arrange** (`A`),
+cost, checks and export. It shares the panel with MCP: an edit made through
+either shows up in the other at once.
+
+A panel is started from the page: **Boards** lists the board files next to the
+panel, and picking one puts it on the plate. Each design has its own colour, on
+the plate and in every list. Colour means which board and nothing else; bare,
+pinned, blocked and in-error are drawn with line style, hatching and labels.
+
 ## Architecture
 
 npm workspaces monorepo — all packages are ESM, strict TypeScript, tested with
@@ -144,6 +368,7 @@ packages/
   engine/   pure library: data model, geometry, netlist/ratsnest, zone fill, DRC, ops
   parts/    LCSC search + EasyEDA footprint fetch/parse/cache
   fab/      Gerber X2 + Excellon writers, BOM/CPL writers, DSN export / SES import
+  panel/    panel format + ops, constraint checks, arrange, merge to one board, cost model, scenarios
   server/   Node: document host, op-log + undo/redo, HTTP + WebSocket, MCP endpoint, CLI, autoroute runner
   ui/       browser PCB view (Canvas 2D) with mouse editing tools
 ```

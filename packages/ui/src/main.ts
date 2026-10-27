@@ -12,7 +12,8 @@ import { store, type AppState } from './state.js';
 import { prepareBoard } from './board-prep.js';
 import { attachViewControls, centerOn, fitToBoard, flipView, screenToWorld } from './view.js';
 import { createRenderer } from './renderer.js';
-import { initPanels } from './panels.js';
+import { downloadBlob, initPanels } from './panels.js';
+import { createExportModal } from './export-modal.js';
 import { connectWs, type RouteStatus } from './ws.js';
 import { showToast } from './toast.js';
 import { hitTest } from './hit-test.js';
@@ -192,11 +193,6 @@ const panels = initPanels(
     ripAllBtn: document.getElementById('ripall-btn') as HTMLButtonElement,
     exportFabBtn: document.getElementById('exportfab-btn') as HTMLButtonElement,
     exportFabStatus: document.getElementById('exportfab-status')!,
-    exportStepBtn: document.getElementById('v3d-step-btn') as HTMLButtonElement,
-    exportStepDetailBtn: document.getElementById('v3d-step-detail-btn') as HTMLButtonElement,
-    exportStepBar: document.getElementById('v3d-step-bar')!,
-    exportStepFill: document.getElementById('v3d-step-fill')!,
-    exportStepError: document.getElementById('v3d-step-err')!,
     bomList: document.getElementById('bom-list')!,
     propsPanel: document.getElementById('props-panel')!,
     projectName: document.getElementById('project-name')!,
@@ -298,6 +294,10 @@ store.subscribe((state) => {
 (document.getElementById('v3d-silk') as HTMLInputElement)?.addEventListener('change', (e) => {
   viewer3d.setShowSilk((e.target as HTMLInputElement).checked);
 });
+
+// Export modal (export-modal.ts): the 3D HUD's Export… button, or E in either view.
+const exportModal = createExportModal({ getBoard: () => store.get().board, download: downloadBlob });
+document.getElementById('v3d-export-btn')?.addEventListener('click', () => exportModal.open());
 
 // ---------------------------------------------------------------------------
 // Pointer routing: hover (always) + active tool's down/move/up/dblclick.
@@ -421,6 +421,11 @@ window.addEventListener('keydown', (ev) => {
   if (digit && !ev.shiftKey) {
     const n = Number(digit[1]);
     if (panels.soloLayerAt(n === 0 ? null : n - 1)) ev.preventDefault();
+    return;
+  }
+
+  if (ev.code === 'KeyE') {
+    exportModal.open();
     return;
   }
 

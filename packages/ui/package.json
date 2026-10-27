@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@flamingo/engine": "*",
+    "@flamingo/panel": "*",
     "three": "^0.160.0"
   },
   "devDependencies": {

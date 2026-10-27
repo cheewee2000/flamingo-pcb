@@ -15,15 +15,22 @@ import type { Model3d } from '@flamingo/parts';
 import { extractModel3d, fetchJlcStock, fetchPart, readCache, searchParts } from '@flamingo/parts';
 import { runAutorouteBroadcast } from './autoroute.js';
 import { Doc } from './document.js';
-import type { McpContext, PartsApi } from './mcp.js';
+import type { BoardMcpContext, McpContext, PartsApi } from './mcp.js';
 import { boardSearchRoots, createMcpServer, runDrcWithStock } from './mcp.js';
 import type { RouteRunner } from './route.js';
 import { defaultRouteRunner } from './route.js';
 import type { ScreenshotOpts } from './screenshot.js';
 import { renderPNG } from './screenshot.js';
-import { BOARD_T, exportStep, exportStepDetail } from './step.js';
+import { BOARD_T, exportStep, exportStepDetail, stepHasSolids } from './step.js';
+import { exportDxf, exportSvg } from './drawing.js';
+import type { ExportFormat, ExportQuery } from './export-opts.js';
+import { exportFileName, parseExportQuery } from './export-opts.js';
 import { parseObjMesh, placeMeshGroups } from './objmesh.js';
 import type { MeshGroup } from './objmesh.js';
+import type { PanelChannel } from './panel/http.js';
+import { attachPanelChannel, handlePanelApi, isPanelChannel } from './panel/http.js';
+import { partLookupFrom } from './panel/parts.js';
+import { PanelSession } from './panel/session.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 // packages/server/dist/http.js -> packages/ui/dist
@@ -72,10 +79,32 @@ function isAllowedOrigin(origin: string | undefined): boolean {
   if (!origin) return true;
   try {
     const { hostname } = new URL(origin);
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'; // WHATWG URL keeps IPv6 brackets
+    return (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '[::1]' || // WHATWG URL keeps IPv6 brackets
+      extraAllowedHosts().has(hostname.toLowerCase())
+    );
   } catch {
     return false;
   }
+}
+
+/**
+ * Hostnames to trust besides loopback, from FLAMINGO_ALLOWED_HOSTS
+ * (comma-separated, e.g. `FLAMINGO_ALLOWED_HOSTS=bennet`): for a server bound to
+ * a LAN or tailnet address and opened by that name from another machine, whose
+ * page would otherwise be refused its WebSocket and every edit. Empty by default,
+ * so the guard stays loopback-only unless the person serving opts in. Read on each
+ * call, so a test or a long-lived process sees the current value.
+ */
+function extraAllowedHosts(): Set<string> {
+  return new Set(
+    (process.env.FLAMINGO_ALLOWED_HOSTS ?? '')
+      .split(',')
+      .map((h) => h.trim().toLowerCase())
+      .filter(Boolean),
+  );
 }
 
 function sendJSON(res: ServerResponse, status: number, body: unknown): void {
@@ -262,7 +291,7 @@ async function collectDetailModels(board: Board): Promise<Map<string, MeshGroup[
 }
 
 async function handleApi(
-  ctx: McpContext,
+  ctx: BoardMcpContext,
   method: string,
   pathname: string,
   url: URL,
@@ -424,20 +453,46 @@ async function handleApi(
     return true;
   }
 
-  if (method === 'GET' && pathname === '/api/export.step') {
-    // ?mode=detail adds copper/silk/real component meshes; default is blocks.
-    const detail = url.searchParams.get('mode') === 'detail';
+  const exportMatch = method === 'GET' ? /^\/api\/export\.(step|dxf|svg)$/.exec(pathname) : null;
+  if (exportMatch) {
+    // Mechanical exports, driven by the UI's export modal:
+    //   ?detail=hd (step; `mode=detail` also works) adds copper/silk/real meshes
+    //   &include=board,comps,vias,pth,mnt   (default: all)
+    //   &side=top|bottom|both (step)  &layers=single|layered (dxf)  &units=mm|in (dxf/svg)
+    const format = exportMatch[1] as ExportFormat;
+    let q: ExportQuery;
     try {
-      const step = detail
-        ? exportStepDetail(doc.board, await collectDetailModels(doc.board))
-        : exportStep(doc.board);
-      const fileName = `${doc.board.name.replace(/[^\w.-]+/g, '_') || 'board'}${detail ? '.detail' : ''}.step`;
+      q = parseExportQuery(url.searchParams);
+    } catch (err) {
+      sendJSON(res, 400, { ok: false, error: err instanceof Error ? err.message : String(err) });
+      return true;
+    }
+    try {
+      let body: string;
+      let contentType: string;
+      if (format === 'step') {
+        const opts = { include: q.include, side: q.side };
+        body = q.detail
+          ? exportStepDetail(doc.board, q.include.comps ? await collectDetailModels(doc.board) : new Map(), opts)
+          : exportStep(doc.board, opts);
+        if (!stepHasSolids(body)) {
+          throw new Error('Nothing to export: the board has no outline, or the selected elements have no geometry');
+        }
+        contentType = 'application/step';
+      } else if (format === 'dxf') {
+        body = exportDxf(doc.board, { include: q.include, layers: q.layers, units: q.units });
+        contentType = 'application/dxf';
+      } else {
+        body = exportSvg(doc.board, { include: q.include, units: q.units });
+        contentType = 'image/svg+xml';
+      }
+      const fileName = exportFileName(doc.board.name, format, q);
       res.writeHead(200, {
-        'content-type': 'application/step',
+        'content-type': contentType,
         'content-disposition': `attachment; filename="${fileName}"`,
-        'content-length': Buffer.byteLength(step),
+        'content-length': Buffer.byteLength(body),
       });
-      res.end(step);
+      res.end(body);
     } catch (err) {
       sendJSON(res, 500, { ok: false, error: err instanceof Error ? err.message : String(err) });
     }
@@ -632,7 +687,6 @@ function makeRequestListener(
   ctx: McpContext,
   uiDistDir: string,
 ): (req: IncomingMessage, res: ServerResponse) => void {
-  const doc = ctx.doc;
   return (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const pathname = url.pathname;
@@ -652,12 +706,46 @@ function makeRequestListener(
           }
           return;
         }
+        if (ctx.panel && (pathname === '/api/panel' || pathname.startsWith('/api/panel/'))) {
+          // Panel routes read their own bodies, so they are dispatched before
+          // handleApi, which drains the body of every route it does not list.
+          const handled = await handlePanelApi(ctx.panel, method, pathname, url, req, res);
+          if (!handled) sendNotFound(res);
+          return;
+        }
+        const doc = ctx.doc;
+        if (!doc) {
+          // Started on a panel file: the panel view is the page at '/', the
+          // way the editor is for a board file, and there is no board here.
+          req.resume();
+          if (pathname.startsWith('/api/') || pathname === '/3d') {
+            sendNotFound(res);
+            return;
+          }
+          if (method === 'GET' && (pathname === '/panel' || pathname === '/panel/')) {
+            // Where the view lives on a server started on a board.
+            res.writeHead(302, { location: '/' });
+            res.end();
+            return;
+          }
+          if (method === 'GET' || method === 'HEAD') {
+            const page = pathname === '/' || pathname === '/index.html' || !/\.[a-z0-9]+$/i.test(pathname);
+            if (await serveStatic(page ? '/panel.html' : pathname, res, uiDistDir)) return;
+          }
+          sendNotFound(res);
+          return;
+        }
         if (pathname.startsWith('/api/')) {
-          const handled = await handleApi(ctx, method, pathname, url, req, res);
+          const handled = await handleApi({ ...ctx, doc }, method, pathname, url, req, res);
           if (!handled) sendNotFound(res);
           return;
         }
         req.resume(); // static/unknown routes never read the body
+        if (ctx.panel && method === 'GET' && (pathname === '/panel' || pathname === '/panel/')) {
+          // The panel view is a page of its own (packages/ui/panel.html).
+          const served = await serveStatic('/panel.html', res, uiDistDir);
+          if (served) return;
+        }
         if (method === 'GET' || method === 'HEAD') {
           const served = await serveStatic(pathname, res, uiDistDir);
           if (served) return;
@@ -670,7 +758,7 @@ function makeRequestListener(
   };
 }
 
-function attachWebSocket(doc: Doc, server: http.Server): WebSocketServer {
+function attachWebSocket(doc: Doc | null, server: http.Server, panelChannel?: PanelChannel): WebSocketServer {
   const wss = new WebSocketServer({
     server,
     path: '/ws',
@@ -678,10 +766,16 @@ function attachWebSocket(doc: Doc, server: http.Server): WebSocketServer {
     // sent an Origin that isn't local (a plain WS client / curl / the
     // Electron app's own page sends none, and is allowed through).
     verifyClient: (info, callback) => {
-      if (isAllowedOrigin(info.origin)) callback(true);
-      else callback(false, 403, 'cross-origin request rejected');
+      if (!isAllowedOrigin(info.origin)) callback(false, 403, 'cross-origin request rejected');
+      // A server with no board has only the panel channel to offer.
+      else if (!doc && !(panelChannel && isPanelChannel(info.req))) callback(false, 404, 'no board on this server');
+      else callback(true);
     },
   });
+  if (!doc) {
+    wss.on('connection', (ws: WebSocket) => panelChannel?.add(ws));
+    return wss;
+  }
   const clients = new Set<WebSocket>();
 
   // `file` is the board file's name (e.g. "blinky.flamingo"), which the UI
@@ -708,7 +802,13 @@ function attachWebSocket(doc: Doc, server: http.Server): WebSocketServer {
   };
   doc.on('routeStatus', onRouteStatus);
 
-  wss.on('connection', (ws: WebSocket) => {
+  wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
+    // /ws?channel=panel is the panel view's socket: it gets panel views and
+    // sends panel ops, and never sees board traffic.
+    if (panelChannel && isPanelChannel(req)) {
+      panelChannel.add(ws);
+      return;
+    }
     clients.add(ws);
     ws.send(JSON.stringify({ type: 'board', board: doc.board, file: fileName() }));
 
@@ -756,6 +856,8 @@ function attachWebSocket(doc: Doc, server: http.Server): WebSocketServer {
 export interface StartedServer {
   server: http.Server;
   port: number;
+  /** The panel session, when the server was started with `panel`. */
+  panel?: PanelSession;
   close(): Promise<void>;
 }
 
@@ -768,25 +870,64 @@ export interface StartServerOptions {
   uiDistDir?: string;
   /** Freerouting runner for the autoroute MCP tool. Defaults to the real java/jar runner -- tests should inject a mock. */
   routeRunner?: RouteRunner;
+  /**
+   * Panelization: the panel MCP tools, the /api/panel routes, the /panel page
+   * and the panel WebSocket channel. Off by default, so a server started
+   * without it behaves exactly as before; `flamingo serve` turns it on. Pass
+   * true for a fresh session, or a session to use (e.g. one that opened a file).
+   */
+  panel?: boolean | PanelSession;
 }
 
 /**
  * Start the Flamingo HTTP + WebSocket server for the given Doc.
  * Pass port 0 to bind an ephemeral port (tests must do this).
+ *
+ * `doc` null is a server started on a panel file: there is no board, so the
+ * panel view is the page at '/', only the panel tools are served over MCP,
+ * and the board routes, tools and WebSocket are not. It needs `panel`.
  */
 export function startServer(
-  doc: Doc,
+  doc: Doc | null,
   port: number = DEFAULT_PORT,
   opts: StartServerOptions = {},
 ): Promise<StartedServer> {
+  const projectDir = opts.projectDir ?? process.cwd();
+  const partsApi = opts.partsApi ?? { fetchPart, searchParts, fetchStock: fetchJlcStock };
+  const panel =
+    opts.panel instanceof PanelSession
+      ? opts.panel
+      : opts.panel === true
+        ? new PanelSession({
+            projectDir,
+            partLookup: partLookupFrom(partsApi),
+          })
+        : undefined;
+  if (!doc && !panel) return Promise.reject(new Error('a server with no board needs a panel'));
   const ctx: McpContext = {
-    doc,
-    projectDir: opts.projectDir ?? process.cwd(),
-    partsApi: opts.partsApi ?? { fetchPart, searchParts, fetchStock: fetchJlcStock },
+    ...(doc ? { doc } : {}),
+    projectDir,
+    partsApi,
     route: opts.routeRunner ?? defaultRouteRunner,
+    ...(panel ? { panel } : {}),
   };
   const uiDistDir = opts.uiDistDir ?? UI_DIST;
   const server = http.createServer(makeRequestListener(ctx, uiDistDir));
+  const panelChannel = panel ? attachPanelChannel(panel) : undefined;
+
+  // A board edited in the editor is a source board changed on disk: about when
+  // its autosave lands, let the panel view notice (stale flag, new geometry).
+  // A save that lands later still shows up through the session's file watcher.
+  let staleTimer: ReturnType<typeof setTimeout> | null = null;
+  const onBoardChange = (): void => {
+    if (!panel || panel.panel.sources.length === 0) return;
+    if (staleTimer) clearTimeout(staleTimer);
+    staleTimer = setTimeout(() => {
+      staleTimer = null;
+      panel.touch();
+    }, 900);
+  };
+  if (panel) doc?.on('change', onBoardChange);
 
   return new Promise((resolve, reject) => {
     server.once('error', reject);
@@ -797,13 +938,17 @@ export function startServer(
       // throws "unhandled 'error' event" *inside* the emit, so a listen
       // failure (EADDRINUSE) would crash uncaught before `reject` ever ran.
       // Late attach also keeps a failed listen from leaking doc listeners.
-      const wss = attachWebSocket(doc, server);
+      const wss = attachWebSocket(doc, server, panelChannel);
       const addr = server.address();
       const actualPort = typeof addr === 'object' && addr !== null ? addr.port : port;
       resolve({
         server,
         port: actualPort,
+        ...(panel ? { panel } : {}),
         close: async () => {
+          if (staleTimer) clearTimeout(staleTimer);
+          doc?.removeListener('change', onBoardChange);
+          panelChannel?.close();
           await new Promise<void>((res, rej) => {
             for (const client of wss.clients) client.terminate();
             wss.close(() => {
@@ -815,7 +960,8 @@ export function startServer(
               server.closeAllConnections();
             });
           });
-          await doc.close();
+          await doc?.close();
+          await panel?.close();
         },
       });
     });

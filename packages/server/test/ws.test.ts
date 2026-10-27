@@ -67,6 +67,32 @@ describe('WebSocket API', () => {
     // Rejected during the handshake -- there's no established socket to close.
   });
 
+  it('accepts the WS upgrade from a host named in FLAMINGO_ALLOWED_HOSTS', async () => {
+    const before = process.env.FLAMINGO_ALLOWED_HOSTS;
+    process.env.FLAMINGO_ALLOWED_HOSTS = 'devbox, Bennet';
+    try {
+      for (const origin of ['http://bennet:4106', 'http://devbox']) {
+        const ws = new WebSocket(wsUrl, { origin });
+        const status = await new Promise<number | undefined>((res) => {
+          ws.once('unexpected-response', (_req, resp) => res(resp.statusCode));
+          ws.once('open', () => res(undefined));
+        });
+        expect(status).toBeUndefined();
+        ws.close();
+      }
+      // Anything not on the list is still refused.
+      const ws = new WebSocket(wsUrl, { origin: 'https://evil.example' });
+      const status = await new Promise<number | undefined>((res) => {
+        ws.once('unexpected-response', (_req, resp) => res(resp.statusCode));
+        ws.once('open', () => res(undefined));
+      });
+      expect(status).toBe(403);
+    } finally {
+      if (before === undefined) delete process.env.FLAMINGO_ALLOWED_HOSTS;
+      else process.env.FLAMINGO_ALLOWED_HOSTS = before;
+    }
+  });
+
   it('sends the current board on connect', async () => {
     const ws = new WebSocket(wsUrl);
     const queue = messageQueue(ws);

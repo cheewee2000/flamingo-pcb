@@ -506,6 +506,32 @@ describe('generateGerbers - board profile (GKO)', () => {
     round.holes.push({ id: 'H2', at: { x: 5, y: 5 }, drill: 2.2, padDiameter: 2.2, plated: false });
     expect(generateGerbers(round).files.get('gko.GKO')).toBe(bare);
   });
+
+  it('draws V-cut score lines as open strokes with a label outside the outline, and nothing without them', () => {
+    const plain = generateGerbers(outlineBoard());
+    // No scores (or an empty extras object) leaves every file byte-identical.
+    const none = generateGerbers(outlineBoard(), {});
+    expect([...none.files.entries()]).toEqual([...plain.files.entries()]);
+
+    const scored = generateGerbers(outlineBoard(), {
+      scores: { lines: [{ start: { x: 30, y: 0 }, end: { x: 30, y: 30 } }], width: 0.1, label: 'V-CUT' },
+    });
+    for (const [name, content] of plain.files) {
+      if (!name.endsWith('.GKO')) expect(scored.files.get(name), name).toBe(content);
+    }
+    const gko = scored.files.get('gko.GKO')!;
+    assertGerberParses(gko);
+    const bare = plain.files.get('gko.GKO')!;
+    expect(drawCoords(gko).slice(0, drawCoords(bare).length)).toEqual(drawCoords(bare));
+    expect(gko).toContain('X30000000Y0D02*\nX30000000Y30000000D01*');
+    // The label: stroked text below the outline, under the line.
+    const extra = drawCoords(gko).slice(drawCoords(bare).length + 2);
+    expect(extra.length).toBeGreaterThan(10);
+    for (const [x, y] of extra) {
+      expect(y / 1e6).toBeLessThan(-0.9);
+      expect(Math.abs(x / 1e6 - 30)).toBeLessThan(6);
+    }
+  });
 });
 
 describe('generateGerbers - filename sanitization', () => {

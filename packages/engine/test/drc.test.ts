@@ -776,6 +776,24 @@ describe('runDRC — blinker-routed fixture (filled zones)', () => {
     expect(violations.filter((v) => v.rule === 'clearance')).toHaveLength(0);
   });
 
+  it('reports progress that only rises, ends at 1 and changes no result', () => {
+    const seen: Array<{ check: string; fraction: number }> = [];
+    const withProgress = runDRC(board, (p) => seen.push(p));
+    expect(withProgress).toEqual(violations);
+    expect(seen.length).toBeGreaterThan(13);
+    for (let i = 1; i < seen.length; i++) expect(seen[i]!.fraction).toBeGreaterThanOrEqual(seen[i - 1]!.fraction);
+    expect(seen[0]).toEqual({ check: 'clearance', fraction: 0 });
+    expect(seen.at(-1)).toEqual({ check: 'done', fraction: 1 });
+  });
+
+  it('fillAllZones reports each zone as it is filled', () => {
+    const raw = parseBoard(readFileSync(join(here, 'fixtures', 'blinker-routed.flamingo'), 'utf8'));
+    const calls: Array<[number, number]> = [];
+    const filled = fillAllZones(raw, (done, total) => calls.push([done, total]));
+    expect(filled).toEqual(board);
+    expect(calls).toEqual(raw.zones.map((_, i) => [i + 1, raw.zones.length]));
+  });
+
   it('still surfaces the board\'s genuine, unrelated violations (silk over pads)', () => {
     const byRule = new Map<string, number>();
     for (const v of violations) byRule.set(v.rule, (byRule.get(v.rule) ?? 0) + 1);

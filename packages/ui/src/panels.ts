@@ -52,11 +52,6 @@ export interface PanelEls {
   ripAllBtn: HTMLButtonElement;
   exportFabBtn: HTMLButtonElement;
   exportFabStatus: HTMLElement;
-  exportStepBtn: HTMLButtonElement;
-  exportStepDetailBtn: HTMLButtonElement;
-  exportStepBar: HTMLElement;
-  exportStepFill: HTMLElement;
-  exportStepError: HTMLElement;
   bomList: HTMLElement;
   propsPanel: HTMLElement;
   projectName: HTMLElement;
@@ -107,7 +102,7 @@ function layerSwatchColor(key: string): string {
 }
 
 /** Save `blob` via a synthetic anchor click, naming it from a content-disposition header when present. */
-function downloadBlob(blob: Blob, disposition: string, fallbackName: string): void {
+export function downloadBlob(blob: Blob, disposition: string, fallbackName: string): void {
   const m = /filename="?([^"]+)"?/.exec(disposition);
   const name = m ? m[1] : fallbackName;
   const url = URL.createObjectURL(blob);
@@ -1746,73 +1741,6 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // Export STEP (3D HUD): GET /api/export.step, streaming the body so the thin
-  // bar under the button shows real download progress when content-length is
-  // known; until the first chunk (or without a length) it sweeps indeterminate.
-  // Errors show inline in the HUD and clear on the next attempt.
-  // ---------------------------------------------------------------------------
-
-  function wireExportStepControls(): void {
-    const bar = els.exportStepBar;
-    const fill = els.exportStepFill;
-    let busy = false;
-
-    async function run(mode: 'blocks' | 'detail'): Promise<void> {
-      try {
-        const res = await fetch(mode === 'detail' ? '/api/export.step?mode=detail' : '/api/export.step');
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}) as { error?: string });
-          throw new Error(body.error ?? res.statusText);
-        }
-        const total = Number(res.headers.get('content-length') ?? 0);
-        const chunks: BlobPart[] = [];
-        if (res.body) {
-          const reader = res.body.getReader();
-          let received = 0;
-          for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-            received += value.length;
-            if (total > 0) {
-              bar.classList.remove('sweep');
-              fill.style.width = `${Math.min(100, (received / total) * 100)}%`;
-            }
-          }
-        } else {
-          chunks.push(await res.blob());
-        }
-        const blob = new Blob(chunks, { type: 'application/step' });
-        downloadBlob(blob, res.headers.get('content-disposition') ?? '', 'board.step');
-      } catch (err) {
-        els.exportStepError.textContent = `STEP failed: ${err instanceof Error ? err.message : String(err)}`;
-      } finally {
-        busy = false;
-        els.exportStepBtn.disabled = false;
-        els.exportStepDetailBtn.disabled = false;
-        bar.classList.remove('busy', 'sweep');
-        fill.style.width = '';
-      }
-    }
-
-    for (const [btn, mode] of [
-      [els.exportStepBtn, 'blocks'],
-      [els.exportStepDetailBtn, 'detail'],
-    ] as const) {
-      btn.addEventListener('click', () => {
-        if (busy) return;
-        busy = true;
-        els.exportStepBtn.disabled = true;
-        els.exportStepDetailBtn.disabled = true;
-        els.exportStepError.textContent = '';
-        fill.style.width = '';
-        bar.classList.add('busy', 'sweep');
-        void run(mode);
-      });
-    }
-  }
-
   function onStateChange(state: AppState): void {
     const boardChanged = state.board !== lastBoard;
     if (boardChanged) {
@@ -1912,7 +1840,6 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
   wireDrcControls();
   wireRipAllControls();
   wireExportFabControls();
-  wireExportStepControls();
   store.subscribe(onStateChange);
   onStateChange(store.get());
 

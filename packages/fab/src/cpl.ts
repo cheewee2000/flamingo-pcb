@@ -22,6 +22,7 @@
  */
 
 import type { Board, ComponentInst } from '@flamingo/engine';
+import { isAssembled } from '@flamingo/engine';
 
 const CRLF = '\r\n';
 
@@ -55,6 +56,7 @@ function rotationOf(c: ComponentInst): string {
 export function generateCPL(b: Board): string {
   const lines = ['Designator,Mid X,Mid Y,Layer,Rotation'];
   for (const c of b.components) {
+    if (!isAssembled(c)) continue; // matches the BOM
     const layer = c.side === 'bottom' ? 'Bottom' : 'Top';
     lines.push([c.refdes, mm4(c.at.x), mm4(c.at.y), layer, rotationOf(c)].join(','));
   }
