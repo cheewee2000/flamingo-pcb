@@ -21,7 +21,10 @@ import type { RouteRunner } from './route.js';
 import { defaultRouteRunner } from './route.js';
 import type { ScreenshotOpts } from './screenshot.js';
 import { renderPNG } from './screenshot.js';
-import { BOARD_T, exportStep, exportStepDetail } from './step.js';
+import { BOARD_T, exportStep, exportStepDetail, stepHasSolids } from './step.js';
+import { exportDxf, exportSvg } from './drawing.js';
+import type { ExportFormat, ExportQuery } from './export-opts.js';
+import { exportFileName, parseExportQuery } from './export-opts.js';
 import { parseObjMesh, placeMeshGroups } from './objmesh.js';
 import type { MeshGroup } from './objmesh.js';
 
@@ -424,20 +427,46 @@ async function handleApi(
     return true;
   }
 
-  if (method === 'GET' && pathname === '/api/export.step') {
-    // ?mode=detail adds copper/silk/real component meshes; default is blocks.
-    const detail = url.searchParams.get('mode') === 'detail';
+  const exportMatch = method === 'GET' ? /^\/api\/export\.(step|dxf|svg)$/.exec(pathname) : null;
+  if (exportMatch) {
+    // Mechanical exports, driven by the UI's export modal:
+    //   ?detail=hd (step; `mode=detail` also works) adds copper/silk/real meshes
+    //   &include=board,comps,vias,pth,mnt   (default: all)
+    //   &side=top|bottom|both (step)  &layers=single|layered (dxf)  &units=mm|in (dxf/svg)
+    const format = exportMatch[1] as ExportFormat;
+    let q: ExportQuery;
     try {
-      const step = detail
-        ? exportStepDetail(doc.board, await collectDetailModels(doc.board))
-        : exportStep(doc.board);
-      const fileName = `${doc.board.name.replace(/[^\w.-]+/g, '_') || 'board'}${detail ? '.detail' : ''}.step`;
+      q = parseExportQuery(url.searchParams);
+    } catch (err) {
+      sendJSON(res, 400, { ok: false, error: err instanceof Error ? err.message : String(err) });
+      return true;
+    }
+    try {
+      let body: string;
+      let contentType: string;
+      if (format === 'step') {
+        const opts = { include: q.include, side: q.side };
+        body = q.detail
+          ? exportStepDetail(doc.board, q.include.comps ? await collectDetailModels(doc.board) : new Map(), opts)
+          : exportStep(doc.board, opts);
+        if (!stepHasSolids(body)) {
+          throw new Error('Nothing to export: the board has no outline, or the selected elements have no geometry');
+        }
+        contentType = 'application/step';
+      } else if (format === 'dxf') {
+        body = exportDxf(doc.board, { include: q.include, layers: q.layers, units: q.units });
+        contentType = 'application/dxf';
+      } else {
+        body = exportSvg(doc.board, { include: q.include, units: q.units });
+        contentType = 'image/svg+xml';
+      }
+      const fileName = exportFileName(doc.board.name, format, q);
       res.writeHead(200, {
-        'content-type': 'application/step',
+        'content-type': contentType,
         'content-disposition': `attachment; filename="${fileName}"`,
-        'content-length': Buffer.byteLength(step),
+        'content-length': Buffer.byteLength(body),
       });
-      res.end(step);
+      res.end(body);
     } catch (err) {
       sendJSON(res, 500, { ok: false, error: err instanceof Error ? err.message : String(err) });
     }

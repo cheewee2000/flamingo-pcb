@@ -43,6 +43,30 @@ import {
 } from "@flamingo/engine";
 import { strokeText } from "@flamingo/fab";
 import type { MeshGroup } from "./objmesh.js";
+import type { ExportInclude, ExportSide } from "./export-opts.js";
+import { INCLUDE_ALL } from "./export-opts.js";
+
+/**
+ * Which elements to emit. Omitted fields default to everything, both sides —
+ * the output before options existed. A hole class that is off is not cut
+ * through the board (and gets no plated barrel in the detail flavour);
+ * `side` limits the component bodies to parts on that side.
+ */
+export interface StepOptions {
+  include?: Partial<ExportInclude>;
+  side?: ExportSide;
+}
+
+function resolveOptions(opts: StepOptions): {
+  inc: ExportInclude;
+  side: ExportSide;
+} {
+  return { inc: { ...INCLUDE_ALL, ...opts.include }, side: opts.side ?? "both" };
+}
+
+function onSide(c: ComponentInst, side: ExportSide): boolean {
+  return side === "both" || (c.side === "bottom") === (side === "bottom");
+}
 
 export const BOARD_T = 1.6;
 
@@ -72,7 +96,7 @@ function componentHeight(c: ComponentInst): number {
  * outlines when the footprint has no courtyard) through the full component
  * transform (mirror + rotation + translation), plus the height heuristic.
  */
-function componentBox(
+export function componentBox(
   c: ComponentInst,
 ): { x0: number; y0: number; x1: number; y1: number; h: number } | null {
   // Bare-pad footprints (test points, fiducials) have no physical body — the
@@ -449,14 +473,17 @@ function prismFaces(
   return faces;
 }
 
-/** All drill cutout loops: mounting holes/slots, TH pad drills (incl. pad slots), vias. */
-function drillLoops(board: Board): Loop[] {
+/**
+ * Drill cutout loops: mounting holes/slots (`mnt`), TH pad drills incl. pad
+ * slots (`pth`), vias (`vias`). Each class is cut only when it is included.
+ */
+function drillLoops(board: Board, inc: ExportInclude): Loop[] {
   const loops: Loop[] = [];
-  for (const h of allHoles(board)) {
+  for (const h of inc.mnt ? allHoles(board) : []) {
     const { start, end } = holeSlotCenterline(h);
     loops.push(capsuleLoop(start, end, h.drill / 2));
   }
-  for (const c of board.components) {
+  for (const c of inc.pth ? board.components : []) {
     for (const pad of c.footprint.pads) {
       if (!pad.drill) continue;
       const { at, rotation } = padWorld(c, pad);
@@ -479,11 +506,21 @@ function drillLoops(board: Board): Loop[] {
       }
     }
   }
-  for (const v of board.vias) loops.push(circleLoop(v.at, v.drill / 2));
+  for (const v of inc.vias ? board.vias : [])
+    loops.push(circleLoop(v.at, v.drill / 2));
   return loops;
 }
 
-function boardPrism(board: Board): Solid | null {
+/** True when the board has a closed outline the exports can use. */
+function hasOutline(board: Board): boolean {
+  try {
+    return outlineToPolygon(board.outline).length >= 3; // validates closure/gaps
+  } catch {
+    return false;
+  }
+}
+
+function boardPrism(board: Board, inc: ExportInclude): Solid | null {
   try {
     outlineToPolygon(board.outline); // validates closure/gaps
   } catch {
@@ -493,7 +530,7 @@ function boardPrism(board: Board): Solid | null {
     name: board.name,
     faces: prismFaces(
       outlineLoop(board.outline),
-      drillLoops(board),
+      drillLoops(board, inc),
       0,
       BOARD_T,
     ),
@@ -526,12 +563,16 @@ function componentBlock(c: ComponentInst): Solid | null {
   };
 }
 
-function boardSolids(board: Board): Solid[] {
+function boardSolids(board: Board, opts: StepOptions): Solid[] {
+  const { inc, side } = resolveOptions(opts);
   const solids: Solid[] = [];
-  const prism = boardPrism(board);
-  if (!prism) return solids;
-  solids.push(prism);
-  for (const c of board.components) {
+  if (!hasOutline(board)) return solids;
+  if (inc.board) {
+    const prism = boardPrism(board, inc);
+    if (prism) solids.push(prism);
+  }
+  for (const c of inc.comps ? board.components : []) {
+    if (!onSide(c, side)) continue;
     const block = componentBlock(c);
     if (block) solids.push(block);
   }
@@ -584,11 +625,18 @@ function meshFaces(tris: { x: number; y: number; z: number }[][]): Face[] {
  * refdes → world-placed per-material mesh groups (see objmesh.ts); parts
  * without an entry fall back to their courtyard block.
  */
-function detailSolids(board: Board, models: Map<string, MeshGroup[]>): Solid[] {
+function detailSolids(
+  board: Board,
+  models: Map<string, MeshGroup[]>,
+  opts: StepOptions,
+): Solid[] {
+  const { inc, side } = resolveOptions(opts);
   const solids: Solid[] = [];
-  const prism = boardPrism(board);
-  if (!prism) return solids;
-  solids.push(prism);
+  if (!hasOutline(board)) return solids;
+  if (inc.board) {
+    const prism = boardPrism(board, inc);
+    if (prism) solids.push(prism);
+  }
 
   const pushPrism = (
     name: string,
@@ -606,8 +654,8 @@ function detailSolids(board: Board, models: Map<string, MeshGroup[]>): Solid[] {
       ? capsuleLoop(seg.start, seg.end, hw)
       : arcStrokeLoop(seg.start, seg.end, seg.center, seg.cw, hw);
 
-  // ---- copper: tracks, zone fills, pads, plated barrels ----
-  for (const t of board.tracks) {
+  // ---- copper: tracks, zone fills, pads (with the board), plated barrels (per hole class) ----
+  for (const t of inc.board ? board.tracks : []) {
     if (t.layer !== "F.Cu" && t.layer !== "B.Cu") continue;
     const z0 = t.layer === "F.Cu" ? BOARD_T : -CU_T;
     pushPrism(
@@ -622,7 +670,7 @@ function detailSolids(board: Board, models: Map<string, MeshGroup[]>): Solid[] {
 
   // Zone fills, with mounting holes punched where an island fully contains
   // them (same containment rule as the 3D viewer).
-  const holeCuts = allHoles(board).map((h) => {
+  const holeCuts = (inc.mnt ? allHoles(board) : []).map((h) => {
     const { start, end } = holeSlotCenterline(h);
     return {
       ring: capsulePolygon(start, end, h.drill / 2),
@@ -630,8 +678,7 @@ function detailSolids(board: Board, models: Map<string, MeshGroup[]>): Solid[] {
       at: h.at,
     };
   });
-  const filled = fillAllZones(board);
-  for (const z of filled.zones) {
+  for (const z of inc.board ? fillAllZones(board).zones : []) {
     if (z.layer !== "F.Cu" && z.layer !== "B.Cu") continue;
     const top = z.layer === "F.Cu";
     const islands = z.fill && z.fill.length > 0 ? z.fill : [z.polygon];
@@ -659,7 +706,9 @@ function detailSolids(board: Board, models: Map<string, MeshGroup[]>): Solid[] {
   for (const c of board.components) {
     for (const pad of c.footprint.pads) {
       const ring = padLoop(c, pad);
-      if (pad.layer === "through") {
+      if (!inc.board) {
+        // no copper without the board
+      } else if (pad.layer === "through") {
         pushPrism(
           `${c.refdes}.${pad.number}`,
           ring,
@@ -687,7 +736,11 @@ function detailSolids(board: Board, models: Map<string, MeshGroup[]>): Solid[] {
           COL_GOLD,
         );
       }
-      if (pad.drill && (pad.drill.slotLength ?? 0) <= pad.drill.diameter) {
+      if (
+        inc.pth &&
+        pad.drill &&
+        (pad.drill.slotLength ?? 0) <= pad.drill.diameter
+      ) {
         const [at] = componentTransformPoints(c, [pad.at]);
         barrels.push({
           at,
@@ -697,13 +750,13 @@ function detailSolids(board: Board, models: Map<string, MeshGroup[]>): Solid[] {
       }
     }
   }
-  for (const h of allHoles(board)) {
+  for (const h of inc.mnt ? allHoles(board) : []) {
     const { start, end } = holeSlotCenterline(h);
     if (h.plated && start.x === end.x && start.y === end.y) {
       barrels.push({ at: h.at, r: h.drill / 2 + 0.2, drill: h.drill / 2 });
     }
   }
-  for (const v of board.vias) {
+  for (const v of inc.vias ? board.vias : []) {
     barrels.push({ at: v.at, r: v.diameter / 2, drill: v.drill / 2 });
   }
   for (const b of barrels) {
@@ -742,7 +795,7 @@ function detailSolids(board: Board, models: Map<string, MeshGroup[]>): Solid[] {
         silkStroke(poly[i], poly[i + 1], width, top);
     }
   };
-  for (const c of board.components) {
+  for (const c of inc.board ? board.components : []) {
     const top = c.side !== "bottom";
     const mirror = c.side === "bottom";
     const name = top ? "F.Silk" : "B.Silk";
@@ -796,10 +849,10 @@ function detailSolids(board: Board, models: Map<string, MeshGroup[]>): Solid[] {
       top,
     );
   }
-  for (const line of board.silkLines) {
+  for (const line of inc.board ? board.silkLines : []) {
     silkStroke(line.start, line.end, line.width, line.layer !== "B.Silk");
   }
-  for (const s of board.silk) {
+  for (const s of inc.board ? board.silk : []) {
     const top = s.layer !== "B.Silk";
     silkPolys(
       strokeText(s.text, s.at, s.height, s.rotation, !top),
@@ -809,7 +862,8 @@ function detailSolids(board: Board, models: Map<string, MeshGroup[]>): Solid[] {
   }
 
   // ---- components: real meshes (per-material solids), else courtyard block ----
-  for (const c of board.components) {
+  for (const c of inc.comps ? board.components : []) {
+    if (!onSide(c, side)) continue;
     const groups = models.get(c.refdes);
     if (groups && groups.length > 0) {
       for (const g of groups) {
@@ -1062,8 +1116,8 @@ function writeStep(name: string, solids: Solid[]): string {
 }
 
 /** Blocks flavour: drilled board prism + courtyard-box component bodies. */
-export function exportStep(board: Board): string {
-  return writeStep(board.name.replace(/'/g, ""), boardSolids(board));
+export function exportStep(board: Board, opts: StepOptions = {}): string {
+  return writeStep(board.name.replace(/'/g, ""), boardSolids(board, opts));
 }
 
 /**
@@ -1074,6 +1128,15 @@ export function exportStep(board: Board): string {
 export function exportStepDetail(
   board: Board,
   models: Map<string, MeshGroup[]>,
+  opts: StepOptions = {},
 ): string {
-  return writeStep(board.name.replace(/'/g, ""), detailSolids(board, models));
+  return writeStep(
+    board.name.replace(/'/g, ""),
+    detailSolids(board, models, opts),
+  );
+}
+
+/** True when a written STEP file holds at least one solid. */
+export function stepHasSolids(step: string): boolean {
+  return step.includes("MANIFOLD_SOLID_BREP(");
 }
