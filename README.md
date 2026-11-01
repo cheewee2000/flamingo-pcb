@@ -86,6 +86,8 @@ breakout with USB-C power and a 3.3V LDO"_ — and watch the browser view fill i
   openjdk` (keg-only — either add `/opt/homebrew/opt/openjdk/bin` to `PATH` or
   set `JAVA_HOME`). `freerouting.jar` is downloaded to `~/.flamingo/` on first
   autoroute.
+- *Optional:* [KiCadRoutingTools](docs/kicadroutingtools.md) as an alternative
+  autoroute backend (no Java needed; opt-in).
 - **Network** on first use, to fetch part footprints from the EasyEDA/LCSC API
   (cached under `~/.flamingo/parts/` afterward).
 

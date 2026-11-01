@@ -1245,7 +1245,7 @@ export function createMcpServer(ctx: McpContext): McpServer {
     'autoroute',
     {
       description:
-        'Autoroute the board with Freerouting. Give a list of nets to route only those (existing routes on other nets are respected as obstacles), or omit to route the whole board. Requires a Java runtime; the freerouting.jar is downloaded on first use.',
+        'Autoroute the board with Freerouting (default) or KiCadRoutingTools (router:"krt"). Give a list of nets to route only those (existing routes on other nets are respected as obstacles), or omit to route the whole board. Requires a Java runtime; the freerouting.jar is downloaded on first use.',
       inputSchema: {
         nets: z
           .array(z.string())
@@ -1261,14 +1261,18 @@ export function createMcpServer(ctx: McpContext): McpServer {
           .boolean()
           .optional()
           .describe('With nets: keep those nets\' existing tracks/vias (hand-placed fanout) as protected copper instead of unrouting them first'),
+        router: z
+          .enum(['freerouting', 'krt'])
+          .optional()
+          .describe('Router backend: "freerouting" (default) or "krt" (KiCadRoutingTools; needs FLAMINGO_KRT_DIR). Defaults to $FLAMINGO_ROUTER.'),
       },
     },
-    async ({ nets, passes, keepExisting }) => {
+    async ({ nets, passes, keepExisting, router }) => {
       try {
         const result = await runAutorouteBroadcast(
           ctx.doc,
           ctx.route,
-          { nets, passes, keepExisting },
+          { nets, passes, keepExisting, router },
           (status) => ctx.doc.emitRouteStatus(status),
         );
         return textResult(formatAutorouteSummary(result));
