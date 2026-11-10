@@ -85,6 +85,8 @@ const TOOL_NAMES = [
   'remove_component',
   'set_component_label',
   'set_component_silk',
+  'set_cpl_rotation',
+  'set_pad_paste',
   'connect_pins',
   'disconnect_pins',
   'create_net_class',
@@ -148,7 +150,7 @@ describe('MCP endpoint', () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([...TOOL_NAMES].sort());
-    expect(tools).toHaveLength(37);
+    expect(tools).toHaveLength(39);
   });
 
   it('place_component (mocked part) then get_board_state reflects it', async () => {

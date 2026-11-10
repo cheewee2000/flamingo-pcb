@@ -16,7 +16,7 @@ running DRC, and exporting a
 
 ## Features
 
-- **Prompt-first workflow over MCP** — 34 tools cover the whole flow: parts →
+- **Prompt-first workflow over MCP** — 39 tools cover the whole flow: parts →
   placement → nets → routing → DRC → fab export. No schematic step.
 - **Real parts** — LCSC keyword search plus EasyEDA footprint fetch/parse with
   real pad numbers and geometry, cached locally under `~/.flamingo/parts/`.
@@ -121,13 +121,13 @@ doing.
 
 ## MCP tools
 
-34 tools are served at `http://localhost:4242/mcp`:
+39 tools are served at `http://localhost:4242/mcp`:
 
 | Group | Tools |
 | --- | --- |
-| **Board / project** | `new_board`, `open_board`, `save_board`, `get_board_state`, `describe_connections` |
+| **Board / project** | `new_board`, `open_board`, `import_board`, `save_board`, `get_board_state`, `describe_connections` |
 | **Parts** | `parts_search`, `parts_get`, `datasheet_get` |
-| **Placement** | `place_component`, `move_component`, `remove_component` |
+| **Placement** | `place_component`, `move_component`, `remove_component`, `set_component_label`, `set_component_silk`, `set_cpl_rotation`, `set_pad_paste` |
 | **Connectivity** | `connect_pins`, `disconnect_pins`, `create_net_class`, `assign_net_class` |
 | **Board features** | `set_board_outline`, `add_zone`, `add_keepout`, `add_mounting_hole`, `add_silk_text`, `add_silk_line`, `remove_item` |
 | **Routing / analysis** | `add_track`, `add_via`, `get_ratsnest`, `autoroute`, `unroute`, `widen_tracks`, `run_drc` |

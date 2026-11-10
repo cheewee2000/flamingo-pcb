@@ -40,6 +40,10 @@ export type Op =
   | { op: 'setComponentLabel'; refdes: string; label?: ComponentInst['label'] }
   /** Hide / show the component's footprint silk items. */
   | { op: 'setComponentSilk'; refdes: string; hidden: boolean }
+  /** Set the degrees added to the part's CPL rotation; 0 or omitted clears it. Never moves the part. */
+  | { op: 'setCplRotationOffset'; refdes: string; offset?: number }
+  /** Stencil paste override for every pad numbered `pad`; `paste` omitted restores the default. */
+  | { op: 'setPadPaste'; refdes: string; pad: string; paste?: boolean }
   | { op: 'editHole'; id: string; hole: Partial<Omit<MountingHole, 'id'>> }
   | { op: 'editKeepout'; id: string; keepout: Partial<Omit<Keepout, 'id'>> }
   | { op: 'editZone'; id: string; zone: Partial<Omit<Zone, 'id' | 'fill'>> }
@@ -192,6 +196,29 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
       if (!comp) return err(`Unknown refdes "${op.refdes}"`);
       if (op.hidden) comp.silk = { hidden: true };
       else delete comp.silk;
+      return ok(board, createdIds);
+    }
+
+    case 'setCplRotationOffset': {
+      const comp = board.components.find((c) => c.refdes === op.refdes);
+      if (!comp) return err(`Unknown refdes "${op.refdes}"`);
+      const offset = op.offset ?? 0;
+      if (!Number.isFinite(offset)) return err('offset must be a finite number of degrees');
+      const norm = ((offset % 360) + 360) % 360;
+      if (norm === 0) delete comp.cplRotationOffset;
+      else comp.cplRotationOffset = norm;
+      return ok(board, createdIds);
+    }
+
+    case 'setPadPaste': {
+      const comp = board.components.find((c) => c.refdes === op.refdes);
+      if (!comp) return err(`Unknown refdes "${op.refdes}"`);
+      const pads = comp.footprint.pads.filter((p) => p.number === op.pad);
+      if (pads.length === 0) return err(`${op.refdes} has no pad "${op.pad}"`);
+      for (const pad of pads) {
+        if (op.paste === undefined) delete pad.paste;
+        else pad.paste = op.paste;
+      }
       return ok(board, createdIds);
     }
 

@@ -109,6 +109,15 @@ describe('generateGerbers', () => {
     expect((gtl.match(/D03\*/g) ?? []).length).toBe(1);
   });
 
+  it('skips stencil paste on an SMD pad flagged paste: false, keeps its mask opening', () => {
+    const b = oneTrackOnePad();
+    const flashes = (f: string) => (generateGerbers(b).files.get(f)!.match(/D03\*/g) ?? []).length;
+    expect(flashes('t1.GTP')).toBe(1);
+    b.components[0].footprint.pads[0].paste = false;
+    expect(flashes('t1.GTP')).toBe(0);
+    expect(flashes('t1.GTS')).toBe(1);
+  });
+
   it('dedupes apertures across identical-width tracks', () => {
     const b = oneTrackOnePad();
     b.tracks.push({

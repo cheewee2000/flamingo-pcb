@@ -948,3 +948,31 @@ describe('setComponentSilk', () => {
     expect(b.components[0].silk).toBeUndefined();
   });
 });
+
+describe('setCplRotationOffset / setPadPaste', () => {
+  const placed = (): Board =>
+    applyOp(newBoard('t', 2), {
+      op: 'placeComponent', refdes: 'R1', lcsc: 'C1', footprint: makeFootprint(['1', '2']),
+      at: { x: 5, y: 5 }, rotation: 90, side: 'top', fields: {},
+    }).board!;
+
+  it('stores a normalized CPL offset, survives a round trip, clears on 0, never turns the part', () => {
+    let b = applyOp(placed(), { op: 'setCplRotationOffset', refdes: 'R1', offset: -90 }).board!;
+    expect(b.components[0].cplRotationOffset).toBe(270);
+    expect(b.components[0].rotation).toBe(90);
+    expect(parseBoard(serializeBoard(b)).components[0].cplRotationOffset).toBe(270);
+    b = applyOp(b, { op: 'setCplRotationOffset', refdes: 'R1', offset: 360 }).board!;
+    expect(b.components[0].cplRotationOffset).toBeUndefined();
+    expect(applyOp(b, { op: 'setCplRotationOffset', refdes: 'R1', offset: NaN }).error).toBeTruthy();
+    expect(applyOp(b, { op: 'setCplRotationOffset', refdes: 'ZZ9', offset: 90 }).error).toBeTruthy();
+  });
+
+  it('sets and clears the paste override on one pad only', () => {
+    let b = applyOp(placed(), { op: 'setPadPaste', refdes: 'R1', pad: '2', paste: false }).board!;
+    expect(b.components[0].footprint.pads.map((p) => p.paste)).toEqual([undefined, false]);
+    expect(parseBoard(serializeBoard(b)).components[0].footprint.pads[1].paste).toBe(false);
+    b = applyOp(b, { op: 'setPadPaste', refdes: 'R1', pad: '2' }).board!;
+    expect(b.components[0].footprint.pads[1].paste).toBeUndefined();
+    expect(applyOp(b, { op: 'setPadPaste', refdes: 'R1', pad: '9', paste: false }).error).toBeTruthy();
+  });
+});

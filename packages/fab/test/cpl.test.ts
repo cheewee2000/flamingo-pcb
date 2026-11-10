@@ -58,14 +58,19 @@ describe('generateCPL', () => {
     expect(csv).toContain(',Bottom,');
   });
 
-  it('bottom side rotation is (rot + 180) % 360 -- rot 270 bottom -> 90', () => {
+  it('bottom side rotation is (360 - rot) % 360 -- rot 270 bottom -> 90', () => {
     const csv = generateCPL(boardWith([comp('R1', { side: 'bottom', rotation: 270 })]));
     expect(csv).toContain('R1,12.3457,4.5000,Bottom,90');
   });
 
-  it('bottom side rotation 0 -> 180 (JLC/EasyEDA convention, verified on a built board)', () => {
-    const csv = generateCPL(boardWith([comp('R1', { side: 'bottom', rotation: 0 })]));
-    expect(csv).toContain(',Bottom,180');
+  it('bottom side rotation 0 -> 0 and 180 -> 180 (mirrored angle, checked in the JLC placement preview)', () => {
+    expect(generateCPL(boardWith([comp('R1', { side: 'bottom', rotation: 0 })]))).toContain(',Bottom,0');
+    expect(generateCPL(boardWith([comp('R1', { side: 'bottom', rotation: 180 })]))).toContain(',Bottom,180');
+  });
+
+  it('cplRotationOffset is added after the side rule', () => {
+    expect(generateCPL(boardWith([comp('U1', { side: 'bottom', rotation: 0, cplRotationOffset: 180 })]))).toContain(',Bottom,180');
+    expect(generateCPL(boardWith([comp('U1', { rotation: 270, cplRotationOffset: 180 })]))).toContain(',Top,90');
   });
 
   it('bottom side rotation 90 -> 270', () => {

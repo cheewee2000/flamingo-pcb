@@ -44,7 +44,10 @@ export interface Pad {
   polygon?: Point[]; // when shape==='polygon', relative to `at`
   drill?: { diameter: number; slotLength?: number; plated: boolean };
   layer: 'top' | 'bottom' | 'through';
-  /** Through-hole pad that still gets stencil paste (paste-in-hole, e.g. USB-C shell legs reflowed on the SMT line). */
+  /**
+   * Stencil paste override. true on a through-hole pad = paste-in-hole (e.g. USB-C shell legs reflowed on the
+   * SMT line); false on an SMD pad = no paste (bare test / pogo pad). Default: SMD pads get paste, through pads don't.
+   */
   paste?: boolean;
 }
 
@@ -126,6 +129,12 @@ export interface ComponentInst {
    * The refdes label is separate (`label`).
    */
   silk?: { hidden?: boolean };
+  /**
+   * Degrees added to this part's CPL rotation. For parts whose JLC library
+   * image is turned relative to the footprint (found by checking pin 1 in
+   * JLC's placement preview). Affects the CPL only, never the board.
+   */
+  cplRotationOffset?: number;
 }
 
 export interface Net {

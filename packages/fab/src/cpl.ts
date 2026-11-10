@@ -12,13 +12,16 @@
  * offset is needed.
  *
  * Rotation is degrees CCW, normalized to [0, 360):
- *   - top side:    rot % 360, shifted into [0, 360)
- *   - bottom side: (normalized-rot + 180) % 360
- * The bottom-side flip matches JLCPCB's convention that CPL rotation for
- * bottom-side parts is measured after mirroring the board (so a part's
- * silkscreen-visible rotation, once physically flipped face-down, keeps
- * agreeing with the rotation JLC's placement machine expects) -- e.g. a
- * board-space rotation of 270 on the bottom side reports as 90.
+ *   - top side:    rot
+ *   - bottom side: 360 - rot  (the angle as seen looking at the bottom face)
+ * plus the component's optional `cplRotationOffset`, for parts whose JLC
+ * library image is turned relative to the EasyEDA footprint.
+ *
+ * History: until 2026-11-08 the bottom rule was rot + 180, copied from the
+ * EasyEDA pick-and-place of the Random Together v3.1 pilot. That file was
+ * never built as-is -- the rotations were corrected by hand in JLC's
+ * placement preview. Measured on that preview: every part at 90/270 was
+ * right, 18 of 20 multi-pin parts at 0/180 were 180 degrees off.
  */
 
 import type { Board, ComponentInst } from '@flamingo/engine';
@@ -44,10 +47,9 @@ function mm4(n: number): string {
 
 function rotationOf(c: ComponentInst): string {
   const rot = normDeg(c.rotation);
-  // Bottom: JLCPCB expects the EasyEDA-style value. Verified against the
-  // CPL JLC built the Random Together v3.1 pilot from (2026-05-26): with the
-  // engine's x-mirror convention that is rot + 180, NOT 360 - rot.
-  const out = c.side === 'bottom' ? (rot + 180) % 360 : rot;
+  // Bottom: JLC's placement preview wants the mirrored angle (see header).
+  const base = c.side === 'bottom' ? 360 - rot : rot;
+  const out = normDeg(base + (c.cplRotationOffset ?? 0));
   return trimNum(out);
 }
 

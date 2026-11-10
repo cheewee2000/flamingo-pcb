@@ -14,7 +14,7 @@ node packages/server/dist/cli.js serve board.flamingo   # prints "Flamingo v0.1.
 
 - Serves the live UI at `http://localhost:4242`, streams board changes over
   `/ws`, and exposes the MCP endpoint at `/mcp`.
-- `.mcp.json` (repo root) wires the `flamingo` MCP server to `/mcp` — its **37
+- `.mcp.json` (repo root) wires the `flamingo` MCP server to `/mcp` — its **39
   tools are available only while the server is running**. Start the server
   first, then use the tools.
 - Port override: `FLAMINGO_PORT`. Autoroute timeout override:
@@ -69,6 +69,13 @@ node packages/server/dist/cli.js serve board.flamingo   # prints "Flamingo v0.1.
   different Comments. Per-instance context ("I2C pull-up on SDA", "warm
   channel") goes in `role`, which never reaches the BOM. Enforced by the
   `bom-comment-conflict` DRC check.
+- **CPL rotation:** top side is the board rotation; bottom side is
+  `360 - rotation` (the angle seen from the bottom face). If JLC's placement
+  preview shows a part turned, fix that one part with `set_cpl_rotation`
+  (offset in degrees, CPL only, the board is untouched) rather than rotating
+  the footprint.
+- **Paste overrides:** `set_pad_paste` with `paste: false` leaves an SMD pad
+  bare (test / pogo pads); `paste: true` on a through pad is paste-in-hole.
 
 ## Stock check (part of DRC)
 

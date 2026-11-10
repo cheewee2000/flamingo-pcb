@@ -349,6 +349,8 @@ function buildPaste(b: Board, side: 'F' | 'B'): string {
     for (const pad of comp.footprint.pads) {
       // Through pads get paste only on their component's side (paste-in-hole).
       if (pad.layer === 'through' && (!pad.paste || (comp.side === 'top') !== (side === 'F'))) continue;
+      // An SMD pad can opt out (`paste: false`): bare test / pogo pads that must stay flat.
+      if (pad.paste === false) continue;
       if (!padCopperLayers(pad, comp.side, cu).includes(layer)) continue;
       emitPad(g, comp, pad, 0);
     }

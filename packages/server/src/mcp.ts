@@ -792,6 +792,42 @@ export function createMcpServer(ctx: McpContext): McpServer {
   );
 
   server.registerTool(
+    'set_cpl_rotation',
+    {
+      description:
+        "Add a rotation offset (degrees CCW) to one part's row in the CPL placement file, for parts whose JLCPCB library image is turned relative to the footprint (pin 1 lands on the wrong corner in JLC's placement preview). Changes the CPL only: the part, its pads and its copper do not move. offset 0 clears it.",
+      inputSchema: {
+        refdes: z.string().describe('Reference designator of the component'),
+        offset: z.number().describe('Degrees CCW added to the CPL rotation after the side rule, e.g. 90, 180, 270; 0 clears'),
+      },
+    },
+    ({ refdes, offset }) => {
+      const op: Op = { op: 'setCplRotationOffset', refdes, offset };
+      return applyAndReport(ctx, op, () => {
+        const v = ctx.doc.board.components.find((c) => c.refdes === refdes)?.cplRotationOffset;
+        return `${refdes} CPL rotation offset: ${v === undefined ? 'none' : `${v} deg`}`;
+      });
+    },
+  );
+
+  server.registerTool(
+    'set_pad_paste',
+    {
+      description:
+        'Override stencil paste on one pad of a placed part. paste: false on an SMD pad leaves it bare (test / pogo pads that must stay flat); paste: true on a through-hole pad adds paste-in-hole (legs reflowed on the SMT line). Omit paste to restore the default (SMD pads get paste, through pads do not). The solder-mask opening is unaffected.',
+      inputSchema: {
+        refdes: z.string().describe('Reference designator of the component'),
+        pad: z.string().describe('Pad number as listed by parts_get, e.g. "1" or "A6"; every pad with that number is changed'),
+        paste: z.boolean().optional().describe('true = paste, false = no paste, omitted = default for the pad type'),
+      },
+    },
+    ({ refdes, pad, paste }) => {
+      const op: Op = { op: 'setPadPaste', refdes, pad, paste };
+      return applyAndReport(ctx, op, () => `${refdes}.${pad} paste: ${paste === undefined ? 'default' : paste ? 'on' : 'off'}`);
+    },
+  );
+
+  server.registerTool(
     'connect_pins',
     {
       description: 'Connect one or more pins to a net (creating the net if it does not already exist).',
