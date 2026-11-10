@@ -83,7 +83,8 @@ generated from the netlist, for documentation (see "Schematic" below).
 ## Schematic (generated, never drawn)
 
 A board has no schematic file. `export_schematic` (MCP), `GET
-/api/export.schematic[?format=png]` and Export → Schematic in the UI all draw
+/api/export.schematic[?format=png]` and the export modal's Schematic format
+(E, then Schematic; SVG or PNG under its options) all draw
 one from `board.nets` on the spot (`packages/engine/src/schematic/`):
 
 - Parts with three or more pins, and connectors/switches/test points whatever
