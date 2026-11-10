@@ -16,8 +16,11 @@ running DRC, and exporting a
 
 ## Features
 
-- **Prompt-first workflow over MCP** — 39 tools cover the whole flow: parts →
+- **Prompt-first workflow over MCP** — 40 tools cover the whole flow: parts →
   placement → nets → routing → DRC → fab export. No schematic step.
+- **Schematic for documentation** — nothing is drawn by hand: `export_schematic`
+  (or Export → Schematic) lays out a readable schematic from the board netlist,
+  with library symbols, wired passives and net labels, as SVG and PNG.
 - **Real parts** — LCSC keyword search plus EasyEDA footprint fetch/parse with
   real pad numbers and geometry, cached locally under `~/.flamingo/parts/`.
 - **Live browser editor** — WebSocket-synced canvas view with selection and
@@ -121,7 +124,7 @@ doing.
 
 ## MCP tools
 
-39 tools are served at `http://localhost:4242/mcp`:
+40 tools are served at `http://localhost:4242/mcp`:
 
 | Group | Tools |
 | --- | --- |
@@ -132,7 +135,7 @@ doing.
 | **Board features** | `set_board_outline`, `add_zone`, `add_keepout`, `add_mounting_hole`, `add_silk_text`, `add_silk_line`, `remove_item` |
 | **Routing / analysis** | `add_track`, `add_via`, `get_ratsnest`, `autoroute`, `unroute`, `widen_tracks`, `run_drc` |
 | **History** | `undo`, `redo` |
-| **Output** | `export_fab`, `export_step`, `screenshot` |
+| **Output** | `export_fab`, `export_step`, `export_schematic`, `screenshot` |
 
 ## Architecture
 

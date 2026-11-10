@@ -13,7 +13,7 @@
 import type { Board } from '@flamingo/engine';
 import { allHoles } from '@flamingo/engine';
 
-type Format = 'step' | 'stephd' | 'dxf' | 'svg';
+type Format = 'step' | 'stephd' | 'dxf' | 'svg' | 'sch' | 'schpng';
 type Preset = 'mech' | 'encl' | 'full' | 'custom';
 type Element = 'board' | 'comps' | 'vias' | 'pth' | 'mnt';
 type Include = Record<Element, boolean>;
@@ -46,6 +46,8 @@ const FORMATS: Record<Format, { label: string; sub: string; ext: string }> = {
   stephd: { label: 'STEP HD', sub: 'Real part models, copper, silk', ext: 'step' },
   dxf: { label: 'DXF', sub: 'Board + component outlines', ext: 'dxf' },
   svg: { label: 'SVG', sub: 'Outline drawing', ext: 'svg' },
+  sch: { label: 'Schematic', sub: 'Drawn from the netlist, SVG', ext: 'svg' },
+  schpng: { label: 'Schematic PNG', sub: 'The same sheet as an image', ext: 'png' },
 };
 const FORMAT_ORDER = Object.keys(FORMATS) as Format[];
 
@@ -125,12 +127,15 @@ function saveSettings(s: Settings): void {
 }
 
 const is3d = (f: Format): boolean => f === 'step' || f === 'stephd';
+/** The schematic is one generated sheet: no elements to pick, no options. */
+const isSchematic = (f: Format): boolean => f === 'sch' || f === 'schpng';
 
 /** Same rule as the server's exportFileName (packages/server/src/export-opts.ts). */
 function fileNameFor(boardName: string, s: Settings): string {
   const base = boardName.replace(/[^\w.-]+/g, '_') || 'board';
   let suffix: string;
-  if (is3d(s.format)) suffix = s.format === 'stephd' ? '-hd' : '';
+  if (isSchematic(s.format)) suffix = '-schematic';
+  else if (is3d(s.format)) suffix = s.format === 'stephd' ? '-hd' : '';
   else if (s.include.comps && !s.include.board) suffix = '-components';
   else if (s.include.comps) suffix = '-outline+components';
   else suffix = '-outline';
@@ -138,6 +143,7 @@ function fileNameFor(boardName: string, s: Settings): string {
 }
 
 function exportUrl(s: Settings): string {
+  if (isSchematic(s.format)) return `/api/export.schematic?format=${FORMATS[s.format].ext}`;
   const ext = FORMATS[s.format].ext;
   const q = new URLSearchParams();
   if (s.format === 'stephd') q.set('detail', 'hd');
@@ -232,7 +238,7 @@ export function createExportModal(deps: ExportModalDeps): ExportModal {
   }
 
   async function runExport(): Promise<void> {
-    if (state.phase === 'exporting' || selectedCount() === 0) return;
+    if (state.phase === 'exporting' || (selectedCount() === 0 && !isSchematic(state.format))) return;
     const board = deps.getBoard();
     const filename = fileNameFor(board?.name ?? 'board', state);
     const controller = new AbortController();
@@ -343,6 +349,7 @@ export function createExportModal(deps: ExportModalDeps): ExportModal {
     const boardName = board?.name ?? 'board';
     const counts = elementCounts(board);
     const three = is3d(state.format);
+    const schematic = isSchematic(state.format);
     const busy = state.phase === 'exporting';
     const n = selectedCount();
     const filename = fileNameFor(boardName, state);
@@ -426,7 +433,20 @@ export function createExportModal(deps: ExportModalDeps): ExportModal {
       optRow('Units', [['mm', 'mm'], ['in', 'in']], state.units, (units) => set({ units }));
     }
 
-    main.append(presetSec, incSec, optSec);
+    if (schematic) {
+      const sec = el('div', 'exp-section');
+      sec.append(
+        el('div', 'exp-label', 'Schematic'),
+        el(
+          'div',
+          'exp-note',
+          'One sheet, drawn from the board netlist. Parts with three or more pins are blocks with a net label on every pin; resistors, capacitors and other two-pin parts are wired up under the block they belong to. Nets with the same name are connected.',
+        ),
+      );
+      main.append(sec);
+    } else {
+      main.append(presetSec, incSec, optSec);
+    }
     body.append(rail, main);
 
     // Footer
@@ -453,7 +473,9 @@ export function createExportModal(deps: ExportModalDeps): ExportModal {
       statusText = state.error ?? 'Export failed';
       statusKind = 'err';
       primaryLabel = 'Retry';
-      primaryDisabled = n === 0;
+      primaryDisabled = n === 0 && !schematic;
+    } else if (schematic) {
+      statusText = filename;
     } else if (n === 0) {
       statusText = 'Select at least one element to export';
       statusKind = 'err';

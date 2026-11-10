@@ -12,11 +12,11 @@ import type { Board, Op } from '@flamingo/engine';
 import { fillAllZones, parseBoard, renderSVG } from '@flamingo/engine';
 import { generateBOM, generateCPL, generateGerbers, zipFiles } from '@flamingo/fab';
 import type { Model3d } from '@flamingo/parts';
-import { extractModel3d, fetchJlcStock, fetchPart, readCache, searchParts } from '@flamingo/parts';
+import { extractModel3d, fetchJlcStock, fetchPart, fetchSymbol, readCache, searchParts } from '@flamingo/parts';
 import { runAutorouteBroadcast } from './autoroute.js';
 import { Doc } from './document.js';
 import type { McpContext, PartsApi } from './mcp.js';
-import { boardSearchRoots, createMcpServer, runDrcWithStock } from './mcp.js';
+import { boardSearchRoots, createMcpServer, runDrcWithStock, symbolLoader } from './mcp.js';
 import type { RouteRunner } from './route.js';
 import { defaultRouteRunner } from './route.js';
 import type { ScreenshotOpts } from './screenshot.js';
@@ -25,6 +25,7 @@ import { BOARD_T, exportStep, exportStepDetail, stepHasSolids } from './step.js'
 import { exportDxf, exportSvg } from './drawing.js';
 import type { ExportFormat, ExportQuery } from './export-opts.js';
 import { exportFileName, parseExportQuery } from './export-opts.js';
+import { boardSchematic, schematicFileBase, schematicPng } from './schematic.js';
 import { parseObjMesh, placeMeshGroups } from './objmesh.js';
 import type { MeshGroup } from './objmesh.js';
 
@@ -427,6 +428,33 @@ async function handleApi(
     return true;
   }
 
+  if (method === 'GET' && pathname === '/api/export.schematic') {
+    // The schematic generated from the netlist (export modal, "Schematic").
+    // SVG by default; ?format=png for a raster copy.
+    const format = url.searchParams.get('format') ?? 'svg';
+    if (format !== 'svg' && format !== 'png') {
+      sendJSON(res, 400, { ok: false, error: `format must be svg or png (got "${format}")` });
+      return true;
+    }
+    if (doc.board.components.length === 0) {
+      sendJSON(res, 400, { ok: false, error: 'The board has no components to draw' });
+      return true;
+    }
+    try {
+      const result = await boardSchematic(doc.board, symbolLoader(ctx));
+      const body = format === 'png' ? schematicPng(result) : Buffer.from(result.svg, 'utf8');
+      res.writeHead(200, {
+        'content-type': format === 'png' ? 'image/png' : 'image/svg+xml',
+        'content-disposition': `attachment; filename="${schematicFileBase(doc.board.name)}.${format}"`,
+        'content-length': body.length,
+      });
+      res.end(body);
+    } catch (err) {
+      sendJSON(res, 500, { ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return true;
+  }
+
   const exportMatch = method === 'GET' ? /^\/api\/export\.(step|dxf|svg)$/.exec(pathname) : null;
   if (exportMatch) {
     // Mechanical exports, driven by the UI's export modal:
@@ -811,7 +839,7 @@ export function startServer(
   const ctx: McpContext = {
     doc,
     projectDir: opts.projectDir ?? process.cwd(),
-    partsApi: opts.partsApi ?? { fetchPart, searchParts, fetchStock: fetchJlcStock },
+    partsApi: opts.partsApi ?? { fetchPart, searchParts, fetchStock: fetchJlcStock, fetchSymbol },
     route: opts.routeRunner ?? defaultRouteRunner,
   };
   const uiDistDir = opts.uiDistDir ?? UI_DIST;
