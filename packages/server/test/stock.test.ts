@@ -30,7 +30,7 @@ function stubLookup(
   return async (lcsc) => {
     calls.push(lcsc);
     if (!(lcsc in stocks)) throw new Error(`unexpected lookup ${lcsc}`);
-    return { lcsc, stock: stocks[lcsc], basic: false, mpn: 'MPN-' + lcsc };
+    return { lcsc, stock: stocks[lcsc], basic: false, standardOnly: false, mpn: 'MPN-' + lcsc };
   };
 }
 

@@ -36,10 +36,15 @@ export interface ExportFabResult {
   cplCsv: string;
 }
 
-/** Zip a filename->content map (deterministic order: Map insertion order). */
-export function zipFiles(files: Map<string, string>): Buffer {
+/**
+ * Zip a filename->content map (deterministic order: adm-zip sorts entries by name).
+ * Strings are written as UTF-8; Buffers as they are, so a zip can hold a zip.
+ */
+export function zipFiles(files: ReadonlyMap<string, string | Buffer>): Buffer {
   const zip = new AdmZip();
-  for (const [name, content] of files) zip.addFile(name, Buffer.from(content, 'utf8'));
+  for (const [name, content] of files) {
+    zip.addFile(name, typeof content === 'string' ? Buffer.from(content, 'utf8') : content);
+  }
   return zip.toBuffer();
 }
 

@@ -554,11 +554,25 @@ export function fillZone(b: Board, zone: Zone): Point[][] {
  */
 const fillCache = new WeakMap<Board, Board>();
 
-/** Return a copy of `b` with every zone's `fill` populated by `fillZone`. */
-export function fillAllZones(b: Board): Board {
+/**
+ * Return a copy of `b` with every zone's `fill` populated by `fillZone`.
+ * `onZone`, if given, is called after each zone with how many are filled
+ * (once, with the total, when the memo already holds the answer).
+ */
+export function fillAllZones(b: Board, onZone?: (done: number, total: number) => void): Board {
   const hit = fillCache.get(b);
-  if (hit) return hit;
-  const filled = { ...b, zones: b.zones.map((z) => ({ ...z, fill: fillZone(b, z) })) };
+  if (hit) {
+    onZone?.(b.zones.length, b.zones.length);
+    return hit;
+  }
+  const filled = {
+    ...b,
+    zones: b.zones.map((z, i) => {
+      const fz = { ...z, fill: fillZone(b, z) };
+      onZone?.(i + 1, b.zones.length);
+      return fz;
+    }),
+  };
   fillCache.set(b, filled);
   return filled;
 }

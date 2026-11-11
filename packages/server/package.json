@@ -16,16 +16,18 @@
   "dependencies": {
     "@flamingo/engine": "*",
     "@flamingo/fab": "*",
+    "@flamingo/panel": "*",
     "@flamingo/parts": "*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@resvg/resvg-js": "^2.6.2",
+    "adm-zip": "^0.6.0",
     "ws": "^8.21.1",
-    "zod": "^4.4.3",
-    "adm-zip": "^0.6.0"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tracespace/parser": "^5.0.0-next.0",
     "@types/adm-zip": "^0.5.8",
-    "@types/ws": "^8.18.1"
+    "@types/ws": "^8.18.1",
+    "playwright-core": "^1.61.1"
   }
 }

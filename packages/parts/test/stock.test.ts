@@ -32,8 +32,46 @@ describe('fetchJlcStock', () => {
       lcsc: 'C21190',
       stock: 186830,
       basic: true,
+      standardOnly: false,
       mpn: '0603WAF1001T5E',
     });
+  });
+
+  it('reads the price tiers, the attrition and the Standard-only flag', async () => {
+    clearStockCache();
+    const body = jlcResponse([
+      {
+        componentCode: 'C41413180',
+        stockCount: 158824,
+        componentLibraryType: 'expand',
+        componentProductType: 2,
+        lossNumber: 8,
+        leastPatchNumber: 10,
+        componentPrices: [
+          { startNumber: 600, endNumber: 3999, productPrice: 0.0223 },
+          { startNumber: 1, endNumber: 199, productPrice: 0.0344 },
+          { startNumber: 200, endNumber: 599, productPrice: 0.0267 },
+          { startNumber: 4000, endNumber: -1, productPrice: 0.0212 },
+          { startNumber: 'x', productPrice: 1 },
+        ],
+      },
+    ]);
+    const info = await fetchJlcStock('C41413180', { fetchImpl: fetchImplReturning(body) });
+    expect(info.standardOnly).toBe(true);
+    expect(info.attrition).toEqual({ loss: 8, minimum: 10 });
+    expect(info.prices).toEqual([
+      { from: 1, to: 199, price: 0.0344 },
+      { from: 200, to: 599, price: 0.0267 },
+      { from: 600, to: 3999, price: 0.0223 },
+      { from: 4000, to: null, price: 0.0212 },
+    ]);
+  });
+
+  it('leaves prices and attrition out when the library gives none', async () => {
+    clearStockCache();
+    const body = jlcResponse([{ componentCode: 'C473006', stockCount: 0, componentLibraryType: 'expand', componentProductType: 0, componentPrices: [] }]);
+    const info = await fetchJlcStock('C473006', { fetchImpl: fetchImplReturning(body) });
+    expect(info).toEqual({ lcsc: 'C473006', stock: 0, basic: false, standardOnly: false });
   });
 
   it('picks the exact code among multiple keyword hits', async () => {
@@ -52,7 +90,7 @@ describe('fetchJlcStock', () => {
     const info = await fetchJlcStock('C999999999', {
       fetchImpl: fetchImplReturning(jlcResponse([])),
     });
-    expect(info).toEqual({ lcsc: 'C999999999', stock: null, basic: false });
+    expect(info).toEqual({ lcsc: 'C999999999', stock: null, basic: false, standardOnly: false });
   });
 
   it('caches results so a second lookup within the TTL does not refetch', async () => {

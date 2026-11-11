@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { newBoard } from '@flamingo/engine';
 import type { Board, ComponentInst, Footprint } from '@flamingo/engine';
-import { generateBOM } from '../src/bom.js';
+import { designatorCells, generateBOM, MAX_DESIGNATOR_CELL } from '../src/bom.js';
 
 function footprint(name: string, lcsc: string): Footprint {
   return { name, lcsc, pads: [], silk: [], courtyard: [] };
@@ -119,5 +119,47 @@ describe('generateBOM', () => {
   it('produces an empty-body CSV (just the header) for a board with no components', () => {
     const csv = generateBOM(boardWith([]));
     expect(csv).toBe('Comment,Designator,Footprint,LCSC Part #\r\n');
+  });
+});
+
+describe('designator cell limit', () => {
+  it('splits a group across rows so no Designator cell passes JLCPCB\'s 2048 characters', () => {
+    // 8 panel instances of 144 LEDs, named F1_D1 .. F8_D144: ~9000 characters joined.
+    const leds: ComponentInst[] = [];
+    for (let f = 1; f <= 8; f++)
+      for (let d = 1; d <= 144; d++)
+        leds.push(comp(`F${f}_D${d}`, 'C2843785', { fields: { value: 'WS2812B', package: '5050' } }));
+    const csv = generateBOM(boardWith(leds));
+    const lines = csv.trim().split('\r\n');
+    expect(lines.length).toBeGreaterThan(2);
+    const all: string[] = [];
+    for (const line of lines.slice(1)) {
+      const m = line.match(/^WS2812B,"([^"]+)",5050,C2843785$/);
+      expect(m, line).not.toBeNull();
+      expect(m![1]!.length).toBeLessThanOrEqual(MAX_DESIGNATOR_CELL);
+      all.push(...m![1]!.split(','));
+    }
+    expect(all).toHaveLength(leds.length);
+    expect(new Set(all).size).toBe(leds.length);
+    expect(all[0]).toBe('F1_D1');
+    expect(all[all.length - 1]).toBe('F8_D144');
+  });
+
+  it('packs designators greedily and keeps their order', () => {
+    expect(designatorCells(['R1', 'R2', 'R3', 'R4'], 5)).toEqual(['R1,R2', 'R3,R4']);
+    expect(designatorCells(['R1', 'R2', 'R3'], 8)).toEqual(['R1,R2,R3']);
+    expect(designatorCells(['LONGNAME1', 'R2'], 4)).toEqual(['LONGNAME1', 'R2']);
+    expect(designatorCells([])).toEqual([]);
+  });
+});
+
+describe('do-not-place parts', () => {
+  it('are left out of the BOM', () => {
+    const dnp = comp('R2', 'C25804');
+    dnp.fields.dnp = true;
+    const csv = generateBOM(boardWith([comp('R1', 'C25804'), dnp]));
+    const lines = csv.trim().split('\r\n');
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toBe('10k,R1,0603,C25804');
   });
 });

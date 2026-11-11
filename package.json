@@ -8,6 +8,7 @@
     "packages/engine",
     "packages/parts",
     "packages/fab",
+    "packages/panel",
     "packages/server",
     "packages/ui",
     "packages/desktop"

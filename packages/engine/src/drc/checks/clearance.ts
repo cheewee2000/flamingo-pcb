@@ -13,6 +13,7 @@ import type { Box, PolyGroup } from '../../geometry.js';
 import { DRC_EPSILON } from '../rules.js';
 import type { RuleSet } from '../rules.js';
 import type { CopperItem, DrcViolation } from '../types.js';
+import type { CheckProgress } from '../drc.js';
 
 /**
  * Distance between two copper items, honoring zone holes. When an item carries
@@ -129,7 +130,7 @@ function zoneDistance(poly: Point[], z: ZoneIndex, reach: number): { d: number; 
   return { d, at };
 }
 
-export function check(b: Board, rules: RuleSet, items: CopperItem[]): DrcViolation[] {
+export function check(b: Board, rules: RuleSet, items: CopperItem[], progress?: CheckProgress): DrcViolation[] {
   const violations: DrcViolation[] = [];
   const boxes = items.map((it) => bboxOf(it.polygon));
   // Candidate pairs come from a grid over item boxes grown by the largest
@@ -145,6 +146,7 @@ export function check(b: Board, rules: RuleSet, items: CopperItem[]): DrcViolati
   };
 
   for (let i = 0; i < items.length; i++) {
+    if (progress && i % 64 === 0) progress(i / items.length);
     const bi = boxes[i];
     const near: number[] = [];
     grid.query({ minX: bi.minX - reach, minY: bi.minY - reach, maxX: bi.maxX + reach, maxY: bi.maxY + reach }, (j) => {

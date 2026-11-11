@@ -5,10 +5,62 @@ import { basename, dirname, extname, resolve } from 'node:path';
 import { newBoard } from '@flamingo/engine';
 import { Doc } from './document.js';
 import { startServer } from './http.js';
+import { PanelDoc } from './panel/doc.js';
+import { PANEL_EXTENSION } from '@flamingo/panel';
+import { PANEL_USAGE, runPanelCli } from './panel/cli.js';
+import { partLookupFrom } from './panel/parts.js';
+import { PanelSession } from './panel/session.js';
+import { fetchJlcStock, fetchPart } from '@flamingo/parts';
 
 const VERSION = createRequire(import.meta.url)('../package.json').version as string;
+/** What panel files were called before they were `.flamboyance`. */
+const OLD_PANEL_EXTENSIONS = ['.flamingo-panel', '.plamingo'];
 
-async function serve(fileArg: string): Promise<void> {
+const partLookup = partLookupFrom({ fetchStock: fetchJlcStock, fetchPart });
+
+function shutDownOn(close: () => Promise<unknown>): void {
+  let shuttingDown = false;
+  const shutdown = (): void => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    close()
+      .catch((err: unknown) => {
+        console.error('[flamingo] failed to flush pending save on shutdown:', err);
+      })
+      .finally(() => {
+        process.exit(0);
+      });
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+}
+
+/**
+ * Serve a panel file the way a board file is served: the file is created if
+ * it is missing, and its view is the page at '/'.
+ */
+async function servePanel(fileArg: string): Promise<void> {
+  const filePath = resolve(process.cwd(), fileArg);
+  const projectDir = dirname(filePath);
+
+  let panel: PanelSession;
+  if (existsSync(filePath)) {
+    panel = new PanelSession({ projectDir, partLookup }, await PanelDoc.load(filePath));
+    void panel.loadPrices(await panel.resolved()).then(() => panel.touch());
+  } else {
+    panel = new PanelSession({ projectDir, partLookup });
+    const created = await panel.create(basename(filePath, PANEL_EXTENSION) || 'panel', filePath);
+    if (!created.ok) throw new Error(created.error);
+  }
+
+  const port = process.env.FLAMINGO_PORT ? Number(process.env.FLAMINGO_PORT) : 4242;
+  // No board: the server has only the panel to offer.
+  const started = await startServer(null, port, { projectDir, panel });
+  console.log(`Flamingo v${VERSION} serving ${fileArg} at http://localhost:${started.port}`);
+  shutDownOn(() => started.close());
+}
+
+async function serve(fileArg: string, panelArg?: string): Promise<void> {
   const filePath = resolve(process.cwd(), fileArg);
 
   let doc: Doc;
@@ -20,25 +72,25 @@ async function serve(fileArg: string): Promise<void> {
     await doc.save();
   }
 
-  const port = process.env.FLAMINGO_PORT ? Number(process.env.FLAMINGO_PORT) : 4242;
-  const started = await startServer(doc, port, { projectDir: dirname(filePath) });
-  console.log(`Flamingo v${VERSION} serving ${fileArg} at http://localhost:${started.port}`);
+  // Panels are served next to the board: open the one named with --panel, or
+  // start with an empty, unsaved one.
+  const projectDir = dirname(filePath);
+  let panel: PanelSession;
+  if (panelArg) {
+    const panelPath = resolve(process.cwd(), panelArg);
+    if (!existsSync(panelPath)) throw new Error(`${panelPath} does not exist (create it with: flamingo panel new ${panelArg})`);
+    panel = new PanelSession({ projectDir, partLookup }, await PanelDoc.load(panelPath));
+    void panel.loadPrices(await panel.resolved()).then(() => panel.touch());
+  } else {
+    panel = new PanelSession({ projectDir, partLookup });
+  }
 
-  let shuttingDown = false;
-  const shutdown = (): void => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    doc
-      .close()
-      .catch((err: unknown) => {
-        console.error('[flamingo] failed to flush pending save on shutdown:', err);
-      })
-      .finally(() => {
-        process.exit(0);
-      });
-  };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  const port = process.env.FLAMINGO_PORT ? Number(process.env.FLAMINGO_PORT) : 4242;
+  const started = await startServer(doc, port, { projectDir, panel });
+  console.log(`Flamingo v${VERSION} serving ${fileArg} at http://localhost:${started.port}`);
+  console.log(`Panel view at http://localhost:${started.port}/panel${panelArg ? ` (${panelArg})` : ''}`);
+
+  shutDownOn(() => Promise.all([doc.close(), panel.close()]));
 }
 
 async function importCmd(srcArg: string, outArg: string | undefined, pcbName: string | undefined): Promise<void> {
@@ -59,10 +111,11 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
 
-  if (command === 'serve') {
-    await serve(args[1] ?? './board.flamingo');
+  if (command === 'panel') {
+    process.exitCode = await runPanelCli(args.slice(1));
     return;
   }
+
   if (command === 'import' && args[1]) {
     const pcbFlag = args.indexOf('--pcb');
     const pcbName = pcbFlag !== -1 ? args[pcbFlag + 1] : undefined;
@@ -70,8 +123,37 @@ async function main(): Promise<void> {
     await importCmd(args[1], rest[0], pcbName);
     return;
   }
-  console.error('Usage: flamingo serve [file.flamingo]\n       flamingo import <project.epro> [out.flamingo] [--pcb name]');
-  process.exitCode = 1;
+
+  if (command !== 'serve') {
+    console.error(
+      `Usage: flamingo serve [file.flamingo] [--panel file${PANEL_EXTENSION}]    the board editor, with a panel at /panel\n` +
+        `       flamingo serve <file${PANEL_EXTENSION}>    the panel view\n` +
+        `       flamingo import <project.epro> [out.flamingo] [--pcb name]\n\n${PANEL_USAGE}`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  const rest = args.slice(1);
+  const panelAt = rest.indexOf('--panel');
+  const panelArg = panelAt >= 0 ? rest.splice(panelAt, 2)[1] : undefined;
+  if (panelAt >= 0 && panelArg === undefined) {
+    console.error('--panel needs a file');
+    process.exitCode = 1;
+    return;
+  }
+  const file = rest[0] ?? './board.flamingo';
+  for (const f of [file, panelArg]) {
+    if (f && OLD_PANEL_EXTENSIONS.some((ext) => f.endsWith(ext))) {
+      throw new Error(`${f}: panel files end in ${PANEL_EXTENSION} now. Rename the file; its contents are unchanged.`);
+    }
+  }
+  if (file.endsWith(PANEL_EXTENSION)) {
+    if (panelArg !== undefined) throw new Error(`${file} is a panel already: leave out --panel`);
+    await servePanel(file);
+    return;
+  }
+  await serve(file, panelArg);
 }
 
 main().catch((err: unknown) => {

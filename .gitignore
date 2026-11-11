@@ -27,3 +27,6 @@ packages/desktop/release/
 packages/desktop/build/icon.iconset/
 packages/desktop/build/icon_1024.png
 packages/desktop/build/icon_preview.png
+
+# Written by packages/server/scripts/verify-panel-ui.ts
+/panel-screenshots/

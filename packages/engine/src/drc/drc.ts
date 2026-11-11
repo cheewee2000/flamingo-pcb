@@ -92,31 +92,59 @@ export function buildCopperItems(b: Board): CopperItem[] {
   return items;
 }
 
-export type CheckFn = (b: Board, rules: RuleSet, items: CopperItem[]) => DrcViolation[];
+/** Called as a check works through its items, with the share of that check done (0..1). */
+export type CheckProgress = (fraction: number) => void;
 
-const CHECKS: CheckFn[] = [
-  clearanceCheck,
-  trackWidthCheck,
-  drillCheck,
-  viaAnnularCheck,
-  viaDiameterCheck,
-  copperToEdgeCheck,
-  keepoutCheck,
-  holeToHoleCheck,
-  courtyardOverlapCheck,
-  silkOverPadCheck,
-  unconnectedCheck,
-  outlineCheck,
-  bomCommentCheck,
+export type CheckFn = (b: Board, rules: RuleSet, items: CopperItem[], progress?: CheckProgress) => DrcViolation[];
+
+const CHECKS: Array<[string, CheckFn]> = [
+  ['clearance', clearanceCheck],
+  ['track width', trackWidthCheck],
+  ['drill', drillCheck],
+  ['via annular ring', viaAnnularCheck],
+  ['via diameter', viaDiameterCheck],
+  ['copper to edge', copperToEdgeCheck],
+  ['keepout', keepoutCheck],
+  ['hole to hole', holeToHoleCheck],
+  ['courtyard overlap', courtyardOverlapCheck],
+  ['silk over pad', silkOverPadCheck],
+  ['unconnected', unconnectedCheck],
+  ['outline', outlineCheck],
+  ['BOM comment', bomCommentCheck],
 ];
 
-/** Run every DRC check against `b` and concatenate their violations. */
-export function runDRC(b: Board): DrcViolation[] {
+/**
+ * Share of a DRC run spent in the clearance check: it compares every pair of
+ * copper items, so on a routed board it takes nearly all the time. Measured on
+ * two routed 4-layer boards (2026-10-04): 85-95%.
+ */
+const CLEARANCE_SHARE = 0.9;
+
+export interface DrcProgress {
+  /** The check being run. */
+  check: string;
+  /** Estimated share of the whole run done, 0..1. */
+  fraction: number;
+}
+
+/**
+ * Run every DRC check against `b` and concatenate their violations.
+ * `onProgress`, if given, is called synchronously as the run goes; the
+ * fraction is an estimate weighted by how long the checks usually take.
+ */
+export function runDRC(b: Board, onProgress?: (p: DrcProgress) => void): DrcViolation[] {
   const rules = RULESETS[b.rules];
   const items = buildCopperItems(b);
   const violations: DrcViolation[] = [];
-  for (const check of CHECKS) {
-    violations.push(...check(b, rules, items));
+  const rest = (1 - CLEARANCE_SHARE) / (CHECKS.length - 1);
+  let done = 0;
+  for (const [name, check] of CHECKS) {
+    const share = check === clearanceCheck ? CLEARANCE_SHARE : rest;
+    const start = done;
+    onProgress?.({ check: name, fraction: start });
+    violations.push(...check(b, rules, items, onProgress && ((f) => onProgress({ check: name, fraction: start + share * f }))));
+    done += share;
   }
+  onProgress?.({ check: 'done', fraction: 1 });
   return violations;
 }
