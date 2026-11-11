@@ -632,6 +632,12 @@ body {
 .exp-row:hover {
   background: var(--paper-2);
 }
+.exp-row.fixed {
+  cursor: default;
+}
+.exp-row.fixed:hover {
+  background: none;
+}
 .exp-box {
   width: 12px;
   height: 12px;

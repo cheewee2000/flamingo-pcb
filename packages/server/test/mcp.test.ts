@@ -109,6 +109,7 @@ const TOOL_NAMES = [
   'autoroute',
   'export_fab',
   'export_step',
+  'export_schematic',
   'import_board',
   'screenshot',
 ];
@@ -150,7 +151,7 @@ describe('MCP endpoint', () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([...TOOL_NAMES].sort());
-    expect(tools).toHaveLength(39);
+    expect(tools).toHaveLength(40);
   });
 
   it('place_component (mocked part) then get_board_state reflects it', async () => {
@@ -837,6 +838,36 @@ describe('MCP endpoint', () => {
     });
     expect(result.isError).toBe(true);
     expect(textOf(result as any)).toContain('inside the project');
+  });
+
+  describe('export_schematic', () => {
+    it('writes the SVG and PNG and reports what was drawn', async () => {
+      await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R1', x: 0, y: 0 } });
+      await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R2', x: 5, y: 0 } });
+      await client.callTool({ name: 'connect_pins', arguments: { net: 'MID', pins: ['R1.2', 'R2.1'] } });
+      await client.callTool({ name: 'connect_pins', arguments: { net: 'GND', pins: ['R2.2'] } });
+
+      const result = await client.callTool({ name: 'export_schematic', arguments: { outDir: 'docs' } });
+      expect(result.isError).toBeFalsy();
+      const text = textOf(result as any);
+      expect(text).toContain(join(projectDir, 'docs', 'mcptest-schematic.svg'));
+      expect(text).toContain('2 components, 2 nets; 4 pins drawn: 2 on wires, 0 by net label, 1 on power symbols, 1 unconnected.');
+      // The mocked parts API has no symbols, so both parts are generic boxes.
+      expect(text).toContain('generic box');
+      const svg = await readFile(join(projectDir, 'docs', 'mcptest-schematic.svg'), 'utf8');
+      expect(svg).toContain('>MID<');
+      const png = await readFile(join(projectDir, 'docs', 'mcptest-schematic.png'));
+      expect(png.subarray(1, 4).toString()).toBe('PNG');
+    });
+
+    it('can skip the PNG, and refuses an empty board', async () => {
+      const empty = await client.callTool({ name: 'export_schematic', arguments: {} });
+      expect(empty.isError).toBe(true);
+      await client.callTool({ name: 'place_component', arguments: { lcsc: 'C25804', refdes: 'R1', x: 0, y: 0 } });
+      const result = await client.callTool({ name: 'export_schematic', arguments: { outDir: 'docs', png: false } });
+      expect(result.isError).toBeFalsy();
+      await expect(stat(join(projectDir, 'docs', 'mcptest-schematic.png'))).rejects.toThrow();
+    });
   });
 
   describe('export_fab', () => {

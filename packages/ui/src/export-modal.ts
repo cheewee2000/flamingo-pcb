@@ -13,13 +13,14 @@
 import type { Board } from '@flamingo/engine';
 import { allHoles } from '@flamingo/engine';
 
-type Format = 'step' | 'stephd' | 'dxf' | 'svg';
+type Format = 'step' | 'stephd' | 'dxf' | 'svg' | 'sch';
 type Preset = 'mech' | 'encl' | 'full' | 'custom';
 type Element = 'board' | 'comps' | 'vias' | 'pth' | 'mnt';
 type Include = Record<Element, boolean>;
 type Side = 'top' | 'bottom' | 'both';
 type Layers = 'single' | 'layered';
 type Units = 'mm' | 'in';
+type SchFile = 'svg' | 'png';
 type Phase = 'idle' | 'exporting' | 'done' | 'error';
 
 interface Settings {
@@ -29,6 +30,8 @@ interface Settings {
   side: Side;
   layers: Layers;
   units: Units;
+  /** File type of the schematic export. */
+  schFile: SchFile;
 }
 
 interface ExportState extends Settings {
@@ -46,6 +49,7 @@ const FORMATS: Record<Format, { label: string; sub: string; ext: string }> = {
   stephd: { label: 'STEP HD', sub: 'Real part models, copper, silk', ext: 'step' },
   dxf: { label: 'DXF', sub: 'Board + component outlines', ext: 'dxf' },
   svg: { label: 'SVG', sub: 'Outline drawing', ext: 'svg' },
+  sch: { label: 'Schematic', sub: 'Drawn from the netlist', ext: 'svg' },
 };
 const FORMAT_ORDER = Object.keys(FORMATS) as Format[];
 
@@ -88,6 +92,7 @@ const DEFAULTS: Settings = {
   side: 'top',
   layers: 'layered',
   units: 'mm',
+  schFile: 'svg',
 };
 
 function oneOf<T extends string>(v: unknown, allowed: readonly T[], fallback: T): T {
@@ -112,23 +117,27 @@ function loadSettings(): Settings {
     side: oneOf(raw.side, ['top', 'bottom', 'both'] as const, DEFAULTS.side),
     layers: oneOf(raw.layers, ['single', 'layered'] as const, DEFAULTS.layers),
     units: oneOf(raw.units, ['mm', 'in'] as const, DEFAULTS.units),
+    schFile: oneOf(raw.schFile, ['svg', 'png'] as const, DEFAULTS.schFile),
   };
 }
 
 function saveSettings(s: Settings): void {
-  const { format, preset, include, side, layers, units } = s;
+  const { format, preset, include, side, layers, units, schFile } = s;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ format, preset, include, side, layers, units }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ format, preset, include, side, layers, units, schFile }));
   } catch {
     // Storage blocked (private window): settings just don't persist.
   }
 }
 
 const is3d = (f: Format): boolean => f === 'step' || f === 'stephd';
+/** The schematic is one generated sheet: there are no board elements to pick. */
+const isSchematic = (f: Format): boolean => f === 'sch';
 
 /** Same rule as the server's exportFileName (packages/server/src/export-opts.ts). */
 function fileNameFor(boardName: string, s: Settings): string {
   const base = boardName.replace(/[^\w.-]+/g, '_') || 'board';
+  if (isSchematic(s.format)) return `${base}-schematic.${s.schFile}`;
   let suffix: string;
   if (is3d(s.format)) suffix = s.format === 'stephd' ? '-hd' : '';
   else if (s.include.comps && !s.include.board) suffix = '-components';
@@ -138,6 +147,7 @@ function fileNameFor(boardName: string, s: Settings): string {
 }
 
 function exportUrl(s: Settings): string {
+  if (isSchematic(s.format)) return `/api/export.schematic?format=${s.schFile}`;
   const ext = FORMATS[s.format].ext;
   const q = new URLSearchParams();
   if (s.format === 'stephd') q.set('detail', 'hd');
@@ -232,7 +242,7 @@ export function createExportModal(deps: ExportModalDeps): ExportModal {
   }
 
   async function runExport(): Promise<void> {
-    if (state.phase === 'exporting' || selectedCount() === 0) return;
+    if (state.phase === 'exporting' || (selectedCount() === 0 && !isSchematic(state.format))) return;
     const board = deps.getBoard();
     const filename = fileNameFor(board?.name ?? 'board', state);
     const controller = new AbortController();
@@ -343,6 +353,8 @@ export function createExportModal(deps: ExportModalDeps): ExportModal {
     const boardName = board?.name ?? 'board';
     const counts = elementCounts(board);
     const three = is3d(state.format);
+    const schematic = isSchematic(state.format);
+    const sheet = { parts: board?.components.length ?? 0, nets: board?.nets.length ?? 0 };
     const busy = state.phase === 'exporting';
     const n = selectedCount();
     const filename = fileNameFor(boardName, state);
@@ -417,7 +429,9 @@ export function createExportModal(deps: ExportModalDeps): ExportModal {
       row.append(seg);
       optSec.append(row);
     };
-    if (three) {
+    if (schematic) {
+      optRow('File', [['svg', 'SVG'], ['png', 'PNG']], state.schFile, (schFile) => set({ schFile, phase: 'idle', error: undefined }));
+    } else if (three) {
       optRow('Component side', [['top', 'Top'], ['bottom', 'Bottom'], ['both', 'Both']], state.side, (side) => set({ side }));
     } else {
       if (state.format === 'dxf') {
@@ -426,7 +440,33 @@ export function createExportModal(deps: ExportModalDeps): ExportModal {
       optRow('Units', [['mm', 'mm'], ['in', 'in']], state.units, (units) => set({ units }));
     }
 
-    main.append(presetSec, incSec, optSec);
+    if (schematic) {
+      // Same shape as the other formats: what goes on the sheet, then the options.
+      const sec = el('div', 'exp-section');
+      sec.append(
+        el('div', 'exp-label', 'Sheet'),
+        el('div', 'exp-note', 'One sheet, drawn from the board netlist. Nets with the same name are connected.'),
+      );
+      const list = el('div', 'exp-include');
+      const listHead = el('div', 'exp-label exp-include-head');
+      listHead.append(el('span', '', 'On the sheet'), el('span', '', 'Count'));
+      list.append(listHead);
+      const rows: [string, string, number][] = [
+        ['Components', 'Library symbols; two-pin parts wired into circuits', sheet.parts],
+        ['Nets', 'Wires, net labels and power symbols', sheet.nets],
+      ];
+      for (const [label, sub, count] of rows) {
+        const row = el('div', 'exp-row on fixed');
+        const text = el('span', 'exp-row-text');
+        text.append(el('span', 'exp-row-label', label), el('span', 'exp-row-sub', sub));
+        // Always on the sheet, so no checkbox: an empty first cell keeps the columns aligned.
+        row.append(el('span', ''), text, el('span', 'exp-row-count', String(count)));
+        list.append(row);
+      }
+      main.append(sec, list, optSec);
+    } else {
+      main.append(presetSec, incSec, optSec);
+    }
     body.append(rail, main);
 
     // Footer
@@ -453,7 +493,11 @@ export function createExportModal(deps: ExportModalDeps): ExportModal {
       statusText = state.error ?? 'Export failed';
       statusKind = 'err';
       primaryLabel = 'Retry';
-      primaryDisabled = n === 0;
+      primaryDisabled = n === 0 && !schematic;
+    } else if (schematic) {
+      primaryDisabled = sheet.parts === 0;
+      statusText = sheet.parts === 0 ? 'The board has no components to draw' : `${filename}  ·  ${sheet.parts} components, ${sheet.nets} nets`;
+      if (sheet.parts === 0) statusKind = 'err';
     } else if (n === 0) {
       statusText = 'Select at least one element to export';
       statusKind = 'err';

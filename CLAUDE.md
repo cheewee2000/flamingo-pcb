@@ -14,7 +14,7 @@ node packages/server/dist/cli.js serve board.flamingo   # prints "Flamingo v0.1.
 
 - Serves the live UI at `http://localhost:4242`, streams board changes over
   `/ws`, and exposes the MCP endpoint at `/mcp`.
-- `.mcp.json` (repo root) wires the `flamingo` MCP server to `/mcp` — its **39
+- `.mcp.json` (repo root) wires the `flamingo` MCP server to `/mcp` — its **40
   tools are available only while the server is running**. Start the server
   first, then use the tools.
 - Port override: `FLAMINGO_PORT`. Autoroute timeout override:
@@ -48,6 +48,9 @@ node packages/server/dist/cli.js serve board.flamingo   # prints "Flamingo v0.1.
 7. **Export.** `export_fab` writes `gerbers.zip` + `bom.csv` + `cpl.csv`
    (+ `board.render.svg`) for JLCPCB.
 
+`export_schematic` writes `<board>-schematic.svg` and `.png`: a schematic
+generated from the netlist, for documentation (see "Schematic" below).
+
 `screenshot` renders a PNG whenever you want to see the board. `get_board_state`
 / `describe_connections` give text summaries. `undo` / `redo` walk the op log.
 
@@ -76,6 +79,32 @@ node packages/server/dist/cli.js serve board.flamingo   # prints "Flamingo v0.1.
   the footprint.
 - **Paste overrides:** `set_pad_paste` with `paste: false` leaves an SMD pad
   bare (test / pogo pads); `paste: true` on a through pad is paste-in-hole.
+
+## Schematic (generated, never drawn)
+
+A board has no schematic file. `export_schematic` (MCP), `GET
+/api/export.schematic[?format=png]` and the export modal's Schematic format
+(E, then Schematic; SVG or PNG under its options) all draw
+one from `board.nets` on the spot (`packages/engine/src/schematic/`):
+
+- Parts with three or more pins, and connectors/switches/test points whatever
+  their pin count, are **blocks**: the part's EasyEDA symbol
+  (`parseEasyedaSymbol` in `packages/parts`) with a net label, ground symbol
+  or supply bar on every connected pin, and a cross on pads with no net.
+- Two-pin parts are **wired**: a signal net shared by 2 to 8 of them becomes
+  a wire carrying the net name, with parts hanging up to their supply, down
+  to ground, or continuing in series. Parts between one supply and ground are
+  drawn side by side as a ladder. Each small circuit sits under the block it
+  shares most signal nets with (pure supply parts: the nearest block on that
+  supply on the PCB).
+- Nets that span blocks are joined **by name**. So the schematic is only as
+  readable as the net names, `value` and `role` fields: name nets for what
+  they carry before exporting.
+- Ground and supply nets are recognised by name (`GND`, `AGND`, `VSS`; `3V3`,
+  `+12V`, `VCC`, `VBUS`, `VIN_RAW`...) or by a net class named like
+  `power`/`supply` (`netKind` in `schematic/build.ts`).
+- A part with no LCSC symbol, or whose symbol lacks a connected pad number,
+  is drawn as a generic box; the tool reply lists those.
 
 ## Stock check (part of DRC)
 
