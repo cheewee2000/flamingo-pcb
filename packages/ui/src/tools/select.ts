@@ -45,6 +45,7 @@ import {
   tracksAtPad,
 } from '@flamingo/engine';
 import { hitEditTarget, hitEditTargets, hitTest, sameEditTarget } from '../hit-test.js';
+import type { EditTarget } from '../hit-test.js';
 import type { PointerEvt, Tool, ToolCtx } from './tool.js';
 import { fillOverlayPolygon, strokeOverlayPolygon } from './overlay-utils.js';
 import { drawSilkGroup, drawSilkGroupFrame, silkTextParams } from '../renderer.js';
@@ -72,6 +73,11 @@ export interface ItemDrag {
  * component path exactly: the drop position is `startAt + delta`, where the
  * delta already comes from grid-snapped pointer events (no extra snap here).
  */
+/** Hits with silk groups removed: Cmd/Ctrl-click selects what lies under a graphic. */
+export function ignoringGroups(hits: EditTarget[]): EditTarget[] {
+  return hits.filter((h) => h.kind !== 'silkGroup');
+}
+
 export function itemDropOp(item: ItemDrag, delta: Point): Op {
   const at = { x: item.startAt.x + delta.x, y: item.startAt.y + delta.y };
   return item.kind === 'silk'
@@ -277,7 +283,8 @@ export function createSelectTool(): Tool {
       if (!state.board) return;
       // A selected silk group's handles win over everything under them.
       const sel = state.selection;
-      if (sel && sel.kind === 'silkGroup' && !ev.shift) {
+      // Cmd/Ctrl-click looks through silk groups to whatever is underneath.
+      if (sel && sel.kind === 'silkGroup' && !ev.shift && !ev.ctrlOrCmd) {
         const g = (state.board.silkGroups ?? []).find((x) => x.id === sel.id);
         const handle = g && hitGroupHandle(g, ev.worldRaw, state.view.scale);
         if (g && handle) {
@@ -291,7 +298,9 @@ export function createSelectTool(): Tool {
           return;
         }
       }
-      const hit = hitEditTarget(state.board, ev.worldRaw, state.view.scale, state.layerVisibility);
+      const hit = ev.ctrlOrCmd
+        ? (ignoringGroups(hitEditTargets(state.board, ev.worldRaw, state.view.scale, state.layerVisibility))[0] ?? null)
+        : hitEditTarget(state.board, ev.worldRaw, state.view.scale, state.layerVisibility);
       if (hit && hit.kind === 'silkGroup' && !ev.shift) {
         const g = (state.board.silkGroups ?? []).find((x) => x.id === hit.id);
         if (g) groupGesture = { id: g.id, kind: 'move', start: g, startWorld: ev.world };
@@ -441,7 +450,8 @@ export function createSelectTool(): Tool {
       // ...alongside the broader edit-selection (component shadows its pads).
       // Clicking the same spot again cycles to the next item stacked under
       // the current selection (hole -> keepout -> zone -> hole -> ...).
-      const hits = hitEditTargets(board, ev.worldRaw, state.view.scale, state.layerVisibility);
+      const allHits = hitEditTargets(board, ev.worldRaw, state.view.scale, state.layerVisibility);
+      const hits = ev.ctrlOrCmd ? ignoringGroups(allHits) : allHits;
       // Shift-click on silk toggles it in the silk multi-selection (to group).
       if (ev.shift) {
         const silkHit = hits.find((h) => h.kind === 'silk' || h.kind === 'silkLine' || h.kind === 'silkGroup');

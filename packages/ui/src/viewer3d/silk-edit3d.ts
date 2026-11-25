@@ -8,6 +8,9 @@
  *    so the side panel, Delete, R, ⌘G/⌘⇧G all work while the 3D tab is up).
  *  - Drag a group to move it; drag a corner handle to resize (aspect locked);
  *    drag the knob to rotate (Shift snaps 15°).
+ *  - Loose silk text / lines are selectable too (text can be dragged). A
+ *    directly-hit loose item wins over a group's bounding box, and
+ *    Cmd/Ctrl-click ignores groups entirely to reach whatever is underneath.
  *  - Anything else falls through to OrbitControls, so orbiting is unchanged.
  *
  * Picking casts the pointer ray onto the silk plane of the side the camera is
@@ -20,7 +23,8 @@
 import * as THREE from 'three';
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { Op, Point, SilkGroup } from '@flamingo/engine';
-import { silkGroupContains, silkGroupSize, silkGroupWorld } from '@flamingo/engine';
+import { silkGroupContains, silkGroupSize, silkGroupWorld, silkTextCorners } from '@flamingo/engine';
+import { hitEditTargets } from '../hit-test.js';
 import type { AppState } from '../state.js';
 import { SILK_KEY } from '../state.js';
 import { groupHandleGeometry, HANDLE_PX, ROTATE_RADIUS_PX } from '../silk-handles.js';
@@ -68,6 +72,8 @@ export function attachSilkEditing(opts: {
   let gesture: (GroupGesture & { z: number }) | null = null;
   let preview: SilkGroup | null = null;
   let down: { x: number; y: number } | null = null;
+  /** Loose silk text being dragged: start position and the live position. */
+  let textDrag: { id: string; startAt: Point; startWorld: Point; z: number; at: Point } | null = null;
 
   const rect = (): DOMRect => canvas.getBoundingClientRect();
 
@@ -142,6 +148,22 @@ export function attachSilkEditing(opts: {
     return best;
   }
 
+  /** Loose silk text or line on the camera-facing layer under the client point. */
+  function looseSilkAt(clientX: number, clientY: number): { kind: 'silk' | 'silkLine'; id: string } | null {
+    const s = hooks.getState();
+    const board = s.board;
+    if (!board || !silkVisible()) return null;
+    const layer = viewingTop() ? 'F.Silk' : 'B.Silk';
+    const z = silkZ(layer);
+    const p = rayPoint(clientX, clientY, z);
+    if (!p) return null;
+    for (const h of hitEditTargets(board, p, pxPerMm(p, z), s.layerVisibility)) {
+      if (h.kind === 'silk' && board.silk.find((t) => t.id === h.id)?.layer === layer) return h;
+      if (h.kind === 'silkLine' && (board.silkLines ?? []).find((l) => l.id === h.id)?.layer === layer) return h;
+    }
+    return null;
+  }
+
   // ---- overlay: selection frame + handles, and the live drag preview ----
 
   // Shared materials: refresh() runs on every camera change, so only
@@ -201,12 +223,37 @@ export function attachSilkEditing(opts: {
     return out;
   }
 
+  /** Outline of the selected loose text (at its live drag position) or line. */
+  function looseFrameObjects(): THREE.Object3D[] {
+    const s = hooks.getState();
+    const sel = s.selection;
+    if (!s.board || !sel) return [];
+    if (sel.kind === 'silk') {
+      const t = s.board.silk.find((x) => x.id === sel.id);
+      if (!t) return [];
+      const z = silkZ(t.layer);
+      const at = textDrag && textDrag.id === t.id ? textDrag.at : t.at;
+      const pts = silkTextCorners(at, t.height, t.rotation, t.text).map((p) => new THREE.Vector3(p.x, p.y, z));
+      return [new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), lineMat())];
+    }
+    if (sel.kind === 'silkLine') {
+      const l = (s.board.silkLines ?? []).find((x) => x.id === sel.id);
+      if (!l) return [];
+      const z = silkZ(l.layer);
+      const pts = [new THREE.Vector3(l.start.x, l.start.y, z), new THREE.Vector3(l.end.x, l.end.y, z)];
+      return [new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat())];
+    }
+    return [];
+  }
+
   function refresh(): void {
     for (const child of [...overlay.children]) {
       overlay.remove(child);
       disposeGroup(child);
     }
     if (!silkVisible()) return;
+    const loose = looseFrameObjects();
+    if (loose.length) overlay.add(...loose);
     const g = preview ?? selectedGroup();
     if (!g) return;
     if (preview) overlay.add(...previewObjects(preview));
@@ -218,7 +265,29 @@ export function attachSilkEditing(opts: {
   function onPointerDown(ev: PointerEvent): void {
     if (!isActive() || ev.target !== canvas || ev.button !== 0) return;
     const sel = selectedGroup();
-    const handle = sel && !ev.shiftKey ? handleAt(sel, ev.clientX, ev.clientY) : null;
+    const throughGroups = ev.metaKey || ev.ctrlKey;
+    const handle = sel && !ev.shiftKey && !throughGroups ? handleAt(sel, ev.clientX, ev.clientY) : null;
+    if (!handle) {
+      const loose = looseSilkAt(ev.clientX, ev.clientY);
+      if (loose) {
+        ev.stopPropagation();
+        ev.preventDefault();
+        down = { x: ev.clientX, y: ev.clientY };
+        hooks.setState({ selection: loose, silkSelection: [], multiSelection: [] });
+        const t = loose.kind === 'silk' ? hooks.getState().board?.silk.find((x) => x.id === loose.id) : undefined;
+        const z = t ? silkZ(t.layer) : 0;
+        const start = t ? rayPoint(ev.clientX, ev.clientY, z) : null;
+        if (t && start) {
+          controls.enabled = false;
+          textDrag = { id: t.id, startAt: t.at, startWorld: snapPoint(start, hooks.getState()), z, at: t.at };
+          window.addEventListener('pointermove', onPointerMove);
+          window.addEventListener('pointerup', onPointerUp);
+        }
+        refresh();
+        return;
+      }
+      if (throughGroups) return; // nothing loose here: orbit
+    }
     let g: SilkGroup | null = null;
     let kind: GroupGesture['kind'] = 'move';
     let corner: number | undefined;
@@ -243,6 +312,15 @@ export function attachSilkEditing(opts: {
   }
 
   function onPointerMove(ev: PointerEvent): void {
+    if (textDrag && down) {
+      if (Math.hypot(ev.clientX - down.x, ev.clientY - down.y) <= DRAG_THRESHOLD_PX) return;
+      const raw = rayPoint(ev.clientX, ev.clientY, textDrag.z);
+      if (!raw) return;
+      const w = snapPoint(raw, hooks.getState());
+      textDrag.at = { x: textDrag.startAt.x + w.x - textDrag.startWorld.x, y: textDrag.startAt.y + w.y - textDrag.startWorld.y };
+      refresh();
+      return;
+    }
     if (!gesture || !down) return;
     if (Math.hypot(ev.clientX - down.x, ev.clientY - down.y) <= DRAG_THRESHOLD_PX && !preview) return;
     const raw = rayPoint(ev.clientX, ev.clientY, gesture.z);
@@ -258,6 +336,14 @@ export function attachSilkEditing(opts: {
     controls.enabled = true;
     const gst = gesture;
     const moved = down !== null && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > DRAG_THRESHOLD_PX;
+    if (textDrag) {
+      const td = textDrag;
+      textDrag = null;
+      down = null;
+      if (moved) hooks.sendOp({ op: 'editSilkText', id: td.id, text: { at: td.at } });
+      refresh();
+      return;
+    }
     gesture = null;
     preview = null;
     down = null;
@@ -279,7 +365,7 @@ export function attachSilkEditing(opts: {
     const s = hooks.getState();
     const sel = s.selection;
     if (!sel || (sel.kind !== 'silkGroup' && sel.kind !== 'silk' && sel.kind !== 'silkLine')) return;
-    if (groupAt(ev.clientX, ev.clientY) === null) hooks.setState({ selection: null, silkSelection: [] });
+    if (groupAt(ev.clientX, ev.clientY) === null && looseSilkAt(ev.clientX, ev.clientY) === null) hooks.setState({ selection: null, silkSelection: [] });
   }
   // Track click-vs-orbit for clicks OrbitControls receives (no gesture armed).
   let orbitDown: { x: number; y: number } | null = null;
