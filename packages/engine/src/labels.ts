@@ -53,6 +53,7 @@
  */
 
 import type { Board, ComponentInst, Point } from './types.js';
+import { allSilkTexts } from './silkgroup.js';
 import {
   bboxOf,
   componentTransformPoints,
@@ -325,7 +326,7 @@ function buildSolveContext(board: Board): SolveContext {
       silkTexts[cc.side === 'bottom' ? 'bottom' : 'top'].push(textBBox(at, rot, item.text.length, item.height));
     }
   }
-  for (const s of board.silk) {
+  for (const s of allSilkTexts(board)) {
     if (s.text.trim().length === 0) continue;
     silkTexts[s.layer === 'B.Silk' ? 'bottom' : 'top'].push(textBBox(s.at, s.rotation, s.text.length, s.height));
   }

@@ -9,8 +9,29 @@
  * highlight and the status bar update unconditionally on every state change.
  */
 
-import type { Board, ComponentInst, DrcViolation, Keepout, LayerId, MountingHole, Op, Point, SilkText, Zone } from '@flamingo/engine';
-import { copperLayersOf } from '@flamingo/engine';
+import type {
+  Board,
+  ComponentInst,
+  DrcViolation,
+  Keepout,
+  LayerId,
+  MountingHole,
+  Op,
+  Point,
+  SilkGroup,
+  SilkLine,
+  SilkText,
+  Zone,
+} from '@flamingo/engine';
+import {
+  centerSilkGroupAt,
+  copperLayersOf,
+  rescaleSilkGroupAboutCenter,
+  setSilkGroupMirror,
+  setSilkGroupRotation,
+  silkGroupCenter,
+  silkGroupSize,
+} from '@flamingo/engine';
 import {
   DIMS_KEY,
   LABEL_NETS_KEY,
@@ -75,6 +96,8 @@ export interface PanelActions {
   sendOp(op: Op): void;
   /** Center the view on a board point (DRC violation click-through). */
   focusPoint(p: Point): void;
+  /** Open a file picker and import the chosen SVG as a silk group on `layer`. */
+  importSvg(layer: 'F.Silk' | 'B.Silk'): void;
 }
 
 // Swatch colors for the two label pseudo-layers, matching the overlay colors in
@@ -134,6 +157,7 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
   let lastToolOptionsTool: string | null = null;
   let lastSelection: AppState['selection'] = null;
   let lastPropsBoard: AppState['board'] = null;
+  let lastSilkSelection: AppState['silkSelection'] = [];
   const netRows = new Map<string, HTMLElement>();
   const bomRowsByRefdes = new Map<string, HTMLElement>();
   let measureReadoutEl: HTMLElement | null = null;
@@ -644,6 +668,10 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
         return null; // editable form built by buildKeepoutProps
       case 'silk':
         return null; // editable form built by buildSilkProps
+      case 'silkLine':
+        return null; // built by buildSilkLineProps
+      case 'silkGroup':
+        return null; // built by buildSilkGroupProps
       case 'dimension': {
         const dim = board.dimensions.find((x) => x.id === sel.id);
         if (!dim) return null;
@@ -679,6 +707,24 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
     }
     const sel = state.selection;
     const board = state.board;
+    if (board && (state.silkSelection ?? []).length > 0) {
+      buildSilkMultiProps(state.silkSelection, board);
+      return;
+    }
+    if (sel && board && sel.kind === 'silkGroup') {
+      const g = (board.silkGroups ?? []).find((x) => x.id === sel.id);
+      if (g) {
+        buildSilkGroupProps(g);
+        return;
+      }
+    }
+    if (sel && board && sel.kind === 'silkLine') {
+      const l = board.silkLines.find((x) => x.id === sel.id);
+      if (l) {
+        buildSilkLineProps(l);
+        return;
+      }
+    }
     if (sel && board && sel.kind === 'component') {
       const c = board.components.find((x) => x.refdes === sel.refdes);
       if (c) {
@@ -771,6 +817,90 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
       numberRow('x mm', s.at.x, (v) => edit({ at: { x: v, y: s.at.y } })),
       numberRow('y mm', s.at.y, (v) => edit({ at: { x: s.at.x, y: v } })),
     );
+  }
+
+  function actionButton(label: string, onClick: () => void, title?: string): HTMLButtonElement {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'props-center';
+    b.textContent = label;
+    if (title) b.title = title;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function hintRow(text: string): HTMLElement {
+    const d = document.createElement('div');
+    d.className = 'props-desc';
+    d.textContent = text;
+    return d;
+  }
+
+  function buildSilkGroupProps(g: SilkGroup): void {
+    const id = g.id;
+    const edit = (patch: Partial<Omit<SilkGroup, 'id'>>): void => actions.sendOp({ op: 'editSilkGroup', id, group: patch });
+    const c = silkGroupCenter(g);
+    const size = silkGroupSize(g);
+    const content = [
+      g.fills.length ? `${g.fills.length} shape${g.fills.length === 1 ? '' : 's'}` : '',
+      g.lines.length ? `${g.lines.length} line${g.lines.length === 1 ? '' : 's'}` : '',
+      g.texts.length ? `${g.texts.length} text${g.texts.length === 1 ? '' : 's'}` : '',
+    ].filter(Boolean);
+    els.propsPanel.append(
+      staticRow('type', 'silk group'),
+      textRow('name', g.name, (v) => v.trim() && edit({ name: v.trim() })),
+      selectRow('layer', g.layer, ['F.Silk', 'B.Silk'], (v) => edit({ layer: v as SilkGroup['layer'] })),
+      numberRow('x mm', c.x, (v) => edit(centerSilkGroupAt(g, { x: v, y: c.y }))),
+      numberRow('y mm', c.y, (v) => edit(centerSilkGroupAt(g, { x: c.x, y: v }))),
+      numberRow('width mm', size.width, (v) => v > 0 && edit(rescaleSilkGroupAboutCenter(g, (g.scale * v) / size.width))),
+      numberRow('height mm', size.height, (v) => v > 0 && edit(rescaleSilkGroupAboutCenter(g, (g.scale * v) / size.height))),
+      numberRow('rot °', g.rotation, (v) => edit(setSilkGroupRotation(g, v)), 15),
+      checkboxRow('mirror', !!g.mirror, (v) => edit(setSilkGroupMirror(g, v))),
+    );
+    // Each text item stays editable inside the group.
+    g.texts.forEach((t, i) => {
+      els.propsPanel.appendChild(
+        textRow(g.texts.length === 1 ? 'text' : `text ${i + 1}`, t.text, (v) => {
+          if (v.trim() === '') return;
+          edit({ texts: g.texts.map((x, j) => (j === i ? { ...x, text: v } : x)) });
+        }),
+      );
+    });
+    els.propsPanel.append(
+      staticRow('contents', content.join(', ') || 'empty'),
+      actionButton('ungroup', () => actions.sendOp({ op: 'ungroupSilk', id }), 'Split into loose items (⌘⇧G)'),
+      hintRow('Drag to move · corners resize · knob rotates (Shift snaps 15°) · R turns 90°.'),
+    );
+  }
+
+  function buildSilkLineProps(l: SilkLine): void {
+    const len = Math.hypot(l.end.x - l.start.x, l.end.y - l.start.y);
+    els.propsPanel.append(
+      staticRow('type', 'silk line'),
+      staticRow('layer', l.layer),
+      staticRow('length', `${len.toFixed(2)} mm`),
+      staticRow('width', `${l.width} mm`),
+      actionButton('make group', () => actions.sendOp({ op: 'groupSilk', ids: [l.id] }), 'Turn into a movable silk group (⌘G)'),
+      hintRow('Shift-click or drag a box to select more silk, then ⌘G to group.'),
+    );
+  }
+
+  function buildSilkMultiProps(ids: string[], board: Board): void {
+    const layers = new Set<string>();
+    for (const id of ids) {
+      const item =
+        board.silk.find((x) => x.id === id) ??
+        board.silkLines.find((x) => x.id === id) ??
+        (board.silkGroups ?? []).find((x) => x.id === id);
+      if (item) layers.add(item.layer);
+    }
+    els.propsPanel.append(staticRow('selected', `${ids.length} silk item${ids.length === 1 ? '' : 's'}`));
+    if (layers.size > 1) {
+      els.propsPanel.appendChild(hintRow('Items are on both silk layers; a group must be on one layer.'));
+    } else {
+      els.propsPanel.appendChild(actionButton('group', () => actions.sendOp({ op: 'groupSilk', ids }), 'Combine into one group (⌘G)'));
+    }
+    els.propsPanel.appendChild(hintRow('Shift-click adds/removes items. Del removes them all.'));
   }
 
   function buildKeepoutProps(k: Keepout): void {
@@ -1184,6 +1314,17 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
       }
       case 'silk': {
         appendHint('Click to place a text label. Enter commits, Esc cancels.');
+        const row = document.createElement('div');
+        row.className = 'tool-options-row';
+        for (const layer of ['F.Silk', 'B.Silk'] as const) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = `Import SVG → ${layer}`;
+          b.title = 'Add vector art as an editable silk group (or drop an .svg onto the board)';
+          b.addEventListener('click', () => actions.importSvg(layer));
+          row.appendChild(b);
+        }
+        els.toolOptions.appendChild(row);
         break;
       }
       default:
@@ -1756,9 +1897,10 @@ export function initPanels(els: PanelEls, toolManager: ToolManager, actions: Pan
       lastToolOptionsTool = state.activeTool;
       buildToolOptions(state);
     }
-    if (state.selection !== lastSelection || state.board !== lastPropsBoard) {
+    if (state.selection !== lastSelection || state.board !== lastPropsBoard || state.silkSelection !== lastSilkSelection) {
       lastSelection = state.selection;
       lastPropsBoard = state.board;
+      lastSilkSelection = state.silkSelection;
       buildProps(state);
     }
     if (state.layerVisibility !== lastLayerVis || state.hiddenCopper !== lastHiddenCopper) {

@@ -42,6 +42,16 @@ node packages/server/dist/cli.js serve board.flamingo   # prints "Flamingo v0.1.
    sizes per net.
 4. **Board features.** `add_zone` (copper pour), `add_mounting_hole`,
    `add_silk_text`, `add_keepout`. `remove_item` by id.
+   **Silk graphics:** `add_silk_graphic` imports an SVG (file path or inline)
+   as one editable *silk group* -- filled shapes become real filled Gerber
+   regions (no hatching), strokes become lines. `edit_silk_group` moves /
+   resizes (width, height or scale, about the centre) / rotates / mirrors /
+   re-layers a group and edits the text inside it; `group_silk` and
+   `ungroup_silk` combine or explode silk items. An `add_silk_line` polyline
+   is stored as one group. In the UI, drag a group to move it, drag a corner
+   to resize, drag the knob to rotate (Shift snaps 15°), Shift-click or box-
+   select silk then ⌘G to group (⌘⇧G ungroups) -- in the 2D *and* 3D views.
+   Drop an `.svg` onto the board to import it.
 5. **Route.** `autoroute` (Freerouting; `passes`, optional `nets`). `unroute` /
    `get_ratsnest` to iterate.
 6. **Check.** `run_drc` returns violations as data (never a tool error).

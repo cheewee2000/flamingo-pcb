@@ -40,6 +40,10 @@ import {
   padOutline,
   padWorld,
   pointInPolygon,
+  allSilkFills,
+  allSilkLines,
+  allSilkTexts,
+  fillShapes,
 } from "@flamingo/engine";
 import { strokeText } from "@flamingo/fab";
 import type { MeshGroup } from "./objmesh.js";
@@ -849,10 +853,16 @@ function detailSolids(
       top,
     );
   }
-  for (const line of inc.board ? board.silkLines : []) {
+  for (const f of inc.board ? allSilkFills(board) : []) {
+    const top = f.layer !== "B.Silk";
+    for (const shape of fillShapes(f.rings)) {
+      silk(f.layer, lineLoop(shape.outer), shape.holes.map(lineLoop), top);
+    }
+  }
+  for (const line of inc.board ? allSilkLines(board) : []) {
     silkStroke(line.start, line.end, line.width, line.layer !== "B.Silk");
   }
-  for (const s of inc.board ? board.silk : []) {
+  for (const s of inc.board ? allSilkTexts(board) : []) {
     const top = s.layer !== "B.Silk";
     silkPolys(
       strokeText(s.text, s.at, s.height, s.rotation, !top),

@@ -6,8 +6,8 @@
  */
 
 import './style.css';
-import type { Board, Op, Point } from '@flamingo/engine';
-import { boardBBox, padOutline, ratsnest } from '@flamingo/engine';
+import type { Board, Op, Point, SilkGroup } from '@flamingo/engine';
+import { boardBBox, padOutline, ratsnest, svgToSilk } from '@flamingo/engine';
 import { store, type AppState } from './state.js';
 import { prepareBoard } from './board-prep.js';
 import { attachViewControls, centerOn, fitToBoard, flipView, screenToWorld } from './view.js';
@@ -34,12 +34,67 @@ const viewportEl = document.getElementById('viewport') as HTMLElement;
 // Live sync -- set up first so `ctx.sendOp` exists before tools are created.
 // ---------------------------------------------------------------------------
 
+/** Silk-group count before an SVG import was sent; the next board with more groups selects the new one. */
+let pendingImportGroupCount: number | null = null;
+
+/**
+ * Import SVG source as a silk group. Placed centred on `at` (default: the
+ * board centre), 10 mm tall but never more than 60% of the board's smaller
+ * side, so it lands visible and grabbable; resize it with the handles.
+ */
+function importSvgText(text: string, fileName: string, layer: 'F.Silk' | 'B.Silk', at?: Point): void {
+  const board = store.get().board;
+  if (!board) return;
+  const bb = boardBBox(board);
+  const span = Math.min(bb.maxX - bb.minX, bb.maxY - bb.minY);
+  const height = Number.isFinite(span) && span > 0 ? Math.min(10, span * 0.6) : 10;
+  let art: ReturnType<typeof svgToSilk>;
+  try {
+    art = svgToSilk(text, { height });
+  } catch (err) {
+    showToast(`SVG import failed: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    return;
+  }
+  const centre = at ?? { x: (bb.minX + bb.maxX) / 2, y: (bb.minY + bb.maxY) / 2 };
+  const group: Omit<SilkGroup, 'id'> = {
+    name: fileName.replace(/\.svg$/i, '') || 'Graphic',
+    layer,
+    at: { x: Math.round(centre.x * 100) / 100, y: Math.round(centre.y * 100) / 100 },
+    rotation: 0,
+    scale: 1,
+    fills: art.fills,
+    lines: art.lines,
+    texts: [],
+  };
+  pendingImportGroupCount = (board.silkGroups ?? []).length;
+  wsApi.sendOp({ op: 'addSilkGroup', group });
+  for (const w of art.warnings) showToast(w, 'info');
+}
+
+function pickSvg(layer: 'F.Silk' | 'B.Silk'): void {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.svg,image/svg+xml';
+  input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    if (file) void file.text().then((t) => importSvgText(t, file.name, layer));
+  });
+  input.click();
+}
+
 function onBoard(rawBoard: Board, file?: string): void {
   document.title = file ? `${file} — Flamingo` : 'Flamingo';
   const board = prepareBoard(rawBoard);
   const state = store.get();
   const ratsnestLines = ratsnest(board);
   const patch: Partial<AppState> = { board, ratsnestLines };
+  // Select a just-imported SVG graphic so its handles show straight away.
+  const groups = board.silkGroups ?? [];
+  if (pendingImportGroupCount !== null && groups.length > pendingImportGroupCount) {
+    patch.selection = { kind: 'silkGroup', id: groups[groups.length - 1]!.id };
+    patch.silkSelection = [];
+    pendingImportGroupCount = null;
+  }
   if (!state.hasFitOnce) {
     const rect = canvas.getBoundingClientRect();
     const bbox = boardBBox(board);
@@ -205,8 +260,32 @@ const panels = initPanels(
     drcList: document.getElementById('drc-list')!,
   },
   toolManager,
-  { focusComponent, focusNet, boardOpened, sendOp: (op) => wsApi.sendOp(op), focusPoint },
+  { focusComponent, focusNet, boardOpened, sendOp: (op) => wsApi.sendOp(op), focusPoint, importSvg: pickSvg },
 );
+
+// Drop an .svg anywhere on the board view to import it as a silk graphic at
+// the drop point, on the silk layer facing the viewer.
+viewportEl.addEventListener('dragover', (ev) => {
+  if (ev.dataTransfer && Array.from(ev.dataTransfer.items).some((i) => i.kind === 'file')) {
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = 'copy';
+  }
+});
+viewportEl.addEventListener('drop', (ev) => {
+  const file = Array.from(ev.dataTransfer?.files ?? []).find((f: File) => /\.svg$/i.test(f.name) || f.type === 'image/svg+xml');
+  if (!file) return;
+  ev.preventDefault();
+  const state = store.get();
+  const layer = state.view.flipped ? 'B.Silk' : 'F.Silk';
+  let at: Point | undefined;
+  if (currentView !== '3d') {
+    const rect = canvas.getBoundingClientRect();
+    at = screenToWorld(state.view, { x: ev.clientX - rect.left, y: ev.clientY - rect.top });
+  } else {
+    at = viewer3d.pickBoardPoint(ev.clientX, ev.clientY) ?? undefined;
+  }
+  void file.text().then((t: string) => importSvgText(t, file.name, layer, at));
+});
 
 const renderer = createRenderer(canvas, () => store.get(), (ctx2d, view, state) => {
   toolManager.active().drawOverlay?.(ctx2d, view, state);
@@ -231,7 +310,21 @@ const viewControls = attachViewControls(
 
 const viewer3dCanvas = document.getElementById('viewer3d-canvas') as HTMLCanvasElement;
 const viewer3dHud = document.getElementById('viewer3d-hud') as HTMLElement;
-const viewer3d = createViewer3D(viewer3dCanvas, viewportEl);
+const viewer3d = createViewer3D(viewer3dCanvas, viewportEl, {
+  getState: () => store.get(),
+  setState: (patch) => store.set(patch),
+  sendOp: (op) => wsApi.sendOp(op),
+});
+// Keep the 3D selection frame in step with the shared selection.
+let lastSel3d: AppState['selection'] = null;
+let lastVis3d: AppState['layerVisibility'] | null = null;
+store.subscribe((state) => {
+  if (state.selection !== lastSel3d || state.layerVisibility !== lastVis3d) {
+    lastSel3d = state.selection;
+    lastVis3d = state.layerVisibility;
+    viewer3d.refreshSelection();
+  }
+});
 
 // Keep the viewer's board in sync (rebuilds itself only when the 3D tab is up).
 let lastBoard3d: Board | null = null;

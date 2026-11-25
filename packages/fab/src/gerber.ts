@@ -41,6 +41,10 @@ import {
   allHoles,
   capsulePolygon,
   RULESETS,
+  allSilkFills,
+  allSilkLines,
+  allSilkTexts,
+  fillShapes,
 } from '@flamingo/engine';
 import { strokeText } from './strokefont.js';
 import { buildDrills } from './excellon.js';
@@ -377,6 +381,20 @@ function buildSilk(b: Board, side: 'F' | 'B'): string {
     for (const poly of polys) g.drawPolyline(poly);
   };
 
+  // Silk-group artwork as filled regions, FIRST: a hole is an LPC region
+  // that clears whatever was drawn before it, so emitting fills ahead of all
+  // stroked silk keeps holes from eating text and outlines. Within a fill the
+  // shapes come outermost-first (fillShapes depth order), so an island inside
+  // a hole is drawn dark again after that hole is cleared.
+  for (const f of allSilkFills(b)) {
+    if (f.layer !== silkLayer) continue;
+    for (const shape of fillShapes(f.rings)) {
+      g.region(shape.outer, true);
+      for (const hole of shape.holes) g.region(hole, false);
+    }
+  }
+  g.resetDark();
+
   for (const comp of b.components) {
     if (comp.side !== compSide) continue;
     const mirror = comp.side === 'bottom';
@@ -418,13 +436,13 @@ function buildSilk(b: Board, side: 'F' | 'B'): string {
   // Board-level silk text. B.Silk text is mirrored (x -> -x about its anchor,
   // before rotation) like bottom-component text, so it reads correctly on the
   // fabbed board's underside — matching the 3D viewer's B.Silk convention.
-  for (const s of b.silk) {
+  for (const s of allSilkTexts(b)) {
     if (s.layer !== silkLayer) continue;
     strokes(strokeText(s.text, s.at, s.height, s.rotation, side === 'B'), s.height * 0.12);
   }
 
   // Board-level silk lines (mechanical reference outlines) stroked at their width.
-  for (const line of b.silkLines) {
+  for (const line of allSilkLines(b)) {
     if (line.layer !== silkLayer) continue;
     g.select(silkAperture(line.width));
     g.drawSeg({ type: 'line', start: line.start, end: line.end });

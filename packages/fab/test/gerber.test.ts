@@ -667,3 +667,45 @@ describe('generateGerbers - zone island ordering', () => {
     assertGerberParses(gtl);
   });
 });
+
+describe('generateGerbers - silk groups', () => {
+  it('emits group art as filled regions (holes clear) before stroked silk, and parses', () => {
+    const b = newBoard('art', 2);
+    const sq = (h: number): Point[] => [
+      { x: -h, y: -h },
+      { x: h, y: -h },
+      { x: h, y: h },
+      { x: -h, y: h },
+    ];
+    b.silk.push({ id: 'T', layer: 'F.Silk', at: { x: 0, y: 0 }, text: 'A', height: 1, rotation: 0 });
+    b.silkGroups = [
+      {
+        id: 'G',
+        name: 'logo',
+        layer: 'F.Silk',
+        at: { x: 10, y: 10 },
+        rotation: 0,
+        scale: 2,
+        fills: [[sq(2), sq(1)]],
+        lines: [{ start: { x: -2, y: -3 }, end: { x: 2, y: -3 }, width: 0.1 }],
+        texts: [{ text: 'B', at: { x: 0, y: 3 }, height: 1, rotation: 0 }],
+      },
+    ];
+    const { files } = generateGerbers(b);
+    const gto = [...files.entries()].find(([n]) => n.endsWith('.GTO'))![1];
+    assertGerberParses(gto);
+    const body = gto.split('\n');
+    const regions = body.filter((l) => l === 'G36*').length;
+    expect(regions).toBe(2); // outer + hole
+    const firstRegion = body.indexOf('G36*');
+    const clear = body.indexOf('%LPC*%');
+    const lastDark = body.lastIndexOf('%LPD*%');
+    expect(clear).toBeGreaterThan(firstRegion); // the hole is cleared after the solid
+    expect(lastDark).toBeGreaterThan(clear); // and polarity returns to dark before strokes
+    // Group transform applied: the solid's 4x4 square scaled by 2 lands at 10±4.
+    expect(gto).toContain('X6000000Y6000000D02*');
+    // B.Silk legend is untouched by an F.Silk group.
+    const gbo = [...files.entries()].find(([n]) => n.endsWith('.GBO'))![1];
+    expect(gbo).not.toContain('G36*');
+  });
+});

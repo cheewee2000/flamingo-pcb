@@ -18,8 +18,44 @@ export type {
   SilkText,
   Dimension,
   SilkLine,
+  SilkGroup,
+  SilkGroupLine,
+  SilkGroupText,
   Board,
 } from './types.js';
+
+// Editable silk graphics (groups) + SVG import
+export {
+  SILK_TEXT_ADVANCE,
+  silkGroupToWorld,
+  silkGroupToLocal,
+  silkGroupRotation,
+  silkGroupWorld,
+  allSilkLines,
+  allSilkTexts,
+  allSilkFills,
+  silkTextCorners,
+  silkGroupLocalBounds,
+  silkGroupCorners,
+  silkGroupSize,
+  silkGroupCenter,
+  silkGroupContains,
+  fillShapes,
+  moveSilkGroup,
+  scaleSilkGroupFromCorner,
+  rotateSilkGroup,
+  rescaleSilkGroupAboutCenter,
+  setSilkGroupMirror,
+  setSilkGroupRotation,
+  centerSilkGroupAt,
+  silkGroupRotateHandle,
+  localizeSilkContents,
+  silkGroupWorldContents,
+  MIN_SILK_GROUP_SCALE,
+} from './silkgroup.js';
+export type { FillShape, WorldSilkContents } from './silkgroup.js';
+export { svgToSilk, parsePathData, parseTransform } from './svg.js';
+export type { SvgToSilkOptions, SvgToSilkResult } from './svg.js';
 
 // Re-export board functions
 export { newBoard, serializeBoard, parseBoard } from './board.js';

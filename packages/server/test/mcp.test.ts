@@ -97,6 +97,10 @@ const TOOL_NAMES = [
   'add_mounting_hole',
   'add_silk_text',
   'add_silk_line',
+  'add_silk_graphic',
+  'edit_silk_group',
+  'group_silk',
+  'ungroup_silk',
   'remove_item',
   'add_track',
   'add_via',
@@ -146,11 +150,11 @@ describe('MCP endpoint', () => {
     await rm(projectDir, { recursive: true, force: true });
   });
 
-  it('tools/list returns all 37 core tools', async () => {
+  it('tools/list returns all core tools', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([...TOOL_NAMES].sort());
-    expect(tools).toHaveLength(39);
+    expect(tools).toHaveLength(43);
   });
 
   it('place_component (mocked part) then get_board_state reflects it', async () => {
@@ -388,7 +392,7 @@ describe('MCP endpoint', () => {
     expect(doc.board.silkLines).toHaveLength(0);
   });
 
-  it('add_silk_line (polyline) creates N-1 connected segments in one call', async () => {
+  it('add_silk_line (polyline) creates ONE silk group of N-1 connected segments', async () => {
     const result = await client.callTool({
       name: 'add_silk_line',
       arguments: {
@@ -404,10 +408,15 @@ describe('MCP endpoint', () => {
       },
     });
     expect(result.isError).toBeFalsy();
-    // 5 points -> 4 segments (a closed rectangle outline).
-    expect(doc.board.silkLines).toHaveLength(4);
-    expect(doc.board.silkLines.every((l) => l.width === 0.2)).toBe(true);
-    expect(textOf(result as any)).toContain('4 silk lines');
+    // 5 points -> 4 segments (a closed rectangle outline), stored as one group.
+    expect(doc.board.silkLines).toHaveLength(0);
+    expect(doc.board.silkGroups).toHaveLength(1);
+    const g = doc.board.silkGroups![0]!;
+    expect(g.lines).toHaveLength(4);
+    expect(g.lines.every((l) => l.width === 0.2)).toBe(true);
+    // Local frame is centred on the outline; the transform puts it back in place.
+    expect(g.at).toEqual({ x: 5, y: 2.5 });
+    expect(textOf(result as any)).toContain('4 segments');
   });
 
   it('add_silk_line (polyline) is a single undo step', async () => {
@@ -418,11 +427,69 @@ describe('MCP endpoint', () => {
         polyline: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 5 }],
       },
     });
-    expect(doc.board.silkLines).toHaveLength(2); // 3 points -> 2 segments
+    expect(doc.board.silkGroups?.[0]?.lines).toHaveLength(2); // 3 points -> 2 segments
 
     const undoResult = await client.callTool({ name: 'undo', arguments: {} });
     expect(undoResult.isError).toBeFalsy();
-    expect(doc.board.silkLines).toHaveLength(0); // both segments gone in one undo
+    expect(doc.board.silkGroups ?? []).toHaveLength(0); // whole outline gone in one undo
+  });
+
+  it('add_silk_line with two points (or start+end) stays a loose silk line', async () => {
+    const result = await client.callTool({
+      name: 'add_silk_line',
+      arguments: { layer: 'F.Silk', polyline: [{ x: 0, y: 0 }, { x: 3, y: 0 }] },
+    });
+    expect(result.isError).toBeFalsy();
+    expect(doc.board.silkLines).toHaveLength(1);
+    expect(doc.board.silkGroups ?? []).toHaveLength(0);
+  });
+
+  it('add_silk_graphic imports inline SVG as one filled group, sized and centred', async () => {
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 10">' +
+      '<path d="M0 0H20V10H0Z M5 2H15V8H5Z" fill="#000"/></svg>';
+    const result = await client.callTool({
+      name: 'add_silk_graphic',
+      arguments: { layer: 'F.Silk', svg, x: 12, y: 7, width: 8 },
+    });
+    expect(result.isError).toBeFalsy();
+    const g = doc.board.silkGroups![0]!;
+    expect(g.fills).toHaveLength(1);
+    expect(g.fills[0]).toHaveLength(2); // outer + hole (even-odd)
+    expect(g.at).toEqual({ x: 12, y: 7 });
+    expect(textOf(result as any)).toContain('8 x 4 mm');
+  });
+
+  it('edit_silk_group moves, resizes about the centre, rotates and edits text', async () => {
+    await client.callTool({ name: 'add_silk_text', arguments: { layer: 'F.Silk', x: 10, y: 10, text: 'V2', height: 1 } });
+    await client.callTool({
+      name: 'add_silk_line',
+      arguments: { layer: 'F.Silk', start: { x: 8, y: 8 }, end: { x: 12, y: 8 } },
+    });
+    const ids = [doc.board.silk[0]!.id, doc.board.silkLines[0]!.id];
+    const grouped = await client.callTool({ name: 'group_silk', arguments: { ids, name: 'Badge' } });
+    expect(grouped.isError).toBeFalsy();
+    expect(doc.board.silk).toHaveLength(0);
+    expect(doc.board.silkLines).toHaveLength(0);
+    const id = doc.board.silkGroups![0]!.id;
+
+    const edited = await client.callTool({
+      name: 'edit_silk_group',
+      arguments: { id, x: 20, y: 30, scale: 2, rotation: 90, textEdits: [{ index: 0, text: 'V3' }] },
+    });
+    expect(edited.isError).toBeFalsy();
+    const g = doc.board.silkGroups![0]!;
+    expect(g.scale).toBe(2);
+    expect(g.rotation).toBe(90);
+    expect(g.texts[0]!.text).toBe('V3');
+    expect(textOf(edited as any)).toContain('centre (20, 30)');
+
+    const ungrouped = await client.callTool({ name: 'ungroup_silk', arguments: { id } });
+    expect(ungrouped.isError).toBeFalsy();
+    expect(doc.board.silkGroups ?? []).toHaveLength(0);
+    expect(doc.board.silk[0]!.text).toBe('V3');
+    expect(doc.board.silk[0]!.height).toBeCloseTo(2);
+    expect(doc.board.silkLines[0]!.width).toBeCloseTo(0.3);
   });
 
   it('add_silk_line rejects a polyline with fewer than 2 points', async () => {

@@ -339,6 +339,37 @@ describe('runDRC', () => {
     expect(violations[0].items).toEqual(expect.arrayContaining(['SL1', 'R1.1']));
   });
 
+  it('silk-over-pad: a silk-group fill covering a pad violates, but a pad inside a hole of the art does not', () => {
+    const square = (h: number): Point[] => [
+      { x: -h, y: -h },
+      { x: h, y: -h },
+      { x: h, y: h },
+      { x: -h, y: h },
+    ];
+    const group = (rings: Point[][]) => ({
+      id: 'G1',
+      name: 'logo',
+      layer: 'F.Silk' as const,
+      at: { x: 0, y: 0 },
+      rotation: 0,
+      scale: 1,
+      fills: [rings],
+      lines: [],
+      texts: [],
+    });
+    const solid = base();
+    solid.components.push(makeComponent('R1', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })]));
+    solid.silkGroups = [group([square(3)])];
+    const hit = violationsOf(solid, 'silk-over-pad');
+    expect(hit.length).toBe(1);
+    expect(hit[0].items).toEqual(expect.arrayContaining(['G1', 'R1.1']));
+
+    const holed = base();
+    holed.components.push(makeComponent('R1', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })]));
+    holed.silkGroups = [group([square(3), square(1.5)])]; // 1x1 pad sits in a 3x3 hole
+    expect(violationsOf(holed, 'silk-over-pad')).toHaveLength(0);
+  });
+
   it('silk-over-pad: a silk line clear of every pad does NOT violate', () => {
     const b = base();
     b.components.push(makeComponent('R1', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })]));

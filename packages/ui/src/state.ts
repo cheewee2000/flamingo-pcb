@@ -91,6 +91,10 @@ export interface AppState {
    * Dragging any member moves the whole group; Delete removes them all.
    * Cleared by plain clicks and tool switches. */
   multiSelection: string[];
+  /** Ids of silk items (loose silk text / silk lines / silk groups) in the
+   * current silk multi-selection (shift-click or marquee). Cmd/Ctrl+G groups
+   * them; Delete removes them all. Cleared by plain clicks and tool switches. */
+  silkSelection: string[];
   /** Grid-snap toggle (toolbar checkbox, default on) -- Ctrl/Cmd bypasses it
    * momentarily per tool (see tools/overlay-utils.ts `snapPoint`). */
   snapEnabled: boolean;
@@ -133,6 +137,7 @@ function initialState(): AppState {
     activeTool: 'select',
     selection: null,
     multiSelection: [],
+    silkSelection: [],
     snapEnabled: true,
     snapMm: 0.5,
     toolOptions: {

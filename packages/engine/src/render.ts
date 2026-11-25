@@ -22,6 +22,7 @@ import {
 } from './geometry.js';
 import { copperLayersOf, padCopperLayers } from './layers.js';
 import { componentLabelHidden, componentLabelPlacement, componentSilkHidden } from './labels.js';
+import { allSilkFills, allSilkLines, allSilkTexts } from './silkgroup.js';
 import type { RatLine } from './connectivity.js';
 
 export interface RenderOpts {
@@ -394,8 +395,17 @@ export function renderSVG(b: Board, opts: RenderOpts = {}): string {
       );
     }
 
-    // board-level silk text on this side
-    for (const s of b.silk) {
+    // silk-group filled artwork on this side (even-odd, so holes stay open)
+    for (const f of allSilkFills(b)) {
+      if (f.layer !== silkLayer) continue;
+      const d = f.rings
+        .map((r) => r.map((p, i) => `${i === 0 ? 'M' : 'L'}${fmt(svg(p).x)} ${fmt(svg(p).y)}`).join('') + 'Z')
+        .join('');
+      parts.push(`<path d="${d}" fill="${color}" fill-rule="evenodd"/>`);
+    }
+
+    // board-level silk text on this side (loose + grouped)
+    for (const s of allSilkTexts(b)) {
       if (s.layer !== silkLayer) continue;
       const p = svg(s.at);
       const svgRot = -s.rotation;
@@ -405,8 +415,8 @@ export function renderSVG(b: Board, opts: RenderOpts = {}): string {
       );
     }
 
-    // board-level silk lines (mechanical reference outlines) on this side
-    for (const line of b.silkLines) {
+    // board-level silk lines (loose reference outlines + grouped strokes) on this side
+    for (const line of allSilkLines(b)) {
       if (line.layer !== silkLayer) continue;
       const s = svg(line.start);
       const e = svg(line.end);

@@ -25,6 +25,8 @@ import {
   pointInPolygon,
   pointSegDistance,
   holeSlotCenterline,
+  silkGroupContains,
+  silkGroupSize,
 } from '@flamingo/engine';
 import type { HitInfo, LayerKey } from './state.js';
 import { DIMS_KEY, SILK_KEY, ZONES_KEY } from './state.js';
@@ -122,6 +124,8 @@ export type EditTarget =
   | { kind: 'keepout'; id: string }
   | { kind: 'hole'; id: string }
   | { kind: 'silk'; id: string }
+  | { kind: 'silkLine'; id: string }
+  | { kind: 'silkGroup'; id: string }
   | { kind: 'dimension'; id: string };
 
 function componentContains(c: ComponentInst, world: Point): boolean {
@@ -177,6 +181,18 @@ export function hitEditTargets(board: Board, world: Point, scale: number, vis?: 
   for (const s of shown.silk ? board.silk : []) {
     if (dist(world, s.at) < Math.max(s.height, 1) + tolMm) hits.push({ kind: 'silk', id: s.id });
   }
+  for (const l of shown.silk ? (board.silkLines ?? []) : []) {
+    if (pointSegDistance(world, { type: 'line', start: l.start, end: l.end }) < l.width / 2 + tolMm) {
+      hits.push({ kind: 'silkLine', id: l.id });
+    }
+  }
+  // Groups hit anywhere inside their (rotated) bounding box, smallest first so
+  // a small graphic sitting on a big one stays reachable.
+  const groups = shown.silk ? [...(board.silkGroups ?? [])] : [];
+  groups.sort((a, b) => groupArea(a) - groupArea(b));
+  for (const g of groups) {
+    if (silkGroupContains(g, world, tolMm)) hits.push({ kind: 'silkGroup', id: g.id });
+  }
   for (const dim of shown.dimension ? board.dimensions : []) {
     const line = dimensionLine(dim.a, dim.b, dim.offset);
     if (!line) continue;
@@ -196,6 +212,11 @@ export function hitEditTargets(board: Board, world: Point, scale: number, vis?: 
     if (nearPolygonEdge(world, z.polygon, tolMm)) hits.push({ kind: 'zone', id: z.id });
   }
   return hits;
+}
+
+function groupArea(g: NonNullable<Board['silkGroups']>[number]): number {
+  const { width, height } = silkGroupSize(g);
+  return width * height;
 }
 
 /** True when `p` is within `tol` of any edge of the polygon. */

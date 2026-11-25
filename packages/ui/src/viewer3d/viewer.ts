@@ -13,6 +13,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { Board } from '@flamingo/engine';
 import { buildBoardGroup, disposeGroup } from './scene.js';
 import { createModelManager } from './models.js';
+import type { Point } from '@flamingo/engine';
+import { attachSilkEditing, type SilkEdit3D, type SilkEditHooks } from './silk-edit3d.js';
 
 const BG = 0x14161a;
 const WHEEL_ROTATE_PER_PX = 0.005; // rad
@@ -41,10 +43,14 @@ export interface Viewer3D {
    * Front/Back toggle: back view looks at the bottom with X mirrored, same as
    * the flipped 2D render. Keeps the current zoom and tilt. */
   setFlipped(v: boolean): void;
+  /** Redraw the silk-group selection frame (call when the selection changes). */
+  refreshSelection(): void;
+  /** Board point under a client position on the side facing the camera (SVG drops). */
+  pickBoardPoint(clientX: number, clientY: number): Point | null;
   dispose(): void;
 }
 
-export function createViewer3D(canvas: HTMLCanvasElement, viewport: HTMLElement): Viewer3D {
+export function createViewer3D(canvas: HTMLCanvasElement, viewport: HTMLElement, editHooks?: SilkEditHooks): Viewer3D {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(BG);
 
@@ -111,6 +117,7 @@ export function createViewer3D(canvas: HTMLCanvasElement, viewport: HTMLElement)
     componentGroup.visible = opts.showComponents;
     scene.add(componentGroup);
 
+    silkEdit?.refresh();
     lastBBox = built.bbox;
     if (!hasFramedOnce) {
       frameCamera(built.bbox);
@@ -192,6 +199,10 @@ export function createViewer3D(canvas: HTMLCanvasElement, viewport: HTMLElement)
     camera.updateProjectionMatrix();
   }
 
+  const silkEdit: SilkEdit3D | null = editHooks
+    ? attachSilkEditing({ canvas, viewport, camera, controls, scene, hooks: editHooks, isActive: () => active })
+    : null;
+
   const ro = new ResizeObserver(() => {
     if (active) resize();
   });
@@ -254,7 +265,14 @@ export function createViewer3D(canvas: HTMLCanvasElement, viewport: HTMLElement)
       camera.lookAt(controls.target);
       camera.updateMatrix();
     },
+    refreshSelection(): void {
+      silkEdit?.refresh();
+    },
+    pickBoardPoint(clientX: number, clientY: number): Point | null {
+      return silkEdit?.pickBoardPoint(clientX, clientY) ?? null;
+    },
     dispose(): void {
+      silkEdit?.dispose();
       active = false;
       if (rafHandle) cancelAnimationFrame(rafHandle);
       if (rebuildTimer !== undefined) clearTimeout(rebuildTimer);

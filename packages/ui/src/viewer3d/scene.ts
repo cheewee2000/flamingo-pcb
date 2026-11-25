@@ -27,7 +27,12 @@ import {
   allHoles,
   padOutline,
   pointInPolygon,
+  allSilkLines,
+  allSilkTexts,
+  fillShapes,
+  silkGroupWorld,
 } from '@flamingo/engine';
+import type { SilkGroup } from '@flamingo/engine';
 import { boardSilkTextSpec, buildSilkTextMesh, footprintSilkTextSpec } from './silktext.js';
 
 export const BOARD_T = 1.6;
@@ -384,10 +389,14 @@ function buildSilkGroup(board: Board): THREE.Group {
     );
     if (label) silk.add(label);
   }
-  for (const line of board.silkLines) {
+  for (const g of board.silkGroups ?? []) {
+    const top = g.layer !== 'B.Silk';
+    for (const shape of silkGroupFillShapes(g)) (top ? topShapes : botShapes).push(shape);
+  }
+  for (const line of allSilkLines(board)) {
     stroke(line.start, line.end, line.width, line.layer !== 'B.Silk');
   }
-  for (const s of board.silk) {
+  for (const s of allSilkTexts(board)) {
     const top = s.layer !== 'B.Silk';
     const mesh = buildSilkTextMesh(boardSilkTextSpec(s), top ? SILK_TOP : SILK_BOT, BOARD_T);
     if (mesh) silk.add(mesh);
@@ -404,6 +413,23 @@ function buildSilkGroup(board: Board): THREE.Group {
     silk.add(mesh);
   }
   return silk;
+}
+
+/** A silk group's filled artwork as three.js shapes (outer rings with their holes), world space. */
+export function silkGroupFillShapes(g: SilkGroup): THREE.Shape[] {
+  const out: THREE.Shape[] = [];
+  for (const f of silkGroupWorld(g).fills) {
+    for (const fs of fillShapes(f.rings)) {
+      const shape = shapeFrom(fs.outer);
+      for (const h of fs.holes) {
+        const path = new THREE.Path(h.map((p) => new THREE.Vector2(p.x, p.y)));
+        path.closePath();
+        shape.holes.push(path);
+      }
+      out.push(shape);
+    }
+  }
+  return out;
 }
 
 /** Recursively dispose geometries (materials — including the silk-text
