@@ -49,6 +49,9 @@ import {
   netIslands,
   padNetMap,
   silkGroupWorld,
+  silkClearanceUnion,
+  DEFAULT_SILK_TO_PAD,
+  RULESETS,
 } from '@flamingo/engine';
 import { groupHandleGeometry, HANDLE_PX, ROTATE_RADIUS_PX } from './silk-handles.js';
 import type { NetIsland } from '@flamingo/engine';
@@ -447,6 +450,23 @@ export function drawDimension(
   ctx.restore();
 }
 
+/** Restrict drawing to everywhere EXCEPT the silk clearance around pads/holes (even-odd clip). */
+function clipOutSilkClearance(ctx: CanvasRenderingContext2D, view: ViewTransform, board: Board, layer: 'F.Silk' | 'B.Silk'): void {
+  const regions = silkClearanceUnion(board, layer, RULESETS[board.rules]?.silkToPad ?? DEFAULT_SILK_TO_PAD);
+  if (!regions.length) return;
+  ctx.beginPath();
+  ctx.rect(-1e5, -1e5, 2e5, 2e5);
+  for (const ring of regions.flat()) {
+    ring.forEach((p, i) => {
+      const q = worldToScreen(view, p);
+      if (i === 0) ctx.moveTo(q.x, q.y);
+      else ctx.lineTo(q.x, q.y);
+    });
+    ctx.closePath();
+  }
+  ctx.clip('evenodd');
+}
+
 function silkColorFor(side: 'top' | 'bottom'): string {
   return side === 'top' ? SILK_COLOR['F.Silk'] : SILK_COLOR['B.Silk'];
 }
@@ -721,6 +741,10 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
     const silkSides: ('bottom' | 'top')[] = view.flipped ? ['top', 'bottom'] : ['bottom', 'top'];
     for (const side of silkSides) {
       const color = silkColorFor(side);
+      // Clip this side's silk back from exposed pads/holes, exactly as the
+      // Gerber legend does (engine silkclip.ts).
+      ctx.save();
+      clipOutSilkClearance(ctx, view, board, side === 'top' ? 'F.Silk' : 'B.Silk');
       for (const c of board.components) {
         if (c.side !== side) continue;
         if (!componentSilkHidden(c)) for (const item of c.footprint.silk) drawFootprintSilkItem(ctx, view, c, item, color);
@@ -750,6 +774,7 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
         ctx.lineWidth = Math.max(line.width * view.scale, 0.6);
         ctx.stroke();
       }
+      ctx.restore();
     }
   }
 

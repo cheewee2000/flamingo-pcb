@@ -346,13 +346,24 @@ describe('generateGerbers - silk text (legend)', () => {
     expect(bot.map(String)).not.toEqual(top.map(String));
   });
 
+  it('clips silk back from exposed pads with clear-polarity regions after all ink', () => {
+    const b = oneTrackOnePad();
+    const gto = generateGerbers(b).files.get('t1.GTO')!;
+    assertGerberParses(gto);
+    const [ink, clip] = gto.split('%LPC*%');
+    expect(clip).toBeDefined();
+    expect(clip).toContain('G36*'); // a region per pad
+    expect(ink).not.toContain('%LPC*%');
+  });
+
   it('strokes the refdes label at the shared componentLabelPlacement anchor (below the body)', () => {
     const b = oneTrackOnePad(); // R1 at (5,5): pad box x 4.5..5.5, y 4.7..5.3
     const lp = componentLabelPlacement(b, b.components[0]);
     expect(lp.position).toBe('below');
     const gto = generateGerbers(b).files.get('t1.GTO')!;
     assertGerberParses(gto);
-    const pts = drawCoords(gto);
+    // Ink only: the pad-clearance clip regions follow the first %LPC*%.
+    const pts = drawCoords(gto.split('%LPC*%')[0]!);
     expect(pts.length).toBeGreaterThan(0);
     // Glyph ink spans exactly [at.y - h/2, at.y + h/2] vertically ('R','1' are
     // full cap-height glyphs) and stays within the label's advance width.

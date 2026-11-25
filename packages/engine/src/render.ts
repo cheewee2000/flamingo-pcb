@@ -23,6 +23,8 @@ import {
 import { copperLayersOf, padCopperLayers } from './layers.js';
 import { componentLabelHidden, componentLabelPlacement, componentSilkHidden } from './labels.js';
 import { allSilkFills, allSilkLines, allSilkTexts } from './silkgroup.js';
+import { DEFAULT_SILK_TO_PAD, silkClearanceUnion } from './silkclip.js';
+import { RULESETS } from './drc/rules.js';
 import type { RatLine } from './connectivity.js';
 
 export interface RenderOpts {
@@ -375,6 +377,7 @@ export function renderSVG(b: Board, opts: RenderOpts = {}): string {
     if (!layerOn(silkLayer)) continue;
     const side: 'top' | 'bottom' = silkLayer === 'F.Silk' ? 'top' : 'bottom';
     const color = SILK_COLOR[silkLayer];
+    const silkStart = parts.length;
 
     // footprint silk items, per component on this side
     for (const c of b.components) {
@@ -422,6 +425,23 @@ export function renderSVG(b: Board, opts: RenderOpts = {}): string {
       const e = svg(line.end);
       parts.push(
         `<line x1="${fmt(s.x)}" y1="${fmt(s.y)}" x2="${fmt(e.x)}" y2="${fmt(e.y)}" stroke="${color}" stroke-width="${fmt(line.width)}" stroke-linecap="round"/>`,
+      );
+    }
+
+    // Mask this layer's silk off exposed pads/holes, matching the Gerber clip (silkclip.ts).
+    const clip = silkClearanceUnion(b, silkLayer, RULESETS[b.rules]?.silkToPad ?? DEFAULT_SILK_TO_PAD);
+    if (clip.length && parts.length > silkStart) {
+      const id = `silkclip-${silkLayer === 'F.Silk' ? 'F' : 'B'}`;
+      const d = clip
+        .flat()
+        .map((r) => r.map((p, i) => `${i === 0 ? 'M' : 'L'}${fmt(svg(p).x)} ${fmt(svg(p).y)}`).join('') + 'Z')
+        .join('');
+      const body = parts.splice(silkStart);
+      parts.push(
+        `<mask id="${id}" maskUnits="userSpaceOnUse" x="-10000" y="-10000" width="20000" height="20000"><rect x="-10000" y="-10000" width="20000" height="20000" fill="white"/><path d="${d}" fill="black" fill-rule="evenodd"/></mask>`,
+        `<g mask="url(#${id})">`,
+        ...body,
+        '</g>',
       );
     }
   }

@@ -28,6 +28,7 @@ import {
   copperLayersOf,
   padCopperLayers,
   padOutline,
+  silkClearanceRegions,
   padWorld,
   componentTransformPoints,
   componentTransformRotation,
@@ -447,6 +448,11 @@ function buildSilk(b: Board, side: 'F' | 'B'): string {
     g.select(silkAperture(line.width));
     g.drawSeg({ type: 'line', start: line.start, end: line.end });
   }
+
+  // Clip everything above back from exposed pads and holes (silkclip.ts):
+  // clear-polarity regions, emitted last so they erase any silk under them.
+  for (const ring of silkClearanceRegions(b, silkLayer, RULESETS[b.rules].silkToPad)) g.region(ring, false);
+  g.resetDark();
 
   const fn = side === 'F' ? 'Legend,Top' : 'Legend,Bot';
   return g.assemble(fn, 'Positive');

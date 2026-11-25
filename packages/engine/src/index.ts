@@ -54,6 +54,8 @@ export {
   MIN_SILK_GROUP_SCALE,
 } from './silkgroup.js';
 export type { FillShape, WorldSilkContents } from './silkgroup.js';
+export { DEFAULT_SILK_TO_PAD, silkClearanceRegions, silkClearanceUnion } from './silkclip.js';
+export type { SilkLayerId } from './silkclip.js';
 export { svgToSilk, parsePathData, parseTransform } from './svg.js';
 export type { SvgToSilkOptions, SvgToSilkResult } from './svg.js';
 
@@ -137,7 +139,7 @@ export {
 } from './render.js';
 
 // Re-export zone fill
-export { fillZone, fillAllZones, bufferPolygon } from './zonefill.js';
+export { fillZone, fillAllZones, bufferPolygon, unionPolygons } from './zonefill.js';
 export type { StitchOptions, StitchPlan } from './stitch.js';
 export { planZoneStitching } from './stitch.js';
 

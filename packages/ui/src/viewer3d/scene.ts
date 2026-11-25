@@ -33,6 +33,7 @@ import {
   silkGroupWorld,
 } from '@flamingo/engine';
 import type { SilkGroup } from '@flamingo/engine';
+import { DEFAULT_SILK_TO_PAD, RULESETS, silkClearanceUnion } from '@flamingo/engine';
 import { boardSilkTextSpec, buildSilkTextMesh, footprintSilkTextSpec } from './silktext.js';
 
 export const BOARD_T = 1.6;
@@ -412,7 +413,64 @@ function buildSilkGroup(board: Board): THREE.Group {
     mesh.position.z = z0;
     silk.add(mesh);
   }
+  clipSilkFromPads(silk, board);
   return silk;
+}
+
+/**
+ * Keep silk off exposed pads and holes, matching the Gerber legend clip
+ * (engine silkclip.ts). Each side's clearance regions are drawn first,
+ * invisibly, into the stencil buffer just above that side's silk; every silk
+ * mesh on the side then skips stencilled pixels. Separate stencil refs per
+ * side so a top-side region seen through the board never cuts bottom silk.
+ */
+function clipSilkFromPads(silk: THREE.Group, board: Board): void {
+  const clearance = RULESETS[board.rules]?.silkToPad ?? DEFAULT_SILK_TO_PAD;
+  const sides = [
+    { layer: 'F.Silk' as const, ref: 1, z: BOARD_T + 0.085 },
+    { layer: 'B.Silk' as const, ref: 2, z: -0.085 },
+  ];
+  const meshes: THREE.Mesh[] = [];
+  silk.traverse((o) => {
+    if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh);
+  });
+  for (const { layer, ref, z } of sides) {
+    const regions = silkClearanceUnion(board, layer, clearance);
+    if (!regions.length) continue;
+    const shapes = regions.map(([outer, ...holes]) => {
+      const sh = shapeFrom(outer!);
+      for (const h of holes) sh.holes.push(new THREE.Path(h.map((p) => new THREE.Vector2(p.x, p.y))));
+      return sh;
+    });
+    const maskMat = new THREE.MeshBasicMaterial({
+      colorWrite: false,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      stencilWrite: true,
+      stencilRef: ref,
+      stencilFunc: THREE.AlwaysStencilFunc,
+      stencilZPass: THREE.ReplaceStencilOp,
+    });
+    maskMat.userData.owned = true;
+    const mask = new THREE.Mesh(new THREE.ShapeGeometry(shapes), maskMat);
+    mask.position.z = z;
+    mask.renderOrder = -1;
+    silk.add(mask);
+    const top = layer === 'F.Silk';
+    for (const m of meshes) {
+      const box = new THREE.Box3().setFromObject(m);
+      const isTop = (box.min.z + box.max.z) / 2 > BOARD_T / 2;
+      if (isTop !== top) continue;
+      const mat = (m.material as THREE.Material).clone();
+      mat.stencilWrite = true;
+      mat.stencilRef = ref;
+      mat.stencilFunc = THREE.NotEqualStencilFunc;
+      mat.stencilZPass = THREE.KeepStencilOp;
+      mat.userData.owned = true;
+      m.material = mat;
+      m.renderOrder = Math.max(m.renderOrder, 1);
+    }
+  }
 }
 
 /** A silk group's filled artwork as three.js shapes (outer rings with their holes), world space. */
@@ -438,5 +496,8 @@ export function disposeGroup(obj: THREE.Object3D): void {
   obj.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (mesh.geometry) mesh.geometry.dispose();
+    // Per-mesh materials made here (e.g. stencil-clipped silk) are owned; shared caches are not.
+    const mat = mesh.material as THREE.Material | undefined;
+    if (mat && !Array.isArray(mat) && mat.userData?.owned) mat.dispose();
   });
 }
