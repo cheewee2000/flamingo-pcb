@@ -5,3 +5,5 @@ export type { McpContext, PartsApi } from './mcp.js';
 export { createMcpServer } from './mcp.js';
 export type { RouteRunner, RunFreeroutingOptions } from './route.js';
 export { ensureFreerouting, findJava, runFreerouting, defaultRouteRunner } from './route.js';
+export type { RunKiCadRouterOptions } from './krt.js';
+export { findKiCadRoutingTools, runKiCadRouter } from './krt.js';
