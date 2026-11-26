@@ -149,6 +149,14 @@ describe('componentLabelPlacement - board-aware collision avoidance', () => {
     expect(p.at.y).toBeCloseTo(10);
   });
 
+  it('a neighbor pad within silkToPad of the label (not touching it) still moves the label', () => {
+    const c = landscape('R1', { x: 10, y: 10 }); // below-label rect: x 9.1..10.9, y 8.3..9.3
+    // 1x1 pad whose top edge is 0.12mm under the label: clear of it, but inside
+    // the 0.15mm silk clip zone, so DRC silk-over-pad would flag the label.
+    const blocker = comp('C9', { x: 10, y: 8.3 - 0.12 - 0.5 }, [smdPad('1', { x: 0, y: 0 })]);
+    expect(componentLabelPlacement(boardWith(c, blocker), c).position).not.toBe('below');
+  });
+
   it('falls back to the geometric default (below) when every candidate collides', () => {
     const c = landscape('R1', { x: 10, y: 10 });
     // A big courtyard that swallows R1 and every candidate label position, so
