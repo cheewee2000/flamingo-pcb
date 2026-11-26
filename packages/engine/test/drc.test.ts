@@ -14,7 +14,7 @@ import type {
   SilkItem,
   Zone,
 } from '../src/index.js';
-import { runDRC, RULESETS, parseBoard, fillAllZones } from '../src/index.js';
+import { runDRC, RULESETS, parseBoard, fillAllZones, padOutline, silkClearanceRegions } from '../src/index.js';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -101,6 +101,7 @@ describe('RULESETS', () => {
       copperToEdge: 0.3,
       holeToHole: 0.5,
       minSilkWidth: 0.15,
+      silkToPad: 0.15,
     });
   });
 
@@ -116,6 +117,7 @@ describe('RULESETS', () => {
         copperToEdge: 0.3,
         holeToHole: 0.5,
         minSilkWidth: 0.15,
+        silkToPad: 0.15,
       });
     }
   });
@@ -314,29 +316,50 @@ describe('runDRC', () => {
     expect(violationsOf(b, 'courtyard-overlap')).toHaveLength(0);
   });
 
-  it('silk-over-pad: silk line crossing an exposed SMD pad on the same side violates', () => {
+  it('silk-over-pad: strokes and artwork over a pad are clipped at output, not reported', () => {
+    const square = (h: number): Point[] => [
+      { x: -h, y: -h },
+      { x: h, y: -h },
+      { x: h, y: h },
+      { x: -h, y: h },
+    ];
     const silk: SilkItem[] = [{ kind: 'line', start: { x: -1, y: 0 }, end: { x: 1, y: 0 }, width: 0.2 }];
     const b = base();
     b.components.push(
-      makeComponent('R1', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })], {
-        footprintOverrides: { silk },
-      }),
+      makeComponent('R1', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })], { footprintOverrides: { silk } }),
     );
-
-    const violations = violationsOf(b, 'silk-over-pad');
-    expect(violations.length).toBeGreaterThan(0);
-    expect(violations[0].items).toEqual(expect.arrayContaining(['R1', 'R1.1']));
+    b.silkLines.push({ id: 'SL1', layer: 'F.Silk', start: { x: -2, y: 0 }, end: { x: 2, y: 0 }, width: 0.15 });
+    b.silkGroups = [
+      { id: 'G1', name: 'logo', layer: 'F.Silk', at: { x: 0, y: 0 }, rotation: 0, scale: 1, fills: [[square(3)]], lines: [], texts: [] },
+    ];
+    expect(violationsOf(b, 'silk-over-pad').filter((v) => v.items.includes('SL1') || v.items.includes('G1'))).toHaveLength(0);
   });
 
-  it('silk-over-pad: a board-level silk LINE crossing an exposed pad violates', () => {
+  it('silkClearanceRegions: one region per exposed pad on that side plus every hole, grown by the clearance', () => {
     const b = base();
     b.components.push(makeComponent('R1', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })]));
-    // F.Silk line running straight across the top-side pad at the origin.
-    b.silkLines.push({ id: 'SL1', layer: 'F.Silk', start: { x: -2, y: 0 }, end: { x: 2, y: 0 }, width: 0.15 });
+    b.holes.push({ id: 'H1', at: { x: 10, y: 0 }, drill: 1, padDiameter: 1, plated: false });
+    const front = silkClearanceRegions(b, 'F.Silk', 0.15);
+    expect(front).toHaveLength(2); // the top pad + the hole
+    expect(silkClearanceRegions(b, 'B.Silk', 0.15)).toHaveLength(1); // hole only
+    const padMaxY = Math.max(...padOutline(b.components[0]!, b.components[0]!.footprint.pads[0]!).map((p) => p.y));
+    expect(Math.max(...front[0]!.map((p) => p.y))).toBeCloseTo(padMaxY + 0.15, 2);
+  });
 
-    const violations = violationsOf(b, 'silk-over-pad');
-    expect(violations.length).toBeGreaterThan(0);
-    expect(violations[0].items).toEqual(expect.arrayContaining(['SL1', 'R1.1']));
+  it('silk-over-pad: TEXT over a pad, or inside its clearance, is reported (it would be clipped unreadable)', () => {
+    const on = base();
+    on.components.push(makeComponent('R1', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })]));
+    on.silk.push({ id: 'T1', layer: 'F.Silk', at: { x: 0, y: 0 }, text: 'X', height: 0.8, rotation: 0 });
+    const hit = violationsOf(on, 'silk-over-pad');
+    expect(hit.length).toBeGreaterThan(0);
+    expect(hit[0].items).toEqual(expect.arrayContaining(['T1', 'R1.1']));
+
+    // Text box edge 0.1mm from the pad: inside the 0.15mm clearance.
+    const near = base();
+    near.components.push(makeComponent('R1', { x: 0, y: 0 }, [smdPad('1', 'top', { x: 0, y: 0 })]));
+    const padEdge = Math.max(...padOutline(near.components[0]!, near.components[0]!.footprint.pads[0]!).map((p) => p.y));
+    near.silk.push({ id: 'T2', layer: 'F.Silk', at: { x: 0, y: padEdge + 0.1 + 0.4 }, text: 'X', height: 0.8, rotation: 0 });
+    expect(violationsOf(near, 'silk-over-pad').some((v) => v.items.includes('T2'))).toBe(true);
   });
 
   it('silk-over-pad: a silk line clear of every pad does NOT violate', () => {
@@ -776,13 +799,10 @@ describe('runDRC — blinker-routed fixture (filled zones)', () => {
     expect(violations.filter((v) => v.rule === 'clearance')).toHaveLength(0);
   });
 
-  it('still surfaces the board\'s genuine, unrelated violations (silk over pads)', () => {
-    const byRule = new Map<string, number>();
-    for (const v of violations) byRule.set(v.rule, (byRule.get(v.rule) ?? 0) + 1);
-    expect(byRule.get('silk-over-pad') ?? 0).toBeGreaterThan(0);
-    // Nothing else should remain: the epsilon fix resolves both the
-    // zone-fill and pad-clearance boundary noise in this fixture.
-    expect(new Set(violations.map((v) => v.rule))).toEqual(new Set(['silk-over-pad']));
+  it('is DRC-clean: its only remaining findings were silk strokes over pads, now clipped at output', () => {
+    // The epsilon fix resolves the zone-fill and pad-clearance boundary noise;
+    // the footprint outlines that crossed pads are clipped by silkToPad.
+    expect(violations).toEqual([]);
   });
 });
 

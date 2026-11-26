@@ -562,3 +562,14 @@ export function fillAllZones(b: Board): Board {
   fillCache.set(b, filled);
   return filled;
 }
+
+/**
+ * Union of simple polygons, returned as polygons-with-holes: each entry is
+ * [outer, ...holes] with the closing duplicate vertex dropped. Overlapping
+ * inputs merge, so the result can be filled with the even-odd rule.
+ */
+export function unionPolygons(polys: Point[][]): Point[][][] {
+  if (polys.length === 0) return [];
+  const mp = robustClip('union', ...polys.map((p): MultiPolygon => [[toRing(p)]]));
+  return mp.map((poly) => poly.map(fromRing));
+}

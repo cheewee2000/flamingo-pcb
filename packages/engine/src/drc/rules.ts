@@ -29,6 +29,8 @@ export interface RuleSet {
   copperToEdge: number;
   holeToHole: number;
   minSilkWidth: number;
+  /** Silk is clipped back this far from exposed pads and holes (silkclip.ts). */
+  silkToPad: number;
 }
 
 export const RULESETS: Record<RuleSet['id'], RuleSet> = {
@@ -42,6 +44,7 @@ export const RULESETS: Record<RuleSet['id'], RuleSet> = {
     copperToEdge: 0.3,
     holeToHole: 0.5,
     minSilkWidth: 0.15,
+    silkToPad: 0.15,
   },
   'jlcpcb-4l': {
     id: 'jlcpcb-4l',
@@ -53,6 +56,7 @@ export const RULESETS: Record<RuleSet['id'], RuleSet> = {
     copperToEdge: 0.3,
     holeToHole: 0.5,
     minSilkWidth: 0.15,
+    silkToPad: 0.15,
   },
   /**
    * 4-layer with JLCPCB's "advanced" via tier: 0.15mm drill / 0.25mm pad. Needed
@@ -72,6 +76,7 @@ export const RULESETS: Record<RuleSet['id'], RuleSet> = {
     copperToEdge: 0.3,
     holeToHole: 0.2,
     minSilkWidth: 0.15,
+    silkToPad: 0.15,
   },
   'jlcpcb-6l': {
     id: 'jlcpcb-6l',
@@ -83,5 +88,6 @@ export const RULESETS: Record<RuleSet['id'], RuleSet> = {
     copperToEdge: 0.3,
     holeToHole: 0.5,
     minSilkWidth: 0.15,
+    silkToPad: 0.15,
   },
 };

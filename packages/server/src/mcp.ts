@@ -21,6 +21,7 @@ import type {
   Point,
   SilkText,
   SilkLine,
+  SilkGroup,
   Track,
   Via,
   Zone,
@@ -38,6 +39,14 @@ import {
   rubberBandReshape,
   runDRC,
   tracksAtPad,
+  svgToSilk,
+  localizeSilkContents,
+  silkGroupCenter,
+  silkGroupSize,
+  rescaleSilkGroupAboutCenter,
+  setSilkGroupMirror,
+  setSilkGroupRotation,
+  centerSilkGroupAt,
 } from '@flamingo/engine';
 import { exportFab } from '@flamingo/fab';
 import { getDatasheet } from '@flamingo/parts';
@@ -148,10 +157,27 @@ function summarizeBoardState(board: Board, lastSaveError?: string): string {
 
   lines.push(
     `Tracks: ${board.tracks.length}, Vias: ${board.vias.length}, Zones: ${board.zones.length}, ` +
-      `Keepouts: ${board.keepouts.length}, Mounting holes: ${board.holes.length}, Silk texts: ${board.silk.length}`,
+      `Keepouts: ${board.keepouts.length}, Mounting holes: ${board.holes.length}, Silk texts: ${board.silk.length}, ` +
+      `Silk lines: ${board.silkLines.length}, Silk groups: ${(board.silkGroups ?? []).length}`,
   );
+  for (const g of board.silkGroups ?? []) lines.push(`  ${describeSilkGroup(g)}`);
 
   return lines.join('\n');
+}
+
+function describeSilkGroup(g: SilkGroup): string {
+  const c = silkGroupCenter(g);
+  const size = silkGroupSize(g);
+  const parts = [
+    g.fills.length ? `${g.fills.length} fill${g.fills.length === 1 ? '' : 's'}` : '',
+    g.lines.length ? `${g.lines.length} line${g.lines.length === 1 ? '' : 's'}` : '',
+    g.texts.length ? `texts ${g.texts.map((t) => JSON.stringify(t.text)).join(', ')}` : '',
+  ].filter(Boolean);
+  return (
+    `silk group ${g.id} "${g.name}" ${g.layer}: centre (${fmt(c.x)}, ${fmt(c.y)}), ` +
+    `${fmt(size.width)} x ${fmt(size.height)} mm, rot ${fmt(g.rotation)}, scale ${fmt(g.scale)}` +
+    `${g.mirror ? ', mirrored' : ''} — ${parts.join('; ')}`
+  );
 }
 
 function describeConnections(board: Board): string {
@@ -1048,7 +1074,7 @@ export function createMcpServer(ctx: McpContext): McpServer {
     'add_silk_line',
     {
       description:
-        'Add silkscreen line(s) for mechanical reference outlines (e.g. the display glass or FPC-tail footprint drawn on the legend layer). Provide either a single segment (start + end) or a `polyline` of >= 2 points, which is drawn as connected segments (N-1 lines) in a single call -- one call per outline instead of one per edge.',
+        'Add silkscreen line(s) for mechanical reference outlines (e.g. the display glass or FPC-tail footprint drawn on the legend layer). Provide either a single segment (start + end, a loose silk line) or a `polyline` of >= 3 points, which becomes ONE silk group of connected segments that moves/scales/deletes as a unit (see edit_silk_group).',
       inputSchema: {
         layer: z.enum(['F.Silk', 'B.Silk']).describe('Silkscreen layer'),
         start: silkPointSchema.optional().describe('Segment start {x,y} in mm (single-segment form)'),
@@ -1058,9 +1084,10 @@ export function createMcpServer(ctx: McpContext): McpServer {
           .optional()
           .describe('Ordered points {x,y} in mm; creates N-1 connected segments (reference-outline form)'),
         width: z.number().positive().optional().describe('Line width in mm (default 0.15)'),
+        name: z.string().optional().describe('Group name for a polyline outline (default "Outline")'),
       },
     },
-    ({ layer, start, end, polyline, width }) => {
+    ({ layer, start, end, polyline, width, name }) => {
       const w = width ?? 0.15;
       let points: Point[];
       if (polyline !== undefined) {
@@ -1077,29 +1104,188 @@ export function createMcpServer(ctx: McpContext): McpServer {
         }
         points = [start, end];
       }
-      // Each segment is its own removable SilkLine. Bundle them into a single
-      // `transaction` op (one addSilkLine sub-op per segment) so a polyline
-      // is one undo step and, on a mid-polyline failure, applies atomically
-      // instead of leaving the earlier segments committed.
-      const segmentOps: Op[] = [];
-      for (let i = 0; i < points.length - 1; i++) {
-        const line: Omit<SilkLine, 'id'> = { layer, start: points[i], end: points[i + 1], width: w };
-        segmentOps.push({ op: 'addSilkLine', line });
+      if (points.length === 2) {
+        const line: Omit<SilkLine, 'id'> = { layer, start: points[0]!, end: points[1]!, width: w };
+        return applyAndReport(ctx, { op: 'addSilkLine', line }, (result) => `Added silk line ${result.createdIds[0]} on ${layer}`);
       }
-      const op: Op = segmentOps.length === 1 ? segmentOps[0]! : { op: 'transaction', ops: segmentOps };
+      // A polyline is one shape: store it as a silk group so it moves,
+      // scales and deletes as a unit (one undo step, one id).
+      const lines = points.slice(0, -1).map((p, i) => ({ start: p, end: points[i + 1]!, width: w }));
+      const local = localizeSilkContents({ fills: [], lines, texts: [] });
+      const group: Omit<SilkGroup, 'id'> = {
+        name: name?.trim() || 'Outline',
+        layer,
+        rotation: 0,
+        scale: 1,
+        ...local,
+      };
       return applyAndReport(
         ctx,
-        op,
+        { op: 'addSilkGroup', group },
+        (result) => `Added silk outline group ${result.createdIds[0]} (${lines.length} segments) on ${layer}`,
+      );
+    },
+  );
+
+  const textEditSchema = z.object({
+    index: z.number().int().min(0).describe('Index of the text inside the group (see get_board_state)'),
+    text: z.string().min(1).optional().describe('New text'),
+    height: z.number().positive().optional().describe('New text height in mm, in the group\'s local (unscaled) frame'),
+    rotation: z.number().optional().describe('New local rotation in degrees CCW'),
+  });
+
+  server.registerTool(
+    'add_silk_graphic',
+    {
+      description:
+        'Import vector artwork (SVG) onto a silkscreen layer as ONE editable silk group: filled shapes become real filled regions in the Gerber legend (no hatching), strokes become lines. The group can then be moved/resized/rotated/mirrored with edit_silk_group or by dragging in the UI. Give the SVG as a file path (svgPath, relative to the project directory) or inline markup (svg). Size it with width OR height in mm (aspect ratio kept; default height 10). Text in the SVG must be converted to outlines first; white shapes are treated as background and dropped.',
+      inputSchema: {
+        layer: z.enum(['F.Silk', 'B.Silk']).describe('Silkscreen layer'),
+        svgPath: z.string().optional().describe('Path to an .svg file (absolute, or relative to the project directory)'),
+        svg: z.string().optional().describe('Inline SVG markup (alternative to svgPath)'),
+        x: z.number().describe('Centre X of the artwork in mm'),
+        y: z.number().describe('Centre Y of the artwork in mm'),
+        width: z.number().positive().optional().describe('Artwork width in mm (aspect kept)'),
+        height: z.number().positive().optional().describe('Artwork height in mm (aspect kept; default 10 when width is not given)'),
+        rotation: z.number().optional().describe('Rotation in degrees CCW (default 0)'),
+        mirror: z.boolean().optional().describe('Mirror horizontally (e.g. art meant to read correctly from the back)'),
+        name: z.string().optional().describe('Group name (default: the file name, or "Graphic")'),
+        tolerance: z.number().positive().optional().describe('Curve simplification tolerance in mm (default 0.01)'),
+      },
+    },
+    async ({ layer, svgPath, svg, x, y, width, height, rotation, mirror, name, tolerance }) => {
+      if ((svgPath === undefined) === (svg === undefined)) return errorResult('Provide exactly one of svgPath or svg');
+      let src: string;
+      let defaultName = 'Graphic';
+      if (svgPath !== undefined) {
+        const abs = resolve(isAbsolute(svgPath) ? svgPath : join(ctx.projectDir, svgPath));
+        try {
+          src = await readFile(abs, 'utf8');
+        } catch (err) {
+          return errorResult(`Could not read "${abs}": ${err instanceof Error ? err.message : String(err)}`);
+        }
+        defaultName = abs.split(sep).pop()!.replace(/\.svg$/i, '');
+      } else src = svg!;
+      let art: ReturnType<typeof svgToSilk>;
+      try {
+        art = svgToSilk(src, { width, height, tolerance });
+      } catch (err) {
+        return errorResult(`SVG import failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      const group: Omit<SilkGroup, 'id'> = {
+        name: name?.trim() || defaultName,
+        layer,
+        at: { x, y },
+        rotation: rotation ?? 0,
+        scale: 1,
+        ...(mirror ? { mirror: true } : {}),
+        fills: art.fills,
+        lines: art.lines,
+        texts: [],
+      };
+      const warn = art.warnings.length ? `\nWarnings:\n${art.warnings.map((w) => `- ${w}`).join('\n')}` : '';
+      return applyAndReport(
+        ctx,
+        { op: 'addSilkGroup', group },
         (result) =>
-          `Added ${result.createdIds.length} silk line${result.createdIds.length === 1 ? '' : 's'} on ${layer}: ${result.createdIds.join(', ')}`,
+          `Added silk graphic ${result.createdIds[0]} "${group.name}" on ${layer}: ${fmt(art.width)} x ${fmt(art.height)} mm, ` +
+          `${art.fills.length} filled shape(s), ${art.lines.length} line(s), centred at (${fmt(x)}, ${fmt(y)}).${warn}\n` +
+          'Run run_drc to check it against pads.',
       );
     },
   );
 
   server.registerTool(
+    'edit_silk_group',
+    {
+      description:
+        'Move, resize, rotate, mirror, rename, re-layer a silk group, or change the text inside it. Position (x, y) is the centre of the group\'s bounding box. Resize with width OR height in mm (aspect ratio locked, about the centre) or with an absolute scale factor. Rotation is absolute (degrees CCW, about the centre). Use textEdits to change a text item by index (see get_board_state for the list).',
+      inputSchema: {
+        id: z.string().describe('Silk group id'),
+        x: z.number().optional().describe('New centre X in mm'),
+        y: z.number().optional().describe('New centre Y in mm'),
+        width: z.number().positive().optional().describe('New bounding-box width in mm (aspect kept)'),
+        height: z.number().positive().optional().describe('New bounding-box height in mm (aspect kept)'),
+        scale: z.number().positive().optional().describe('New absolute scale factor (1 = as imported)'),
+        rotation: z.number().optional().describe('New rotation in degrees CCW'),
+        mirror: z.boolean().optional().describe('Mirror horizontally'),
+        layer: z.enum(['F.Silk', 'B.Silk']).optional().describe('Move the group to the other silk layer'),
+        name: z.string().optional().describe('New name'),
+        textEdits: z.array(textEditSchema).optional().describe('Changes to text items inside the group'),
+      },
+    },
+    ({ id, x, y, width, height, scale, rotation, mirror, layer, name, textEdits }) => {
+      const board = ctx.doc.board;
+      let g = (board.silkGroups ?? []).find((s) => s.id === id);
+      if (!g) return errorResult(`No silk group with id "${id}"`);
+      if ([width, height, scale].filter((v) => v !== undefined).length > 1) {
+        return errorResult('Give at most one of width, height, scale');
+      }
+      const center = silkGroupCenter(g);
+      const step = (t: Pick<SilkGroup, 'at' | 'rotation' | 'scale' | 'mirror'>): void => {
+        g = { ...g!, ...t };
+      };
+      const size = silkGroupSize(g);
+      if (width !== undefined) step(rescaleSilkGroupAboutCenter(g, (g.scale * width) / size.width));
+      if (height !== undefined) step(rescaleSilkGroupAboutCenter(g, (g.scale * height) / size.height));
+      if (scale !== undefined) step(rescaleSilkGroupAboutCenter(g, scale));
+      if (mirror !== undefined && mirror !== !!g.mirror) step(setSilkGroupMirror(g, mirror));
+      if (rotation !== undefined) step(setSilkGroupRotation(g, rotation));
+      step(centerSilkGroupAt(g, { x: x ?? center.x, y: y ?? center.y }));
+      const patch: Partial<Omit<SilkGroup, 'id'>> = { at: g.at, rotation: g.rotation, scale: g.scale };
+      if (g.mirror !== undefined) patch.mirror = g.mirror;
+      if (layer !== undefined) patch.layer = layer;
+      if (name !== undefined) patch.name = name;
+      if (textEdits?.length) {
+        const texts = g.texts.map((t) => ({ ...t }));
+        for (const e of textEdits) {
+          const t = texts[e.index];
+          if (!t) return errorResult(`Group "${id}" has no text at index ${e.index} (it has ${texts.length})`);
+          if (e.text !== undefined) t.text = e.text;
+          if (e.height !== undefined) t.height = e.height;
+          if (e.rotation !== undefined) t.rotation = e.rotation;
+        }
+        patch.texts = texts;
+      }
+      return applyAndReport(ctx, { op: 'editSilkGroup', id, group: patch }, (result) => {
+        const updated = (result.board.silkGroups ?? []).find((s) => s.id === id)!;
+        return `Updated ${describeSilkGroup(updated)}`;
+      });
+    },
+  );
+
+  server.registerTool(
+    'group_silk',
+    {
+      description:
+        'Combine loose silk text, silk lines and/or existing silk groups (all on the same layer) into ONE new silk group that moves/resizes/rotates as a unit. Grouping groups flattens them into the new group.',
+      inputSchema: {
+        ids: z.array(z.string()).min(1).describe('Ids of silk texts, silk lines and/or silk groups'),
+        name: z.string().optional().describe('Name for the new group'),
+      },
+    },
+    ({ ids, name }) =>
+      applyAndReport(ctx, { op: 'groupSilk', ids, ...(name ? { name } : {}) }, (result) => {
+        const g = (result.board.silkGroups ?? []).find((s) => s.id === result.createdIds[0])!;
+        return `Grouped ${ids.length} item(s): ${describeSilkGroup(g)}`;
+      }),
+  );
+
+  server.registerTool(
+    'ungroup_silk',
+    {
+      description:
+        'Explode a silk group: its lines and texts become loose silk items at their current placement; each filled shape becomes its own single-shape group (filled art has no loose form).',
+      inputSchema: { id: z.string().describe('Silk group id') },
+    },
+    ({ id }) =>
+      applyAndReport(ctx, { op: 'ungroupSilk', id }, (result) => `Ungrouped ${id}: created ${result.createdIds.join(', ') || 'nothing'}`),
+  );
+
+  server.registerTool(
     'remove_item',
     {
-      description: 'Remove a keepout, zone, mounting hole, silk text, silk line, track, or via by id.',
+      description: 'Remove a keepout, zone, mounting hole, silk text, silk line, silk group, track, or via by id.',
       inputSchema: { id: z.string().describe('Item id, as returned by its creating tool') },
     },
     ({ id }) => {

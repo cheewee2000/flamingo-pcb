@@ -26,6 +26,7 @@ import type {
   PathSeg,
   Point,
   RatLine,
+  SilkGroup,
   SilkItem,
   Track,
 } from '@flamingo/engine';
@@ -47,7 +48,12 @@ import {
   padLabelLayout,
   netIslands,
   padNetMap,
+  silkGroupWorld,
+  silkClearanceUnion,
+  DEFAULT_SILK_TO_PAD,
+  RULESETS,
 } from '@flamingo/engine';
+import { groupHandleGeometry, HANDLE_PX, ROTATE_RADIUS_PX } from './silk-handles.js';
 import type { NetIsland } from '@flamingo/engine';
 import type { AppState, ViewTransform } from './state.js';
 import { DIMS_KEY, LABEL_NETS_KEY, LABEL_PADS_KEY, RATSNEST_KEY, SILK_KEY, ZONES_KEY } from './state.js';
@@ -276,6 +282,81 @@ function drawSilkText(
   ctx.restore();
 }
 
+/**
+ * Draw a silk group's artwork: filled shapes (even-odd, so holes stay open),
+ * stroked lines and text. Shared by the board render and the select tool's
+ * drag ghost, so the preview is exactly what gets committed.
+ */
+export function drawSilkGroup(
+  ctx: CanvasRenderingContext2D,
+  view: ViewTransform,
+  g: SilkGroup,
+  color: string,
+  alpha = 1,
+): void {
+  const w = silkGroupWorld(g);
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.fillStyle = color;
+  for (const f of w.fills) {
+    ctx.beginPath();
+    for (const ring of f.rings) {
+      ring.forEach((p, i) => {
+        const sp = worldToScreen(view, p);
+        if (i === 0) ctx.moveTo(sp.x, sp.y);
+        else ctx.lineTo(sp.x, sp.y);
+      });
+      ctx.closePath();
+    }
+    ctx.fill('evenodd');
+  }
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = color;
+  for (const l of w.lines) {
+    const a = worldToScreen(view, l.start);
+    const b = worldToScreen(view, l.end);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.lineWidth = Math.max(l.width * view.scale, 0.6);
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  for (const t of w.texts) drawSilkText(ctx, view, t.at, t.rotation, t.text, t.height, color, g.layer === 'B.Silk');
+  ctx.restore();
+}
+
+/** Selection frame for a silk group: rotated bounding box, corner squares, rotate knob. */
+export function drawSilkGroupFrame(ctx: CanvasRenderingContext2D, view: ViewTransform, g: SilkGroup, color: string): void {
+  const geo = groupHandleGeometry(g, view.scale);
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 3]);
+  pathPolygon(ctx, view, geo.corners);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  const a = worldToScreen(view, geo.topMid);
+  const r = worldToScreen(view, geo.rotate);
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(r.x, r.y);
+  ctx.stroke();
+  ctx.fillStyle = '#14161a';
+  for (const c of geo.corners) {
+    const sp = worldToScreen(view, c);
+    ctx.fillRect(sp.x - HANDLE_PX, sp.y - HANDLE_PX, HANDLE_PX * 2, HANDLE_PX * 2);
+    ctx.strokeRect(sp.x - HANDLE_PX, sp.y - HANDLE_PX, HANDLE_PX * 2, HANDLE_PX * 2);
+  }
+  ctx.beginPath();
+  ctx.arc(r.x, r.y, ROTATE_RADIUS_PX, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
 const DIMENSION_COLOR = '#E8E8E8';
 const DIM_ARROW_MM = 1.1;
 const DIM_EXT_OVERSHOOT_MM = 0.7;
@@ -367,6 +448,23 @@ export function drawDimension(
   ctx.textBaseline = 'middle';
   ctx.fillText(`${len.toFixed(2)}`, 0, 0);
   ctx.restore();
+}
+
+/** Restrict drawing to everywhere EXCEPT the silk clearance around pads/holes (even-odd clip). */
+function clipOutSilkClearance(ctx: CanvasRenderingContext2D, view: ViewTransform, board: Board, layer: 'F.Silk' | 'B.Silk'): void {
+  const regions = silkClearanceUnion(board, layer, RULESETS[board.rules]?.silkToPad ?? DEFAULT_SILK_TO_PAD);
+  if (!regions.length) return;
+  ctx.beginPath();
+  ctx.rect(-1e5, -1e5, 2e5, 2e5);
+  for (const ring of regions.flat()) {
+    ring.forEach((p, i) => {
+      const q = worldToScreen(view, p);
+      if (i === 0) ctx.moveTo(q.x, q.y);
+      else ctx.lineTo(q.x, q.y);
+    });
+    ctx.closePath();
+  }
+  ctx.clip('evenodd');
 }
 
 function silkColorFor(side: 'top' | 'bottom'): string {
@@ -643,6 +741,10 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
     const silkSides: ('bottom' | 'top')[] = view.flipped ? ['top', 'bottom'] : ['bottom', 'top'];
     for (const side of silkSides) {
       const color = silkColorFor(side);
+      // Clip this side's silk back from exposed pads/holes, exactly as the
+      // Gerber legend does (engine silkclip.ts).
+      ctx.save();
+      clipOutSilkClearance(ctx, view, board, side === 'top' ? 'F.Silk' : 'B.Silk');
       for (const c of board.components) {
         if (c.side !== side) continue;
         if (!componentSilkHidden(c)) for (const item of c.footprint.silk) drawFootprintSilkItem(ctx, view, c, item, color);
@@ -657,6 +759,9 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
         if (s.layer !== silkLayer) continue;
         drawSilkText(ctx, view, s.at, s.rotation, s.text, s.height, color, s.layer === 'B.Silk');
       }
+      for (const g of board.silkGroups ?? []) {
+        if (g.layer === silkLayer) drawSilkGroup(ctx, view, g, color);
+      }
       for (const line of board.silkLines) {
         if (line.layer !== silkLayer) continue;
         const s = worldToScreen(view, line.start);
@@ -669,6 +774,7 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
         ctx.lineWidth = Math.max(line.width * view.scale, 0.6);
         ctx.stroke();
       }
+      ctx.restore();
     }
   }
 
@@ -798,6 +904,26 @@ export function draw(board: Board, state: AppState, ctx: CanvasRenderingContext2
   } else if (sel && sel.kind === 'silk') {
     const s = board.silk.find((x) => x.id === sel.id);
     if (s) strokeCircle(ctx, view, s.at, Math.max(s.height, 1) + 0.3, SELECTION_COLOR, 0.1);
+  } else if (sel && sel.kind === 'silkLine') {
+    const l = board.silkLines.find((x) => x.id === sel.id);
+    if (l) strokePolygon(ctx, view, capsulePolygon(l.start, l.end, l.width / 2 + 0.12), SELECTION_COLOR, 0.08);
+  } else if (sel && sel.kind === 'silkGroup') {
+    const g = (board.silkGroups ?? []).find((x) => x.id === sel.id);
+    if (g) drawSilkGroupFrame(ctx, view, g, SELECTION_COLOR);
+  }
+  // Silk multi-selection (shift-click / marquee): outline every member.
+  for (const id of state.silkSelection ?? []) {
+    const s = board.silk.find((x) => x.id === id);
+    if (s) strokeCircle(ctx, view, s.at, Math.max(s.height, 1) + 0.3, SELECTION_COLOR, 0.1);
+    const l = board.silkLines.find((x) => x.id === id);
+    if (l) strokePolygon(ctx, view, capsulePolygon(l.start, l.end, l.width / 2 + 0.12), SELECTION_COLOR, 0.08);
+    const g = (board.silkGroups ?? []).find((x) => x.id === id);
+    if (g) {
+      ctx.save();
+      ctx.setLineDash([4, 3]);
+      strokePolygon(ctx, view, groupHandleGeometry(g, view.scale).corners, SELECTION_COLOR, 0);
+      ctx.restore();
+    }
   }
 
   // ---- label overlays (pad numbers + net names) ----

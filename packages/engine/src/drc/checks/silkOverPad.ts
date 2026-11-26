@@ -1,6 +1,11 @@
 /**
- * DRC check: silkscreen over exposed copper pad. Silk on top of an exposed
- * pad (SMD or through-hole annular ring) can prevent a good solder joint.
+ * DRC check: silkscreen TEXT that would be clipped by a pad.
+ *
+ * All silk is clipped back from exposed pads and holes by `RuleSet.silkToPad`
+ * at fab output and in every renderer (silkclip.ts), so silk can never reach
+ * the copper. Outlines, lines and artwork losing a sliver to that clip is
+ * harmless and not reported. Text is: a label with letters erased by a pad is
+ * unreadable, so a text box that touches a pad's clearance zone is flagged.
  *
  * Approximations (documented, not exact stroke geometry):
  *  - line/arc silk items are approximated by a rectangle stroking the
@@ -17,14 +22,20 @@
  *    renderers and Gerber legend use.
  */
 import type { Board, ComponentInst, Point, SilkItem, SilkLine, SilkText } from '../../types.js';
-import { add, componentTransformPoints, polyIntersects, rotate } from '../../geometry.js';
+import { add, componentTransformPoints, pointInPolygon, polyIntersects, rotate } from '../../geometry.js';
 import { componentLabelHidden, componentLabelRect, componentSilkHidden } from '../../labels.js';
+import { allSilkFills, allSilkLines, allSilkTexts, fillShapes } from '../../silkgroup.js';
 import { circlePolygon } from '../util.js';
+import { bufferPolygon } from '../../zonefill.js';
 import type { RuleSet } from '../rules.js';
 import type { CopperItem, DrcViolation } from '../types.js';
 
 interface SilkShape {
   poly: Point[];
+  /** Only text is reported; everything else is clipped silently. */
+  text?: boolean;
+  /** Holes in `poly` (group artwork): a pad entirely inside one is clear of the ink. */
+  holes?: Point[][];
   side: 'top' | 'bottom';
   ref: string;
 }
@@ -66,7 +77,7 @@ function footprintSilkShapes(b: Board, c: ComponentInst): SilkShape[] {
   // Auto-generated refdes label: its world-space box comes from the shared
   // board-aware placement helper (labels.ts), so DRC checks the label exactly
   // where the renderers and the Gerber legend draw it.
-  if (!componentLabelHidden(c)) shapes.push({ poly: componentLabelRect(b, c), side, ref: c.refdes });
+  if (!componentLabelHidden(c)) shapes.push({ poly: componentLabelRect(b, c), side, ref: c.refdes, text: true });
   return shapes;
 }
 
@@ -83,14 +94,14 @@ function footprintSilkItemShape(c: ComponentInst, item: SilkItem, side: 'top' | 
     }
     case 'text': {
       const localRect = textRectLocal(item.at, item.rotation, item.text, item.height);
-      return [{ poly: componentTransformPoints(c, localRect), side, ref: c.refdes }];
+      return [{ poly: componentTransformPoints(c, localRect), side, ref: c.refdes, text: true }];
     }
   }
 }
 
 function boardSilkTextShape(st: SilkText): SilkShape {
   const poly = textRectLocal(st.at, st.rotation, st.text, st.height);
-  return { poly, side: st.layer === 'F.Silk' ? 'top' : 'bottom', ref: st.id };
+  return { poly, side: st.layer === 'F.Silk' ? 'top' : 'bottom', ref: st.id, text: true };
 }
 
 function boardSilkLineShape(line: SilkLine): SilkShape {
@@ -101,9 +112,54 @@ function boardSilkLineShape(line: SilkLine): SilkShape {
 function buildSilkShapes(b: Board): SilkShape[] {
   const shapes: SilkShape[] = [];
   for (const c of b.components) shapes.push(...footprintSilkShapes(b, c));
-  for (const st of b.silk) shapes.push(boardSilkTextShape(st));
-  for (const line of b.silkLines) shapes.push(boardSilkLineShape(line));
+  for (const st of allSilkTexts(b)) shapes.push(boardSilkTextShape(st));
+  for (const line of allSilkLines(b)) shapes.push(boardSilkLineShape(line));
+  // Group fills: each solid region with its holes (even-odd nesting).
+  for (const f of allSilkFills(b)) {
+    for (const shape of fillShapes(f.rings)) {
+      shapes.push({
+        poly: shape.outer,
+        holes: shape.holes,
+        side: f.layer === 'F.Silk' ? 'top' : 'bottom',
+        ref: f.id.split('#')[0]!,
+      });
+    }
+  }
   return shapes;
+}
+
+/** True when `poly` lies wholly inside one of `holes` (all vertices in, no edge crossing). */
+function insideAHole(poly: Point[], holes: Point[][] | undefined): boolean {
+  for (const h of holes ?? []) {
+    if (poly.every((p) => pointInPolygon(p, h)) && !edgesCross(poly, h)) return true;
+  }
+  return false;
+}
+
+function edgesCross(a: Point[], b: Point[]): boolean {
+  const cross = (p: Point, q: Point, r: Point): number => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  for (let i = 0; i < a.length; i++) {
+    const p1 = a[i]!;
+    const p2 = a[(i + 1) % a.length]!;
+    for (let j = 0; j < b.length; j++) {
+      const q1 = b[j]!;
+      const q2 = b[(j + 1) % b.length]!;
+      const d1 = cross(q1, q2, p1);
+      const d2 = cross(q1, q2, p2);
+      const d3 = cross(p1, p2, q1);
+      const d4 = cross(p1, p2, q2);
+      if (d1 * d2 < 0 && d3 * d4 < 0) return true;
+    }
+  }
+  return false;
+}
+
+/** `poly` grown outward by `d` mm (round joins); the outer ring of the buffer. */
+function growPoly(poly: Point[], d: number): Point[] {
+  if (d <= 0) return poly;
+  const mp = bufferPolygon(poly, d);
+  if (!mp.length) return poly;
+  return mp[0]![0]!.map(([x, y]): Point => ({ x, y }));
 }
 
 function centroid(poly: Point[]): Point {
@@ -117,18 +173,23 @@ function centroid(poly: Point[]): Point {
 }
 
 export function check(b: Board, rules: RuleSet, items: CopperItem[]): DrcViolation[] {
-  const shapes = buildSilkShapes(b);
-  const padItems = items.filter((i) => i.kind === 'pad' && (i.layer === 'F.Cu' || i.layer === 'B.Cu'));
+  const shapes = buildSilkShapes(b).filter((sh) => sh.text);
+  // A text box is clipped when it reaches into the pad's clearance zone, so
+  // test against the pad grown by silkToPad (a square grow is close enough).
+  const grow = rules.silkToPad ?? 0;
+  const padItems = items
+    .filter((i) => i.kind === 'pad' && (i.layer === 'F.Cu' || i.layer === 'B.Cu'))
+    .map((i) => ({ ...i, polygon: growPoly(i.polygon, grow) }));
 
   const violations: DrcViolation[] = [];
   for (const shape of shapes) {
     for (const pad of padItems) {
       const padSide: 'top' | 'bottom' = pad.layer === 'F.Cu' ? 'top' : 'bottom';
       if (padSide !== shape.side) continue;
-      if (polyIntersects(shape.poly, pad.polygon)) {
+      if (polyIntersects(shape.poly, pad.polygon) && !insideAHole(pad.polygon, shape.holes)) {
         violations.push({
           rule: 'silk-over-pad',
-          message: `Silkscreen (${shape.ref}) overlaps pad ${pad.ref} (net "${pad.net}") on ${pad.layer}`,
+          message: `Silkscreen text (${shape.ref}) overlaps pad ${pad.ref} (net "${pad.net}") on ${pad.layer} and would be clipped`,
           at: centroid(pad.polygon),
           items: [shape.ref, pad.ref],
         });

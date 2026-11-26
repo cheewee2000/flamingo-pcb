@@ -53,6 +53,8 @@
  */
 
 import type { Board, ComponentInst, Point } from './types.js';
+import { allSilkTexts } from './silkgroup.js';
+import { RULESETS } from './drc/rules.js';
 import {
   bboxOf,
   componentTransformPoints,
@@ -265,6 +267,9 @@ function inflate(r: BBox, m: number): BBox {
 const W_OUTLINE = 1000;
 const W_COMPONENT = 30;
 const W_LABEL = 12;
+/** Label inside a pad's silk-clip zone but off the body: cheapest fault, so a
+ * boxed-in label grazes a clip zone rather than sitting on a neighbour. */
+const W_CLIP = 4;
 
 /** Sample points of a rect (4 corners + 4 edge midpoints) for the outline test. */
 function rectSamplePoints(r: BBox): Point[] {
@@ -286,7 +291,7 @@ function rectSamplePoints(r: BBox): Point[] {
 interface SolveContext {
   outlinePoly: Point[] | null;
   /** Body box + owning refdes for every component with a body. */
-  bodies: { refdes: string; box: BBox }[];
+  bodies: { refdes: string; box: BBox; clip: BBox }[];
   /** Silk text rects per side (board-level SilkText + footprint text items):
    * a refdes label sitting on a hand-placed annotation ("VSYS" beside a test
    * point) is as unreadable as label-on-label, so they cost the same. */
@@ -313,11 +318,15 @@ function buildSolveContext(board: Board): SolveContext {
       outlinePoly = null; // malformed outline: skip containment scoring
     }
   }
-  const bodies: { refdes: string; box: BBox }[] = [];
+  const bodies: SolveContext['bodies'] = [];
+  // DRC flags a label that reaches within `silkToPad` of a pad (silk is clipped
+  // there). `clip` is the body grown until label margin + growth clears that;
+  // the extra 0.01 keeps an exact tie on the clear side.
+  const padClear = Math.max(0, (RULESETS[board.rules]?.silkToPad ?? 0) - SCORE_PAD) + 0.01;
   const silkTexts: SolveContext['silkTexts'] = { top: [], bottom: [] };
   for (const cc of board.components) {
     const box = componentObstacleBox(cc);
-    if (box) bodies.push({ refdes: cc.refdes, box });
+    if (box) bodies.push({ refdes: cc.refdes, box, clip: inflate(box, padClear) });
     for (const item of cc.footprint.silk) {
       if (item.kind !== 'text' || item.text.trim().length === 0) continue;
       const [at] = componentTransformPoints(cc, [item.at]);
@@ -325,7 +334,7 @@ function buildSolveContext(board: Board): SolveContext {
       silkTexts[cc.side === 'bottom' ? 'bottom' : 'top'].push(textBBox(at, rot, item.text.length, item.height));
     }
   }
-  for (const s of board.silk) {
+  for (const s of allSilkTexts(board)) {
     if (s.text.trim().length === 0) continue;
     silkTexts[s.layer === 'B.Silk' ? 'bottom' : 'top'].push(textBBox(s.at, s.rotation, s.text.length, s.height));
   }
@@ -353,6 +362,7 @@ function candidateCost(
   for (const body of ctx.bodies) {
     if (body.refdes === ownRefdes) continue; // never penalize the label's own body
     if (bboxOverlaps(rect, body.box)) cost += W_COMPONENT;
+    else if (bboxOverlaps(rect, body.clip)) cost += W_CLIP;
   }
   for (const lab of placedLabels) if (bboxOverlaps(rect, lab)) cost += W_LABEL;
   for (const t of ctx.silkTexts[side]) if (bboxOverlaps(rect, t)) cost += W_LABEL;

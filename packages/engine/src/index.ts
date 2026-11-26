@@ -18,8 +18,46 @@ export type {
   SilkText,
   Dimension,
   SilkLine,
+  SilkGroup,
+  SilkGroupLine,
+  SilkGroupText,
   Board,
 } from './types.js';
+
+// Editable silk graphics (groups) + SVG import
+export {
+  SILK_TEXT_ADVANCE,
+  silkGroupToWorld,
+  silkGroupToLocal,
+  silkGroupRotation,
+  silkGroupWorld,
+  allSilkLines,
+  allSilkTexts,
+  allSilkFills,
+  silkTextCorners,
+  silkGroupLocalBounds,
+  silkGroupCorners,
+  silkGroupSize,
+  silkGroupCenter,
+  silkGroupContains,
+  fillShapes,
+  moveSilkGroup,
+  scaleSilkGroupFromCorner,
+  rotateSilkGroup,
+  rescaleSilkGroupAboutCenter,
+  setSilkGroupMirror,
+  setSilkGroupRotation,
+  centerSilkGroupAt,
+  silkGroupRotateHandle,
+  localizeSilkContents,
+  silkGroupWorldContents,
+  MIN_SILK_GROUP_SCALE,
+} from './silkgroup.js';
+export type { FillShape, WorldSilkContents } from './silkgroup.js';
+export { DEFAULT_SILK_TO_PAD, silkClearanceRegions, silkClearanceUnion } from './silkclip.js';
+export type { SilkLayerId } from './silkclip.js';
+export { svgToSilk, parsePathData, parseTransform } from './svg.js';
+export type { SvgToSilkOptions, SvgToSilkResult } from './svg.js';
 
 // Re-export board functions
 export { newBoard, serializeBoard, parseBoard } from './board.js';
@@ -101,7 +139,7 @@ export {
 } from './render.js';
 
 // Re-export zone fill
-export { fillZone, fillAllZones, bufferPolygon } from './zonefill.js';
+export { fillZone, fillAllZones, bufferPolygon, unionPolygons } from './zonefill.js';
 export type { StitchOptions, StitchPlan } from './stitch.js';
 export { planZoneStitching } from './stitch.js';
 

@@ -224,6 +224,50 @@ export interface SilkLine {
   width: number;
 }
 
+/** A text item inside a SilkGroup, in the group's local frame (mm). */
+export interface SilkGroupText {
+  text: string;
+  /** Centre of the text, local frame. */
+  at: Point;
+  height: number;
+  /** Degrees CCW, local frame. */
+  rotation: number;
+}
+
+/** A stroked line inside a SilkGroup, in the group's local frame (mm). */
+export interface SilkGroupLine {
+  start: Point;
+  end: Point;
+  width: number;
+}
+
+/**
+ * An editable silkscreen graphic: filled shapes, strokes and text that move,
+ * scale, rotate and mirror as one. Geometry is stored in a local frame (mm)
+ * and placed on the board by the transform
+ *
+ *   world = at + rotate(rotation) · scale · (mirror ? (-x, y) : (x, y))
+ *
+ * so dragging/resizing only rewrites `at` / `scale` / `rotation` and never
+ * resamples the artwork. Line widths and text heights scale with `scale`.
+ * Text glyphs are never mirrored by `mirror` (only their placement is): they
+ * follow their layer's reading convention like every other silk text.
+ */
+export interface SilkGroup {
+  id: string;
+  name: string;
+  layer: 'F.Silk' | 'B.Silk';
+  at: Point;
+  rotation: number;
+  scale: number;
+  mirror?: boolean;
+  /** Filled shapes. Each entry is one shape: a set of closed rings filled
+   * with the even-odd rule (holes are simply rings nested inside others). */
+  fills: Point[][][];
+  lines: SilkGroupLine[];
+  texts: SilkGroupText[];
+}
+
 /**
  * A linear dimension annotation between two measured points. Documentation
  * only — never affects DRC, routing, or fab outputs. The dimension line runs
@@ -252,6 +296,9 @@ export interface Board {
   zones: Zone[];
   silk: SilkText[];
   silkLines: SilkLine[];
+  /** Editable silk graphics (see SilkGroup). Optional: absent on boards saved
+   * before groups existed; read it as `board.silkGroups ?? []`. */
+  silkGroups?: SilkGroup[];
   dimensions: Dimension[];
   rules: 'jlcpcb-2l' | 'jlcpcb-4l' | 'jlcpcb-4l-adv' | 'jlcpcb-6l';
 }

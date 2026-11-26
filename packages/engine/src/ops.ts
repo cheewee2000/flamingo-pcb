@@ -10,12 +10,14 @@ import type {
   SilkText,
   Dimension,
   SilkLine,
+  SilkGroup,
   Track,
   Via,
   Zone,
 } from './types.js';
 import { copperLayersOf, isCopper } from './layers.js';
 import { widenTracks } from './widen.js';
+import { localizeSilkContents, silkGroupWorldContents, type WorldSilkContents } from './silkgroup.js';
 
 /**
  * Discriminated union of all board-mutating operations.
@@ -55,6 +57,14 @@ export type Op =
   | { op: 'addSilkText'; text: Omit<SilkText, 'id'> }
   | { op: 'editSilkText'; id: string; text: Partial<Omit<SilkText, 'id'>> }
   | { op: 'addSilkLine'; line: Omit<SilkLine, 'id'> }
+  /** Add an editable silk graphic (artwork in its local frame + transform). */
+  | { op: 'addSilkGroup'; group: Omit<SilkGroup, 'id'> }
+  /** Patch a silk group: transform, name, layer, or its contents (e.g. `texts` to change a label). */
+  | { op: 'editSilkGroup'; id: string; group: Partial<Omit<SilkGroup, 'id'>> }
+  /** Combine loose silk text/lines and/or existing groups (same layer) into one new group. */
+  | { op: 'groupSilk'; ids: string[]; name?: string }
+  /** Explode a group: lines and texts become loose items; each filled shape becomes its own group. */
+  | { op: 'ungroupSilk'; id: string }
   | { op: 'addDimension'; dimension: Omit<Dimension, 'id'> }
   | { op: 'removeItem'; id: string }
   | { op: 'connectPins'; net: string; pins: string[] }
@@ -94,6 +104,25 @@ function ok(board: Board, createdIds: string[]): OpResult {
 
 function err(error: string): OpError {
   return { ok: false, error };
+}
+
+/** Validation message for a silk group, or null when it is well-formed. */
+function validateSilkGroup(g: Omit<SilkGroup, 'id'>): string | null {
+  if (g.layer !== 'F.Silk' && g.layer !== 'B.Silk') return `silk group layer must be F.Silk or B.Silk`;
+  if (!(g.scale > 0) || !Number.isFinite(g.scale)) return 'silk group scale must be > 0';
+  if (!Number.isFinite(g.rotation) || !Number.isFinite(g.at?.x) || !Number.isFinite(g.at?.y)) {
+    return 'silk group position and rotation must be finite numbers';
+  }
+  if (!Array.isArray(g.fills) || !Array.isArray(g.lines) || !Array.isArray(g.texts)) {
+    return 'silk group needs fills, lines and texts arrays';
+  }
+  if (g.fills.length + g.lines.length + g.texts.length === 0) return 'silk group is empty';
+  for (const t of g.texts) {
+    if (typeof t.text !== 'string' || t.text.trim() === '') return 'silk group text cannot be empty';
+    if (!(t.height > 0)) return 'silk group text height must be > 0';
+  }
+  for (const l of g.lines) if (!(l.width > 0)) return 'silk group line width must be > 0';
+  return null;
 }
 
 const PIN_RE = /^([^.]+)\.([^.]+)$/;
@@ -335,6 +364,93 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
       return ok(board, createdIds);
     }
 
+    case 'addSilkGroup': {
+      const bad = validateSilkGroup(op.group);
+      if (bad) return err(bad);
+      const id = globalThis.crypto.randomUUID();
+      (board.silkGroups ??= []).push({ id, ...op.group });
+      createdIds.push(id);
+      return ok(board, createdIds);
+    }
+
+    case 'editSilkGroup': {
+      const g = (board.silkGroups ?? []).find((x) => x.id === op.id);
+      if (!g) return err(`No silk group with id "${op.id}"`);
+      const next = { ...g, ...op.group, id: g.id };
+      const bad = validateSilkGroup(next);
+      if (bad) return err(bad);
+      Object.assign(g, next);
+      return ok(board, createdIds);
+    }
+
+    case 'groupSilk': {
+      const ids = [...new Set(op.ids)];
+      if (ids.length === 0) return err('groupSilk needs at least one id');
+      const contents: WorldSilkContents = { fills: [], lines: [], texts: [] };
+      let layer: SilkGroup['layer'] | undefined;
+      const take = (l: SilkGroup['layer'], id: string): string | null => {
+        if (layer && layer !== l) return `Cannot group items on different layers (${layer} and ${l}, item "${id}")`;
+        layer = l;
+        return null;
+      };
+      const groups = board.silkGroups ?? [];
+      for (const id of ids) {
+        const text = board.silk.find((x) => x.id === id);
+        const line = board.silkLines.find((x) => x.id === id);
+        const group = groups.find((x) => x.id === id);
+        const item = text ?? line ?? group;
+        if (!item) return err(`No silk text, silk line or silk group with id "${id}"`);
+        const bad = take(item.layer, id);
+        if (bad) return err(bad);
+        if (text) contents.texts.push({ at: text.at, text: text.text, height: text.height, rotation: text.rotation });
+        if (line) contents.lines.push({ start: line.start, end: line.end, width: line.width });
+        if (group) {
+          const w = silkGroupWorldContents(group);
+          contents.fills.push(...w.fills);
+          contents.lines.push(...w.lines);
+          contents.texts.push(...w.texts);
+        }
+      }
+      const idSet = new Set(ids);
+      board.silk = board.silk.filter((x) => !idSet.has(x.id));
+      board.silkLines = board.silkLines.filter((x) => !idSet.has(x.id));
+      const kept = groups.filter((x) => !idSet.has(x.id));
+      const local = localizeSilkContents(contents);
+      const id = globalThis.crypto.randomUUID();
+      const name = op.name?.trim() || `Group ${kept.length + 1}`;
+      kept.push({ id, name, layer: layer!, rotation: 0, scale: 1, ...local });
+      board.silkGroups = kept;
+      createdIds.push(id);
+      return ok(board, createdIds);
+    }
+
+    case 'ungroupSilk': {
+      const groups = board.silkGroups ?? [];
+      const idx = groups.findIndex((x) => x.id === op.id);
+      if (idx === -1) return err(`No silk group with id "${op.id}"`);
+      const g = groups[idx]!;
+      const w = silkGroupWorldContents(g);
+      groups.splice(idx, 1);
+      for (const l of w.lines) {
+        const id = globalThis.crypto.randomUUID();
+        board.silkLines.push({ id, layer: g.layer, ...l });
+        createdIds.push(id);
+      }
+      for (const t of w.texts) {
+        const id = globalThis.crypto.randomUUID();
+        board.silk.push({ id, layer: g.layer, ...t });
+        createdIds.push(id);
+      }
+      w.fills.forEach((rings, i) => {
+        const id = globalThis.crypto.randomUUID();
+        const local = localizeSilkContents({ fills: [rings], lines: [], texts: [] });
+        groups.push({ id, name: `${g.name} ${i + 1}`, layer: g.layer, rotation: 0, scale: 1, ...local });
+        createdIds.push(id);
+      });
+      board.silkGroups = groups;
+      return ok(board, createdIds);
+    }
+
     case 'addDimension': {
       const id = globalThis.crypto.randomUUID();
       const dimension: Dimension = { id, ...op.dimension };
@@ -350,6 +466,7 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
         board.holes,
         board.silk,
         board.silkLines,
+        board.silkGroups ?? [],
         board.tracks,
         board.vias,
         board.dimensions,
@@ -362,7 +479,7 @@ export function applyOp(b: Board, op: Op): OpResult | OpError {
         }
       }
       return err(
-        `No item with id "${op.id}" found in keepouts/zones/holes/silk/silkLines/tracks/vias/dimensions`,
+        `No item with id "${op.id}" found in keepouts/zones/holes/silk/silkLines/silkGroups/tracks/vias/dimensions`,
       );
     }
 

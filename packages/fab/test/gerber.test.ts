@@ -346,13 +346,24 @@ describe('generateGerbers - silk text (legend)', () => {
     expect(bot.map(String)).not.toEqual(top.map(String));
   });
 
+  it('clips silk back from exposed pads with clear-polarity regions after all ink', () => {
+    const b = oneTrackOnePad();
+    const gto = generateGerbers(b).files.get('t1.GTO')!;
+    assertGerberParses(gto);
+    const [ink, clip] = gto.split('%LPC*%');
+    expect(clip).toBeDefined();
+    expect(clip).toContain('G36*'); // a region per pad
+    expect(ink).not.toContain('%LPC*%');
+  });
+
   it('strokes the refdes label at the shared componentLabelPlacement anchor (below the body)', () => {
     const b = oneTrackOnePad(); // R1 at (5,5): pad box x 4.5..5.5, y 4.7..5.3
     const lp = componentLabelPlacement(b, b.components[0]);
     expect(lp.position).toBe('below');
     const gto = generateGerbers(b).files.get('t1.GTO')!;
     assertGerberParses(gto);
-    const pts = drawCoords(gto);
+    // Ink only: the pad-clearance clip regions follow the first %LPC*%.
+    const pts = drawCoords(gto.split('%LPC*%')[0]!);
     expect(pts.length).toBeGreaterThan(0);
     // Glyph ink spans exactly [at.y - h/2, at.y + h/2] vertically ('R','1' are
     // full cap-height glyphs) and stays within the label's advance width.
@@ -665,5 +676,47 @@ describe('generateGerbers - zone island ordering', () => {
     expect(kinds).toEqual(['D', 'C', 'D']);
     expect(regions[2]).toContain('X4000000Y4000000');
     assertGerberParses(gtl);
+  });
+});
+
+describe('generateGerbers - silk groups', () => {
+  it('emits group art as filled regions (holes clear) before stroked silk, and parses', () => {
+    const b = newBoard('art', 2);
+    const sq = (h: number): Point[] => [
+      { x: -h, y: -h },
+      { x: h, y: -h },
+      { x: h, y: h },
+      { x: -h, y: h },
+    ];
+    b.silk.push({ id: 'T', layer: 'F.Silk', at: { x: 0, y: 0 }, text: 'A', height: 1, rotation: 0 });
+    b.silkGroups = [
+      {
+        id: 'G',
+        name: 'logo',
+        layer: 'F.Silk',
+        at: { x: 10, y: 10 },
+        rotation: 0,
+        scale: 2,
+        fills: [[sq(2), sq(1)]],
+        lines: [{ start: { x: -2, y: -3 }, end: { x: 2, y: -3 }, width: 0.1 }],
+        texts: [{ text: 'B', at: { x: 0, y: 3 }, height: 1, rotation: 0 }],
+      },
+    ];
+    const { files } = generateGerbers(b);
+    const gto = [...files.entries()].find(([n]) => n.endsWith('.GTO'))![1];
+    assertGerberParses(gto);
+    const body = gto.split('\n');
+    const regions = body.filter((l) => l === 'G36*').length;
+    expect(regions).toBe(2); // outer + hole
+    const firstRegion = body.indexOf('G36*');
+    const clear = body.indexOf('%LPC*%');
+    const lastDark = body.lastIndexOf('%LPD*%');
+    expect(clear).toBeGreaterThan(firstRegion); // the hole is cleared after the solid
+    expect(lastDark).toBeGreaterThan(clear); // and polarity returns to dark before strokes
+    // Group transform applied: the solid's 4x4 square scaled by 2 lands at 10±4.
+    expect(gto).toContain('X6000000Y6000000D02*');
+    // B.Silk legend is untouched by an F.Silk group.
+    const gbo = [...files.entries()].find(([n]) => n.endsWith('.GBO'))![1];
+    expect(gbo).not.toContain('G36*');
   });
 });
