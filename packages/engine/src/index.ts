@@ -110,3 +110,16 @@ export type { RuleSet } from './drc/rules.js';
 export { RULESETS } from './drc/rules.js';
 export type { DrcViolation, CopperItem } from './drc/types.js';
 export { runDRC, buildCopperItems, groupFillRings } from './drc/drc.js';
+
+// Re-export schematic generation (a drawing made from the board's netlist)
+export type {
+  SymbolShape,
+  SchematicSymbolPin,
+  SymbolPinText,
+  SchematicSymbol,
+  SchematicPrim,
+  SchematicPin,
+  Schematic,
+  SchematicOpts,
+} from './schematic/index.js';
+export { buildSchematic, renderSchematicSVG, genericSymbol, symbolBBox, netKind } from './schematic/index.js';

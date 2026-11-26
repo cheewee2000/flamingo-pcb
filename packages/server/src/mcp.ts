@@ -19,6 +19,7 @@ import type {
   OpResult,
   PathSeg,
   Point,
+  SchematicSymbol,
   SilkText,
   SilkLine,
   Track,
@@ -48,6 +49,7 @@ import { formatAutorouteSummary, runAutorouteBroadcast } from './autoroute.js';
 import { pngDimensions, renderPNGDetailed } from './screenshot.js';
 import { checkStock, stockCheckEnabled } from './stock.js';
 import { exportStep } from './step.js';
+import { boardSchematic, schematicFileBase, schematicPng, schematicSummary } from './schematic.js';
 import { importEpro } from './import/epro.js';
 
 /**
@@ -60,6 +62,16 @@ export interface PartsApi {
   searchParts(query: string, opts?: SearchOpts): Promise<PartInfo[]>;
   /** JLCPCB assembly-library stock for one LCSC id (see @flamingo/parts fetchJlcStock). */
   fetchStock(lcsc: string): Promise<JlcStock>;
+  /**
+   * Schematic symbol of a part, null when it has none (see @flamingo/parts
+   * fetchSymbol). Optional: without it export_schematic draws generic boxes.
+   */
+  fetchSymbol?(lcsc: string): Promise<SchematicSymbol | null>;
+}
+
+/** Symbol loader for the schematic export, from the injected parts API. */
+export function symbolLoader(ctx: McpContext): (lcsc: string) => Promise<SchematicSymbol | null> {
+  return async (lcsc) => (await ctx.partsApi.fetchSymbol?.(lcsc)) ?? null;
 }
 
 export interface McpContext {
@@ -1386,6 +1398,43 @@ export function createMcpServer(ctx: McpContext): McpServer {
         return errorResult(`export_step failed: ${err instanceof Error ? err.message : String(err)}`);
       }
       return textResult(`Wrote ${path}`);
+    },
+  );
+
+  server.registerTool(
+    'export_schematic',
+    {
+      description:
+        'Draw a schematic of the board for documentation and write it as "<board>-schematic.svg" (vector, true scale) plus a PNG. The schematic is generated from the board netlist, there is nothing to draw by hand: parts with three or more pins are blocks with their library symbol and a net label, ground symbol or supply bar on every pin; two-pin parts (R, C, L, D...) are drawn as wired circuits under the block they belong to; nets with the same name are connected. Net names and each part\'s value and role are printed, so name nets and fill in roles before exporting. The reply says which parts had no library symbol and were drawn as a generic box.',
+      inputSchema: {
+        outDir: z
+          .string()
+          .optional()
+          .describe('Directory to write into (defaults to "<board dir>/fab"). Absolute, or relative to the project directory.'),
+        png: z.boolean().optional().describe('Also write the PNG (default true)'),
+      },
+    },
+    async ({ outDir, png }) => {
+      const board = ctx.doc.board;
+      if (board.components.length === 0) return errorResult('export_schematic: the board has no components');
+      const targetDir = resolveFabOutDir(ctx, outDir);
+      const base = join(targetDir, schematicFileBase(board.name));
+      const written: string[] = [];
+      let summary: string[];
+      try {
+        const result = await boardSchematic(board, symbolLoader(ctx));
+        await mkdir(targetDir, { recursive: true });
+        await writeFile(`${base}.svg`, result.svg, 'utf8');
+        written.push(`${base}.svg`);
+        if (png !== false) {
+          await writeFile(`${base}.png`, schematicPng(result));
+          written.push(`${base}.png`);
+        }
+        summary = schematicSummary(board, result.schematic);
+      } catch (err) {
+        return errorResult(`export_schematic failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return textResult([`Wrote ${written.join(' and ')}`, ...summary].join('\n'));
     },
   );
 

@@ -194,6 +194,26 @@ describe('GET /api/export.*', () => {
     expect(svg.headers.get('content-disposition')).toContain('filename="exp_test-outline+components.svg"');
   });
 
+  it('serves the generated schematic as SVG or PNG', async () => {
+    const board = testBoard();
+    for (const c of board.components) c.lcsc = '';
+    board.nets.push({ name: 'SIG', class: 'default', pins: ['J1.1', 'J2.1'] });
+    const base = await serve(board);
+    const svg = await fetch(`${base}/api/export.schematic`);
+    expect(svg.status).toBe(200);
+    expect(svg.headers.get('content-type')).toBe('image/svg+xml');
+    expect(svg.headers.get('content-disposition')).toContain('filename="exp_test-schematic.svg"');
+    expect(await svg.text()).toContain('>SIG<');
+
+    const png = await fetch(`${base}/api/export.schematic?format=png`);
+    expect(png.status).toBe(200);
+    expect(png.headers.get('content-type')).toBe('image/png');
+
+    expect((await fetch(`${base}/api/export.schematic?format=pdf`)).status).toBe(400);
+    const emptyBase = await serve(newBoard('empty', 2));
+    expect((await fetch(`${emptyBase}/api/export.schematic`)).status).toBe(400);
+  });
+
   it('answers 400 on bad options and 500 with a message when nothing can be exported', async () => {
     const base = await serve(testBoard());
     const bad = await fetch(`${base}/api/export.dxf?include=`);

@@ -2,8 +2,9 @@
  * fetchPart: cache-first retrieval + parse of an EasyEDA/LCSC component.
  */
 
-import type { Footprint } from '@flamingo/engine';
+import type { Footprint, SchematicSymbol } from '@flamingo/engine';
 import { parseEasyedaFootprint, deriveInfo, type PartInfo } from './easyeda-parse.js';
+import { parseEasyedaSymbol } from './symbol-parse.js';
 import { readCache, writeCache } from './cache.js';
 
 const API_VERSION = '6.4.19.5';
@@ -49,4 +50,23 @@ function completeInfo(partial: Partial<PartInfo>, lcsc: string, raw: unknown): P
   const result = (raw as { result?: Parameters<typeof deriveInfo>[0] })?.result ?? (raw as Parameters<typeof deriveInfo>[0]);
   const info = { lcsc, mfr: '', mpn: '', description: '', package: '', basic: false, ...deriveInfo(result), ...partial };
   return { ...info, lcsc: info.lcsc || lcsc };
+}
+
+/**
+ * The schematic symbol of a part, cache first like `fetchPart`. Resolves to
+ * null (never rejects) when the part cannot be fetched or has no symbol, so a
+ * schematic can fall back to a generic box. `offline` reads the cache only.
+ */
+export async function fetchSymbol(lcsc: string, opts: { offline?: boolean } = {}): Promise<SchematicSymbol | null> {
+  try {
+    let raw = await readCache(lcsc);
+    if (raw === null) {
+      if (opts.offline) return null;
+      raw = await fetchRaw(lcsc);
+      await writeCache(lcsc, raw);
+    }
+    return parseEasyedaSymbol(raw);
+  } catch {
+    return null;
+  }
 }
